@@ -1,0 +1,3 @@
+/* small utilities */
+.u-center{text-align:center}
+.container{max-width:var(--max-width);margin:0 auto;padding:0 16px}

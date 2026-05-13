@@ -1,0 +1,10 @@
+/* CSS variables */
+:root{
+  --color-primary:#0b7285;
+  --color-bg:#fff;
+  --color-text:#222;
+  --radius:8px;
+  --max-width:1200px;
+  --transition:200ms ease;
+}
+@media (prefers-color-scheme:dark){:root{--color-bg:#0b1220;--color-text:#e6eef8}}

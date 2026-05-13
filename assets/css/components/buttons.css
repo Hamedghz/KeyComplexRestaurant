@@ -1,0 +1,2 @@
+button{cursor:pointer}
+.btn{display:inline-block;padding:8px 12px;border-radius:var(--radius);background:var(--color-primary);color:#fff;text-decoration:none}
