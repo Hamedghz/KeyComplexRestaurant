@@ -1,0 +1,30 @@
+/* components.css - hero, sections, cards, bottom-nav, forms */
+.hero{padding:24px 0;position:relative}
+.hero__carousel{position:relative;overflow:hidden}
+.hero__slides{display:flex;transition:transform 400ms ease;will-change:transform}
+.hero__slide{min-width:100%;flex:0 0 100%;}
+.hero__image{width:100%;height:auto;display:block}
+.hero__control{position:absolute;top:50%;transform:translateY(-50%);background:rgba(0,0,0,0.4);color:#fff;border:none;padding:8px;border-radius:50%}
+.hero__control--prev{left:8px}
+.hero__control--next{right:8px}
+.hero__indicators{position:absolute;left:50%;transform:translateX(-50%);bottom:12px;display:flex;gap:8px}
+.hero__indicator{width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,0.3)}
+.hero__indicator.is-active{background:var(--color-primary)}
+.section{padding:48px 0}
+.section__title{font-size:1.5rem;margin-bottom:12px}
+.menu-tabs__list{display:flex;gap:8px}
+.menu-tab{padding:8px 12px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.04)}
+.menu-tab.is-active{background:var(--color-surface)}
+.menu-panels{margin-top:16px}
+.menu-panel{display:none}
+.menu-panel.is-active{display:block}
+.gallery-track{display:flex;gap:12px;overflow:auto}
+.gallery-item{min-width:200px}
+.form{max-width:420px}
+.form__group{margin-bottom:12px}
+.form__input{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.06)}
+.form__message{margin-top:8px}
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;height:var(--bottom-nav-height);display:flex;justify-content:space-around;align-items:center;background:var(--color-surface);border-top:1px solid rgba(255,255,255,0.03);z-index:80}
+.bottom-nav__item{text-decoration:none;color:var(--color-text);display:flex;flex-direction:column;align-items:center}
+.bottom-nav__item.is-active{color:var(--color-primary)}
+.footer{padding:24px 0;background:transparent;border-top:1px solid rgba(255,255,255,0.02)}

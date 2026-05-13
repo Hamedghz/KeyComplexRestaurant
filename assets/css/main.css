@@ -1,0 +1,23 @@
+/* main.css - variables, reset, base typography */
+:root{
+  --color-bg:#0b0b0f;
+  --color-surface:rgba(255,255,255,0.04);
+  --color-primary:#ffb347;
+  --color-text:#f8f8f8;
+  --header-height:72px;
+  --bottom-nav-height:64px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial;line-height:1.4;background:var(--color-bg);color:var(--color-text)}
+.container{max-width:1200px;margin:0 auto;padding:0 16px}
+.visually-hidden{position:absolute!important;height:1px;width:1px;overflow:hidden;clip:rect(1px,1px,1px,1px)}
+.skip-link{position:fixed;top:8px;left:8px;background:#000;color:#fff;padding:8px;z-index:9999}
+.header{height:var(--header-height);display:flex;align-items:center;background:transparent}
+.header--fixed{position:sticky;top:0;z-index:60;backdrop-filter:blur(6px)}
+.btn{display:inline-block;padding:8px 12px;border-radius:12px;text-decoration:none}
+.btn--primary{background:var(--color-primary);color:#000}
+.btn--ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--color-text)}
+/* utilities for display toggles */
+.d-none{display:none}
+.d-md-flex{display:none}
+.d-md-none{display:block}

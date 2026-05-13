@@ -3,86 +3,249 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>webland — Home</title>
-  <link rel="canonical" href="https://github.com/Hamedghz/webland">
+  <title>رستوران کی — صفحه اصلی</title>
+  <meta name="description" content="رستوران کی — تجربه متفاوت غذا و کافه در قلب شهر">
+  <link rel="canonical" href="https://example.com/">
+
   <!-- OpenGraph -->
-  <meta property="og:title" content="webland">
-  <meta property="og:description" content="Web land">
+  <meta property="og:title" content="رستوران کی">
+  <meta property="og:description" content="رستوران کی — تجربه متفاوت غذا و کافه در قلب شهر">
   <meta property="og:type" content="website">
-  <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image">
 
-  <!-- JSON-LD (example) -->
   <script type="application/ld+json">
-  {"@context":"https://schema.org","@type":"Restaurant","name":"webland","url":"https://github.com/Hamedghz/webland"}
+  {"@context":"https://schema.org","@type":"Restaurant","name":"رستوران کی","url":"https://example.com/"}
   </script>
 
-  <link rel="stylesheet" href="/assets/css/base/variables.css">
-  <link rel="stylesheet" href="/assets/css/base/typography.css">
-  <link rel="stylesheet" href="/assets/css/components/buttons.css">
-  <link rel="stylesheet" href="/assets/css/layout/header.css">
-  <link rel="stylesheet" href="/assets/css/components/bottom-nav.css">
-  <link rel="stylesheet" href="/assets/css/pages/home.css">
+  <link rel="stylesheet" href="/assets/css/main.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
   <link rel="stylesheet" href="/assets/css/responsive.css">
-
-  <meta name="color-scheme" content="light dark">
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
 
-  <header role="banner">
-    <nav role="navigation" aria-label="Primary" class="site-nav">
-      <a href="#home" class="logo">webland</a>
-    </nav>
+  <header class="header header--glass header--fixed" role="banner">
+    <div class="header__inner container">
+      <a href="#hero" class="header__brand">
+        <img src="/assets/images/logo.svg" alt="رستوران کی" class="header__logo">
+        <span class="header__title">رستوران کی</span>
+      </a>
+
+      <nav class="nav-desktop d-none d-md-flex" role="navigation" aria-label="ناوبری اصلی">
+        <a href="#hero" class="nav-desktop__link">خانه</a>
+        <a href="#about" class="nav-desktop__link">درباره ما</a>
+        <a href="#menu" class="nav-desktop__link">منو</a>
+        <a href="#gallery" class="nav-desktop__link">گالری</a>
+        <a href="#club" class="nav-desktop__link">باشگاه مشتریان</a>
+        <a href="#contact" class="nav-desktop__link">تماس</a>
+      </nav>
+
+      <div class="header__actions d-none d-md-flex">
+        <a href="tel:021xxxxxxx" class="btn btn--primary header__cta">سفارش تلفنی</a>
+      </div>
+    </div>
   </header>
 
   <main id="main">
-    <section aria-labelledby="hero-heading" class="hero">
-      <h1 id="hero-heading" class="visually-hidden">Hero Carousel</h1>
+    <!-- HERO -->
+    <section id="hero" class="hero hero-section">
+      <div class="hero__overlay"></div>
 
-      <div class="carousel" data-carousel>
-        <div class="carousel-track">
-          <div class="carousel-slide" role="group" aria-roledescription="slide" aria-label="1 of 3" style="--index:0">
-            <div class="img-wrap" style="aspect-ratio:16/9">
-              <img data-src="/assets/images/slide1.jpg" alt="Slide 1" loading="lazy" decoding="async">
-            </div>
-            <div class="carousel-caption">Slide 1</div>
+      <div class="hero__carousel" data-carousel>
+        <div class="hero__slides" data-carousel-track>
+          <div class="hero__slide is-active" data-carousel-slide id="slide-1">
+            <img data-src="/assets/images/hero/slide1.jpg" alt="رستوران کی" class="hero__image" loading="lazy" decoding="async">
           </div>
-
-          <div class="carousel-slide" role="group" aria-roledescription="slide" aria-label="2 of 3" style="--index:1">
-            <div class="img-wrap" style="aspect-ratio:16/9">
-              <img data-src="/assets/images/slide2.jpg" alt="Slide 2" loading="lazy" decoding="async">
-            </div>
-            <div class="carousel-caption">Slide 2</div>
-          </div>
-
-          <div class="carousel-slide" role="group" aria-roledescription="slide" aria-label="3 of 3" style="--index:2">
-            <div class="img-wrap" style="aspect-ratio:16/9">
-              <img data-src="/assets/images/slide3.jpg" alt="Slide 3" loading="lazy" decoding="async">
-            </div>
-            <div class="carousel-caption">Slide 3</div>
+          <div class="hero__slide" data-carousel-slide id="slide-2">
+            <img data-src="/assets/images/hero/slide2.jpg" alt="فضای داخلی" class="hero__image" loading="lazy" decoding="async">
           </div>
         </div>
 
-        <button class="carousel-prev" aria-controls="carousel" aria-label="Previous slide">◀</button>
-        <button class="carousel-next" aria-controls="carousel" aria-label="Next slide">▶</button>
+        <button class="hero__control hero__control--prev" data-carousel-prev aria-label="اسلاید قبلی">◀</button>
+        <button class="hero__control hero__control--next" data-carousel-next aria-label="اسلاید بعدی">▶</button>
+
+        <div class="hero__indicators" data-carousel-indicators>
+          <button class="hero__indicator is-active" data-carousel-indicator aria-label="نمایش اسلاید ۱"></button>
+          <button class="hero__indicator" data-carousel-indicator aria-label="نمایش اسلاید ۲"></button>
+        </div>
+      </div>
+
+      <div class="hero__content container">
+        <div class="glass-card hero__card">
+          <h1 class="hero__title">رستوران کی</h1>
+          <p class="hero__subtitle">تجربه متفاوت غذا و کافه در قلب شهر</p>
+          <div class="hero__actions">
+            <a href="#menu" class="btn btn--primary">مشاهده منو</a>
+            <a href="#contact" class="btn btn--ghost">تماس و آدرس</a>
+          </div>
+        </div>
       </div>
     </section>
 
-    <section id="content" class="content">
-      <h2>Welcome</h2>
-      <p>Starter scaffold for webland.</p>
+    <!-- ABOUT -->
+    <section id="about" class="section section-about">
+      <div class="container section__inner section-about__inner">
+        <div class="section-about__content">
+          <h2 class="section__title">درباره رستوران کی</h2>
+          <p class="section__text">متن معرفی رستوران (جایگزین با محتوا)...</p>
+          <ul class="section-about__features">
+            <li class="section-about__feature">محیط خانوادگی و صمیمی</li>
+            <li class="section-about__feature">مواد اولیه تازه</li>
+            <li class="section-about__feature">کافی شاپ تخصصی</li>
+          </ul>
+        </div>
+
+        <div class="section-about__media">
+          <div class="glass-card section-about__card">
+            <img src="/assets/images/about/about-1.jpg" alt="فضای رستوران" class="section-about__image">
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MENU -->
+    <section id="menu" class="section section-menu">
+      <div class="container section__inner section-menu__inner">
+        <header class="section__header">
+          <h2 class="section__title">منوی رستوران</h2>
+          <p class="section__subtitle">انتخاب از میان غذاهای اصلی، پیش‌غذا و نوشیدنی‌ها</p>
+        </header>
+
+        <div class="menu-tabs" data-tabs>
+          <div class="menu-tabs__list" role="tablist">
+            <button class="menu-tab is-active" type="button" role="tab" aria-selected="true" data-tab-target="main">غذاهای اصلی</button>
+            <button class="menu-tab" type="button" role="tab" aria-selected="false" data-tab-target="starter">پیش‌غذا</button>
+            <button class="menu-tab" type="button" role="tab" aria-selected="false" data-tab-target="drinks">نوشیدنی</button>
+            <button class="menu-tab" type="button" role="tab" aria-selected="false" data-tab-target="dessert">دسر</button>
+          </div>
+        </div>
+
+        <div class="menu-panels">
+          <div class="menu-panel is-active" data-tab-panel="main">
+            <article class="menu-card">
+              <h3 class="menu-card__title">جوجه کباب زعفرانی</h3>
+              <p class="menu-card__desc">توضیحات کوتاه در مورد این آیتم منو...</p>
+            </article>
+          </div>
+
+          <div class="menu-panel" data-tab-panel="starter">
+            <article class="menu-card">
+              <h3 class="menu-card__title">سوپ روز</h3>
+              <p class="menu-card__desc">توضیحات...</p>
+            </article>
+          </div>
+
+          <div class="menu-panel" data-tab-panel="drinks"></div>
+          <div class="menu-panel" data-tab-panel="dessert"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- GALLERY -->
+    <section id="gallery" class="section section-gallery">
+      <div class="container section__inner section-gallery__inner">
+        <header class="section__header">
+          <h2 class="section__title">گالری تصاویر</h2>
+          <p class="section__subtitle">نگاهی به فضای رستوران و غذاها</p>
+        </header>
+
+        <div class="gallery-track" data-gallery-track>
+          <article class="gallery-item">
+            <div class="gallery-item__media">
+              <img src="/assets/images/gallery/img-1.jpg" alt="تصویر ۱" class="gallery-item__image" loading="lazy" decoding="async">
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- CLUB -->
+    <section id="club" class="section section-club">
+      <div class="container section__inner section-club__inner">
+        <div class="section-club__content">
+          <h2 class="section__title">باشگاه مشتریان</h2>
+          <p class="section__text">با عضویت در باشگاه مشتریان، از تخفیف‌ها و پیشنهادهای ویژه باخبر شوید.</p>
+        </div>
+
+        <div class="section-club__form-wrapper">
+          <form id="clubForm" class="form form--glass" novalidate>
+            <div class="form__group">
+              <label for="phone" class="form__label">شماره موبایل</label>
+              <input id="phone" name="phone" type="tel" class="form__input" placeholder="مثلاً 0912xxxxxxx" required>
+            </div>
+
+            <button type="submit" class="btn btn--primary form__submit">عضویت</button>
+
+            <p id="formMessage" class="form__message" aria-live="polite"></p>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- MAP -->
+    <section id="map" class="section section-map">
+      <div class="container section__inner section-map__inner">
+        <header class="section__header"><h2 class="section__title">موقعیت رستوران</h2></header>
+        <div class="section-map__content">
+          <div class="map-wrapper">
+            <div class="map-frame" data-map-zoom>
+              <img src="/assets/images/map/map-static.jpg" alt="نقشه موقعیت رستوران کی" class="map-image" loading="lazy">
+            </div>
+            <div class="map-actions">
+              <a href="#" target="_blank" class="btn btn--ghost">باز کردن در نقشه</a>
+            </div>
+          </div>
+
+          <div class="section-map__info">
+            <ul class="contact-list">
+              <li class="contact-list__item"><span class="contact-list__label">آدرس:</span><span class="contact-list__value">...</span></li>
+              <li class="contact-list__item"><span class="contact-list__label">تلفن:</span><a href="tel:021xxxxxxx" class="contact-list__value">021-xxxxxxx</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CONTACT -->
+    <section id="contact" class="section section-contact">
+      <div class="container section__inner section-contact__inner">
+        <div class="section-contact__col">
+          <h2 class="section__title">تماس با ما</h2>
+          <ul class="contact-list">
+            <li class="contact-list__item"><span class="contact-list__label">تلفن ثابت:</span><a href="tel:021xxxxxxx" class="contact-list__value">021-xxxxxxx</a></li>
+            <li class="contact-list__item"><span class="contact-list__label">موبایل:</span><a href="tel:09xxxxxxxxx" class="contact-list__value">09xx xxx xxxx</a></li>
+            <li class="contact-list__item"><span class="contact-list__label">اینستاگرام:</span><a href="#" target="_blank" class="contact-list__value">@restaurant.key</a></li>
+          </ul>
+        </div>
+
+        <div class="section-contact__col">
+          <h3 class="section-contact__subtitle">ساعات کاری</h3>
+          <ul class="schedule-list">
+            <li class="schedule-list__item"><span class="schedule-list__day">شنبه تا چهارشنبه</span><span class="schedule-list__time">۱۲:۰۰ تا ۲۳:۳۰</span></li>
+            <li class="schedule-list__item"><span class="schedule-list__day">پنجشنبه و جمعه</span><span class="schedule-list__time">۱۲:۰۰ تا ۰۰:۳۰</span></li>
+          </ul>
+        </div>
+      </div>
     </section>
   </main>
 
-  <footer role="contentinfo">
-    <p>&copy; webland</p>
+  <footer class="footer">
+    <div class="container footer__inner">
+      <div class="footer__col footer__col--brand"><h3 class="footer__title">رستوران کی</h3><p class="footer__tagline">شعار رستوران...</p></div>
+      <div class="footer__col footer__col--hours"><h4 class="footer__subtitle">ساعات کاری</h4><p class="footer__text">هر روز از ۱۲:۰۰ تا ۲۳:۳۰</p></div>
+      <div class="footer__col footer__col--contact"><h4 class="footer__subtitle">آدرس</h4><p class="footer__text">...</p><a href="#map" class="footer__link">مشاهده روی نقشه</a>
+        <nav class="footer-nav"><a href="#hero" class="footer-nav__link">خانه</a><a href="#about" class="footer-nav__link">درباره</a><a href="#menu" class="footer-nav__link">منو</a><a href="#gallery" class="footer-nav__link">گالری</a><a href="#club" class="footer-nav__link">باشگاه</a><a href="#contact" class="footer-nav__link">تماس</a></nav>
+      </div>
+    </div>
+
+    <div class="footer__bottom"><div class="container footer__bottom-inner"><p class="footer__copyright">© تمامی حقوق برای رستوران کی محفوظ است.</p></div></div>
   </footer>
 
-  <nav class="bottom-nav" role="navigation" aria-label="Bottom Navigation" data-bottom-nav>
-    <a href="#home" data-target="#home">خانه</a>
-    <a href="#content" data-target="#content">محتوا</a>
-    <a href="#contact" data-target="#contact">تماس</a>
+  <nav class="bottom-nav d-md-none" data-bottom-nav>
+    <a href="#hero" class="bottom-nav__item is-active" data-nav-section="hero"><span class="bottom-nav__icon bottom-nav__icon--home"></span><span class="bottom-nav__label">خانه</span></a>
+    <a href="#about" class="bottom-nav__item" data-nav-section="about"><span class="bottom-nav__icon bottom-nav__icon--info"></span><span class="bottom-nav__label">درباره</span></a>
+    <a href="#menu" class="bottom-nav__item" data-nav-section="menu"><span class="bottom-nav__icon bottom-nav__icon--menu"></span><span class="bottom-nav__label">منو</span></a>
+    <a href="#contact" class="bottom-nav__item" data-nav-section="contact"><span class="bottom-nav__icon bottom-nav__icon--call"></span><span class="bottom-nav__label">تماس</span></a>
   </nav>
 
   <script type="module" src="/assets/js/app.js"></script>
