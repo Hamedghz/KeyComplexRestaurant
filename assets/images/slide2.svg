@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-labelledby="t d">
+  <title id="t">تصویر غذا</title>
+  <desc id="d">پس‌زمینه تزئینی برای معرفی غذاهای رستوران</desc>
+  <defs>
+    <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2d1e1e" />
+      <stop offset="1" stop-color="#8b4513" />
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#g2)"/>
+  <ellipse cx="800" cy="470" rx="420" ry="240" fill="#f4a261" opacity="0.25"/>
+  <ellipse cx="800" cy="470" rx="300" ry="160" fill="#2a9d8f" opacity="0.2"/>
+  <text x="80" y="790" fill="#fff" font-size="68" font-family="sans-serif">WebLand • Signature Dishes</text>
+</svg>

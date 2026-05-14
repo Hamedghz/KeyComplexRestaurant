@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 2200" role="img" aria-labelledby="t d">
+<title id="t">پیش‌نمایش صفحه اول</title><desc id="d">ماکاپ ساده از ساختار صفحه اصلی شامل هیرو، منو و فوتر</desc>
+<rect width="1440" height="2200" fill="#111"/>
+<rect x="70" y="40" width="1300" height="80" rx="18" fill="#1f1f1f"/>
+<rect x="70" y="150" width="1300" height="640" rx="26" fill="#2b2b2b"/>
+<rect x="130" y="560" width="620" height="180" rx="20" fill="#000" opacity="0.55"/>
+<rect x="70" y="830" width="1300" height="260" rx="26" fill="#1e1e1e"/>
+<rect x="70" y="1130" width="1300" height="360" rx="26" fill="#1e1e1e"/>
+<rect x="70" y="1530" width="1300" height="420" rx="26" fill="#1e1e1e"/>
+<rect x="70" y="1985" width="1300" height="150" rx="24" fill="#181818"/>
+<text x="120" y="105" fill="#fff" font-size="38" font-family="sans-serif">WebLand Restaurant Landing (RTL)</text>
+<text x="120" y="1760" fill="#bbb" font-size="34" font-family="sans-serif">Menu Tabs + Cards + Contact + Bottom Nav</text>
+</svg>
