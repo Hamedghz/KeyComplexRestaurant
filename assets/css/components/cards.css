@@ -1,1 +1,1 @@
-.card{border:1px solid #eee;padding:12px;border-radius:8px;background:#fff}
+.card{padding:12px;border-radius:12px;background:var(--glass-bg);border:1px solid var(--glass-border);box-shadow:var(--glass-shadow);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
