@@ -1,6 +1,6 @@
 .header{position:fixed;top:0;inset-inline:0;backdrop-filter:blur(var(--glass-blur));background:linear-gradient(120deg,#00766e 0%,#006a62 45%,#004743 100%);border-bottom:1px solid rgba(255,255,255,.25);z-index:50}
-.header__nav{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;padding:1rem;min-height:72px;gap:.75rem}
-.header__brand{grid-column:2;font-size:clamp(1rem,2.5vw,1.4rem);color:#fff6cc}
+.header__nav{display:flex;align-items:center;justify-content:space-between;direction:ltr;padding:1rem;min-height:72px;gap:.75rem}
+.header__brand{font-size:clamp(1rem,2.5vw,1.4rem);color:#fff6cc;direction:rtl}
 .header__links{display:none;gap:1rem}
-.header__call{grid-column:1;justify-self:end;display:flex;align-items:center;gap:.35rem;padding:.45rem .75rem;font-size:.9rem;white-space:nowrap}
+.header__call{display:flex;flex-direction:column;align-items:flex-start;gap:.1rem;padding:.45rem .75rem;font-size:.9rem;white-space:nowrap;direction:rtl}
 .header__call small{font-size:.8em;opacity:.95}
