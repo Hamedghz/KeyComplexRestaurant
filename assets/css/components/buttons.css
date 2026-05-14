@@ -1,4 +1,4 @@
 button{cursor:pointer}
 .btn{display:inline-block;padding:10px 16px;border-radius:var(--radius);background:var(--btn-primary);color:var(--btn-text);text-decoration:none;border:1px solid transparent;box-shadow:var(--gold-glow);transition:transform var(--transition),box-shadow var(--transition),filter var(--transition)}
-.btn:hover{transform:translateY(-1px);filter:brightness(1.03);box-shadow:0 0 30px rgba(255,215,0,.45)}
+.btn:hover{transform:translateY(-1px);background:var(--light-gold);box-shadow:0 0 30px rgba(255,215,0,.45)}
 .btn:focus-visible{outline:2px solid var(--gold-primary);outline-offset:2px}
