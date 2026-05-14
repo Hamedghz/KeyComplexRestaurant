@@ -1,2 +1,4 @@
 form{display:block}
-input,textarea,select{padding:8px;border:1px solid #ddd;border-radius:6px}
+input,textarea,select{padding:8px;border:1px solid var(--glass-border);border-radius:10px;background:var(--black-glass);color:var(--white-soft)}
+input::placeholder,textarea::placeholder{color:var(--white-muted)}
+input:focus,textarea:focus,select:focus{outline:2px solid var(--gold-primary);outline-offset:1px}

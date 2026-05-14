@@ -2,7 +2,7 @@
 .carousel{position:relative;overflow:hidden}
 .carousel-track{display:flex;transition:transform 400ms var(--transition);will-change:transform}
 .carousel-slide{min-width:100%;flex:0 0 100%;transform:translateZ(0)}
-.carousel .img-wrap{background:#f0f0f0}
-.carousel-prev,.carousel-next{position:absolute;top:50%;transform:translateY(-50%);background:rgba(0,0,0,0.4);color:#fff;border:none;padding:8px;border-radius:50%}
+.carousel .img-wrap{background:var(--black-soft)}
+.carousel-prev,.carousel-next{position:absolute;top:50%;transform:translateY(-50%);background:var(--black-glass);color:var(--white-primary);border:1px solid var(--glass-border);padding:8px;border-radius:50%;box-shadow:var(--teal-glow)}
 .carousel-prev{left:8px}
 .carousel-next{right:8px}
