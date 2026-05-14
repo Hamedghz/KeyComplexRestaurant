@@ -9,7 +9,7 @@
   .hero-card h1,.hero-card h2{font-size:clamp(1.1rem,5vw,1.5rem);line-height:1.4;margin-bottom:.4rem}
   .hero-card p{font-size:.92rem;line-height:1.7}
   .hero-actions{display:grid;grid-template-columns:1fr;gap:.45rem}
-  .carousel__controls{inset:46% .65rem auto .65rem}
+  .carousel__controls{inset-block-start:46%}
   .carousel__controls button{width:2.7rem;height:2.7rem;font-size:1.5rem}
 }
 @media (min-width:768px){.section{padding:5rem 2rem}}
