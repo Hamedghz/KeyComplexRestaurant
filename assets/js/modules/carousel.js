@@ -53,8 +53,8 @@ export default class Carousel{
   resume(){ this.isPaused = false }
   restart(){ clearInterval(this.timer); this.timer=null; this.start() }
   lazyLoadVisible(){
-    const loadImg = (slide)=>{ const img = slide?.querySelector('img[data-src]'); if(img && !img.src){ img.src = img.dataset.src } }
+    const loadImg = (slide)=>{ const img = slide?.querySelector('img[data-src]'); if(img && !img.getAttribute('src')){ img.src = img.dataset.src } }
     loadImg(this.slides[this.index]); loadImg(this.slides[(this.index+1)%this.count])
   }
-  prefetchNext(){ const img = this.slides[(this.index+1)%this.count]?.querySelector('img[data-src]'); if(img && !img.src){ const p=new Image(); p.src = img.dataset.src } }
+  prefetchNext(){ const img = this.slides[(this.index+1)%this.count]?.querySelector('img[data-src]'); if(img && !img.getAttribute('src')){ const p=new Image(); p.src = img.dataset.src } }
 }
