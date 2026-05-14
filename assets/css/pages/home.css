@@ -1,4 +1,5 @@
 html{scroll-behavior:smooth}
+body{padding-block:4.5rem 5rem}
 .hero{min-height:100svh}
 .carousel{position:relative;overflow:hidden}
 .carousel::after{content:"";position:absolute;inset:0;background:var(--hero-overlay);pointer-events:none}

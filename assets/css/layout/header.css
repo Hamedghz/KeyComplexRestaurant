@@ -2,4 +2,4 @@
 .header__nav{display:flex;justify-content:space-between;align-items:center;padding:1rem}
 .header__brand{font-size:clamp(1rem,2.5vw,1.4rem)}
 .header__links{display:none;gap:1rem}
-@media (min-width:992px){.header__links{display:flex}}
+
