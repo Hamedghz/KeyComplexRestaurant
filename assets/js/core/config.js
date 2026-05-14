@@ -4,7 +4,7 @@
  */
 export const config = {
   carousel: {
-    autoplay: 4000,
+    autoplay: 6000,
     transition: 400,
     touchThreshold: 40 // px
   },
