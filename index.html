@@ -1,90 +1,63 @@
 <!doctype html>
 <html lang="fa" dir="rtl">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>webland — Home</title>
-  <link rel="canonical" href="https://github.com/Hamedghz/webland">
-  <!-- OpenGraph -->
-  <meta property="og:title" content="webland">
-  <meta property="og:description" content="Web land">
-  <meta property="og:type" content="website">
-  <!-- Twitter -->
-  <meta name="twitter:card" content="summary_large_image">
-
-  <!-- JSON-LD (example) -->
-  <script type="application/ld+json">
-  {"@context":"https://schema.org","@type":"Restaurant","name":"webland","url":"https://github.com/Hamedghz/webland"}
-  </script>
-
-  <link rel="stylesheet" href="/assets/css/base/variables.css">
-  <link rel="stylesheet" href="/assets/css/base/typography.css">
-  <link rel="stylesheet" href="/assets/css/components/buttons.css">
-  <link rel="stylesheet" href="/assets/css/layout/header.css">
-  <link rel="stylesheet" href="/assets/css/components/bottom-nav.css">
-  <link rel="stylesheet" href="/assets/css/pages/home.css">
-  <link rel="stylesheet" href="/assets/css/responsive.css">
-
-  <meta name="color-scheme" content="light dark">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>WebLand V8 | رستوران مدرن</title>
+  <meta name="description" content="وب‌لند V8، صفحه فرود مدرن رستوران با تمرکز بر سرعت، تجربه موبایل و دسترس‌پذیری." />
+  <meta name="keywords" content="رستوران, کافه, منو, رزرو, WebLand" />
+  <link rel="canonical" href="https://webland.example" />
+  <meta property="og:title" content="WebLand V8" />
+  <meta property="og:description" content="صفحه فرود حرفه‌ای رستوران با معماری ماژولار." />
+  <meta property="og:image" content="/public/social-preview.jpg" />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="stylesheet" href="/assets/css/base/variables.css" />
+  <link rel="stylesheet" href="/assets/css/base/reset.css" />
+  <link rel="stylesheet" href="/assets/css/base/typography.css" />
+  <link rel="stylesheet" href="/assets/css/base/utilities.css" />
+  <link rel="stylesheet" href="/assets/css/layout/header.css" />
+  <link rel="stylesheet" href="/assets/css/layout/sections.css" />
+  <link rel="stylesheet" href="/assets/css/layout/footer.css" />
+  <link rel="stylesheet" href="/assets/css/components/buttons.css" />
+  <link rel="stylesheet" href="/assets/css/components/cards.css" />
+  <link rel="stylesheet" href="/assets/css/components/tabs.css" />
+  <link rel="stylesheet" href="/assets/css/components/gallery.css" />
+  <link rel="stylesheet" href="/assets/css/components/forms.css" />
+  <link rel="stylesheet" href="/assets/css/components/bottom-nav.css" />
+  <link rel="stylesheet" href="/assets/css/pages/home.css" />
+  <link rel="stylesheet" href="/assets/css/responsive.css" />
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"Restaurant","name":"WebLand V8","telephone":"+98-21-0000-0000","address":{"@type":"PostalAddress","streetAddress":"تهران، خیابان نمونه"}}</script>
 </head>
 <body>
-  <a class="skip-link" href="#main">Skip to content</a>
-
-  <header role="banner">
-    <nav role="navigation" aria-label="Primary" class="site-nav">
-      <a href="#home" class="logo">webland</a>
+  <a class="skip-link" href="#main">رفتن به محتوا</a>
+  <header class="header" role="banner">
+    <nav class="header__nav" aria-label="منوی اصلی">
+      <a href="#home" class="header__brand">WebLand</a>
+      <ul class="header__links">
+        <li><a href="#about">درباره</a></li><li><a href="#menu">منو</a></li><li><a href="#gallery">گالری</a></li><li><a href="#contact">تماس</a></li>
+      </ul>
     </nav>
   </header>
-
   <main id="main">
-    <section aria-labelledby="hero-heading" class="hero">
-      <h1 id="hero-heading" class="visually-hidden">Hero Carousel</h1>
-
+    <section id="home" class="hero" aria-label="Hero">
       <div class="carousel" data-carousel>
         <div class="carousel-track">
-          <div class="carousel-slide" role="group" aria-roledescription="slide" aria-label="1 of 3" style="--index:0">
-            <div class="img-wrap" style="aspect-ratio:16/9">
-              <img data-src="/assets/images/slide1.jpg" alt="Slide 1" loading="lazy" decoding="async">
-            </div>
-            <div class="carousel-caption">Slide 1</div>
-          </div>
-
-          <div class="carousel-slide" role="group" aria-roledescription="slide" aria-label="2 of 3" style="--index:1">
-            <div class="img-wrap" style="aspect-ratio:16/9">
-              <img data-src="/assets/images/slide2.jpg" alt="Slide 2" loading="lazy" decoding="async">
-            </div>
-            <div class="carousel-caption">Slide 2</div>
-          </div>
-
-          <div class="carousel-slide" role="group" aria-roledescription="slide" aria-label="3 of 3" style="--index:2">
-            <div class="img-wrap" style="aspect-ratio:16/9">
-              <img data-src="/assets/images/slide3.jpg" alt="Slide 3" loading="lazy" decoding="async">
-            </div>
-            <div class="carousel-caption">Slide 3</div>
-          </div>
+          <article class="carousel-slide"><img data-src="/assets/images/slide1.jpg" alt="غذا ۱" loading="lazy" decoding="async" /><h1>طعم متفاوت</h1></article>
+          <article class="carousel-slide"><img data-src="/assets/images/slide2.jpg" alt="غذا ۲" loading="lazy" decoding="async" /><h1>کیفیت روز</h1></article>
+          <article class="carousel-slide"><img data-src="/assets/images/slide3.jpg" alt="غذا ۳" loading="lazy" decoding="async" /><h1>فضای مدرن</h1></article>
         </div>
-
-        <button class="carousel-prev" aria-controls="carousel" aria-label="Previous slide">◀</button>
-        <button class="carousel-next" aria-controls="carousel" aria-label="Next slide">▶</button>
+        <div class="carousel__controls"><button class="carousel-prev" aria-label="اسلاید قبلی">‹</button><button class="carousel-next" aria-label="اسلاید بعدی">›</button></div>
       </div>
     </section>
-
-    <section id="content" class="content">
-      <h2>Welcome</h2>
-      <p>Starter scaffold for webland.</p>
-    </section>
+    <section id="about" class="section"><h2>درباره ما</h2><p>رستورانی مدرن با منوی فصلی و مواد اولیه تازه.</p></section>
+    <section id="menu" class="section"><h2>منو</h2><div class="tabs" data-tabs><button role="tab" aria-selected="true" data-tab="main">غذا اصلی</button><button role="tab" data-tab="starter">پیش‌غذا</button><button role="tab" data-tab="drink">نوشیدنی</button><button role="tab" data-tab="dessert">دسر</button></div><div class="tab-panel is-active" data-panel="main">کباب، پاستا</div><div class="tab-panel" data-panel="starter">سوپ، سالاد</div><div class="tab-panel" data-panel="drink">قهوه، اسموتی</div><div class="tab-panel" data-panel="dessert">چیزکیک، تیرامیسو</div></section>
+    <section id="gallery" class="section"><h2>گالری</h2><div class="gallery"><img src="/assets/images/slide1.jpg" alt="گالری ۱" loading="lazy" decoding="async" /><img src="/assets/images/slide2.jpg" alt="گالری ۲" loading="lazy" decoding="async" /><img src="/assets/images/slide3.jpg" alt="گالری ۳" loading="lazy" decoding="async" /></div></section>
+    <section id="club" class="section"><h2>باشگاه مشتریان</h2><form data-club-form><label for="phone">شماره موبایل</label><input id="phone" name="phone" inputmode="numeric" placeholder="09xxxxxxxxx" /><button class="btn" type="submit">عضویت</button><p data-form-message aria-live="polite"></p></form></section>
+    <section id="contact" class="section"><h2>تماس با ما</h2><p>تلفن: ۰۲۱۰۰۰۰۰۰۰۰</p><p>آدرس: تهران، خیابان نمونه</p></section>
   </main>
-
-  <footer role="contentinfo">
-    <p>&copy; webland</p>
-  </footer>
-
-  <nav class="bottom-nav" role="navigation" aria-label="Bottom Navigation" data-bottom-nav>
-    <a href="#home" data-target="#home">خانه</a>
-    <a href="#content" data-target="#content">محتوا</a>
-    <a href="#contact" data-target="#contact">تماس</a>
-  </nav>
-
+  <footer class="footer"><p>© WebLand V8</p></footer>
+  <nav class="bottom-nav" data-bottom-nav aria-label="ناوبری موبایل"><a href="#home" data-target="#home">خانه</a><a href="#about" data-target="#about">درباره</a><a href="#menu" data-target="#menu">منو</a><a href="#contact" data-target="#contact">تماس</a></nav>
   <script type="module" src="/assets/js/app.js"></script>
 </body>
 </html>

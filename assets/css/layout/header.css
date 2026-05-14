@@ -1,2 +1,1 @@
-header.site-nav{background:var(--color-bg);padding:12px 16px;position:sticky;top:0;z-index:50;border-bottom:1px solid #eee}
-.logo{font-weight:700;color:var(--color-primary);text-decoration:none}
+.header{position:fixed;top:0;inset-inline:0;backdrop-filter:blur(10px);background:rgb(17 17 17 / 50%);z-index:50;transition:box-shadow .3s}.header.is-scrolled{box-shadow:0 4px 20px rgb(0 0 0 / 25%)}.header__nav{display:flex;justify-content:space-between;align-items:center;padding:1rem}.header__links{display:flex;gap:1rem}
