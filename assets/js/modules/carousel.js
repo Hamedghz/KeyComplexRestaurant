@@ -39,7 +39,6 @@ export default class Carousel {
 
     try {
       this.update()
-      this.loadAllSlideImages()
       this.bind()
       this.start()
       this.lazyLoadVisible()
@@ -49,18 +48,7 @@ export default class Carousel {
   }
 
 
-  /**
-   * Ensure all slide images are initialized
-   */
-  loadAllSlideImages() {
-    this.slides.forEach((slide) => {
-      const img = slide?.querySelector('img[data-src]')
-      if (img && !img.getAttribute('src')) {
-        img.src = img.dataset.src
-      }
-    })
-  }
-  /**
+    /**
    * Bind all event listeners
    */
   bind() {
@@ -211,7 +199,9 @@ export default class Carousel {
       })
 
       this.dots.forEach((dot, i) => {
-        dot?.classList?.toggle('is-active', i === this.index)
+        const isActive = i === this.index
+        dot?.classList?.toggle('is-active', isActive)
+        dot?.setAttribute('aria-current', isActive ? 'true' : 'false')
       })
     } catch (e) {
       console.error('Carousel update error:', e)
