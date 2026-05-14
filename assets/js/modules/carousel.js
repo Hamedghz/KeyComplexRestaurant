@@ -1,16 +1,6 @@
 import { config } from '../core/config.js'
 
-/**
- * Carousel/Slider Component
- * Handles image rotation with autoplay, touch, keyboard, and mouse support
- * Includes proper memory cleanup and lazy loading
- */
 export default class Carousel {
-  /**
-   * @param {HTMLElement} root - Carousel container element
-   * @param {Object} opts - Configuration options
-   * @param {number} opts.autoplay - Autoplay interval in ms (default: 4000)
-   */
   constructor(root, opts = {}) {
     this.root = root
     this.track = root?.querySelector('.carousel-track')
@@ -18,301 +8,164 @@ export default class Carousel {
     this.prevBtn = root?.querySelector('.carousel-prev')
     this.nextBtn = root?.querySelector('.carousel-next')
     this.dots = Array.from(root?.querySelectorAll('[data-dot]') ?? [])
+
     this.index = 0
     this.count = this.slides.length
     this.autoplay = opts.autoplay ?? config.carousel.autoplay
     this.timer = null
     this.isPaused = false
     this.touch = { startX: 0, deltaX: 0 }
-    this.cleanups = [] // Track cleanup functions
+    this.cleanups = []
+    this.imageObserver = null
 
-    if (this.root) {
+    if (this.root && this.track && this.count > 0) {
       this.init()
     }
   }
 
-  /**
-   * Initialize carousel
-   */
   init() {
-    if (!this.track || this.count === 0) return
+    this.setupLayout()
+    this.setupImages()
+    this.bind()
+    this.update()
+    this.start()
+  }
 
-    try {
-      this.update()
-      this.bind()
-      this.start()
-      this.lazyLoadVisible()
-    } catch (e) {
-      console.error('Carousel initialization error:', e)
+  setupLayout() {
+    this.track.style.width = `${this.count * 100}%`
+    this.slides.forEach((slide) => {
+      slide.style.width = `${100 / this.count}%`
+      slide.setAttribute('role', 'group')
+    })
+  }
+
+  setupImages() {
+    const loadImage = (img) => {
+      if (!img || img.dataset.loaded === 'true') return
+      const nextSrc = img.dataset.src
+      if (!nextSrc) return
+      img.src = nextSrc
+      img.dataset.loaded = 'true'
+    }
+
+    this.loadImage = loadImage
+
+    this.loadVisibleImages()
+
+    if ('IntersectionObserver' in window) {
+      this.imageObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const img = entry.target.querySelector('img')
+            loadImage(img)
+          }
+        })
+      }, { root: this.root, threshold: 0.15 })
+
+      this.slides.forEach((slide) => this.imageObserver.observe(slide))
+    } else {
+      this.slides.forEach((slide) => loadImage(slide.querySelector('img')))
     }
   }
 
-
-    /**
-   * Bind all event listeners
-   */
   bind() {
-    try {
-      // Navigation buttons
-      if (this.nextBtn) {
-        const nextCleanup = this._addEventListener(
-          this.nextBtn,
-          'click',
-          () => this.goTo(this.index + 1)
-        )
-        this.cleanups.push(nextCleanup)
-      }
+    this.root.setAttribute('role', 'region')
+    this.root.setAttribute('aria-label', 'اسلایدر تصاویر')
+    this.root.setAttribute('tabindex', '0')
 
-      if (this.prevBtn) {
-        const prevCleanup = this._addEventListener(
-          this.prevBtn,
-          'click',
-          () => this.goTo(this.index - 1)
-        )
-        this.cleanups.push(prevCleanup)
-      }
+    this.cleanups.push(this.on(this.nextBtn, 'click', () => this.goTo(this.index + 1)))
+    this.cleanups.push(this.on(this.prevBtn, 'click', () => this.goTo(this.index - 1)))
 
-      // Dots navigation
-      this.dots.forEach((dot) => {
-        const cleanup = this._addEventListener(dot, 'click', () => {
-          this.goTo(Number(dot.dataset.dot))
-        })
-        this.cleanups.push(cleanup)
-      })
+    this.dots.forEach((dot) => {
+      this.cleanups.push(this.on(dot, 'click', () => this.goTo(Number(dot.dataset.dot))))
+    })
 
-      // Pause on hover/focus
-      this.cleanups.push(
-        this._addEventListener(this.root, 'mouseenter', () => this.pause())
-      )
-      this.cleanups.push(
-        this._addEventListener(this.root, 'focusin', () => this.pause())
-      )
-      this.cleanups.push(
-        this._addEventListener(this.root, 'mouseleave', () => this.resume())
-      )
-      this.cleanups.push(
-        this._addEventListener(this.root, 'focusout', () => this.resume())
-      )
+    this.cleanups.push(this.on(this.root, 'mouseenter', () => this.pause()))
+    this.cleanups.push(this.on(this.root, 'focusin', () => this.pause()))
+    this.cleanups.push(this.on(this.root, 'mouseleave', () => this.resume()))
+    this.cleanups.push(this.on(this.root, 'focusout', () => this.resume()))
 
-      // Keyboard navigation with RTL awareness
-      this.cleanups.push(
-        this._addEventListener(this.root, 'keydown', (e) => {
-          const isRTL = document?.documentElement?.dir === 'rtl'
+    this.cleanups.push(this.on(this.root, 'keydown', (e) => {
+      const isRTL = document.documentElement.dir === 'rtl'
+      if (e.key === 'ArrowRight') this.goTo(isRTL ? this.index - 1 : this.index + 1)
+      if (e.key === 'ArrowLeft') this.goTo(isRTL ? this.index + 1 : this.index - 1)
+    }))
 
-          if (e.key === 'ArrowRight') {
-            this.goTo(isRTL ? this.index - 1 : this.index + 1)
-          }
+    this.cleanups.push(this.on(this.root, 'touchstart', (e) => {
+      this.touch.startX = e.touches?.[0]?.clientX ?? 0
+    }, { passive: true }))
 
-          if (e.key === 'ArrowLeft') {
-            this.goTo(isRTL ? this.index + 1 : this.index - 1)
-          }
-        })
-      )
+    this.cleanups.push(this.on(this.root, 'touchmove', (e) => {
+      this.touch.deltaX = (e.touches?.[0]?.clientX ?? 0) - this.touch.startX
+    }, { passive: true }))
 
-      // Touch navigation
-      this.cleanups.push(
-        this._addEventListener(
-          this.root,
-          'touchstart',
-          (e) => {
-            this.touch.startX = e.touches?.[0]?.clientX ?? 0
-          },
-          { passive: true }
-        )
-      )
-
-      this.cleanups.push(
-        this._addEventListener(
-          this.root,
-          'touchmove',
-          (e) => {
-            this.touch.deltaX =
-              (e.touches?.[0]?.clientX ?? 0) - this.touch.startX
-          },
-          { passive: true }
-        )
-      )
-
-      this.cleanups.push(
-        this._addEventListener(this.root, 'touchend', () => {
-          const threshold = config.carousel.touchThreshold
-          if (this.touch.deltaX > threshold) {
-            this.goTo(this.index - 1)
-          } else if (this.touch.deltaX < -threshold) {
-            this.goTo(this.index + 1)
-          }
-          this.touch.deltaX = 0
-        })
-      )
-
-      // Resize handler
-      const resizeCleanup = this._addEventListener(
-        window,
-        'resize',
-        () => this.update(),
-        { passive: true }
-      )
-      this.cleanups.push(resizeCleanup)
-
-      // Set ARIA attributes
-      this.root.setAttribute('role', 'region')
-      this.root.setAttribute('aria-label', 'اسلایدر تصاویر')
-      this.root.setAttribute('tabindex', '0')
-    } catch (e) {
-      console.error('Carousel bind error:', e)
-    }
+    this.cleanups.push(this.on(this.root, 'touchend', () => {
+      const threshold = config.carousel.touchThreshold
+      if (this.touch.deltaX > threshold) this.goTo(this.index - 1)
+      if (this.touch.deltaX < -threshold) this.goTo(this.index + 1)
+      this.touch.deltaX = 0
+    }))
   }
 
-  /**
-   * Helper to attach event with error handling
-   * @private
-   */
-  _addEventListener(el, event, handler, opts) {
-    try {
-      el?.addEventListener(event, handler, opts)
-      return () => {
-        try {
-          el?.removeEventListener(event, handler, opts)
-        } catch (e) {
-          console.error(`Failed to remove ${event} listener`, e)
-        }
-      }
-    } catch (e) {
-      console.error(`Failed to attach ${event} listener`, e)
-      return () => {}
-    }
+  on(el, event, handler, opts) {
+    el?.addEventListener(event, handler, opts)
+    return () => el?.removeEventListener(event, handler, opts)
   }
 
-  /**
-   * Update carousel position and state
-   */
   update() {
-    try {
-      const x = -this.index * 100
-      this.track?.style?.setProperty(
-        'transform',
-        `translate3d(${x}%,0,0)`
-      )
+    const x = -(this.index * 100) / this.count
+    this.track.style.transform = `translate3d(${x}%, 0, 0)`
 
-      this.slides.forEach((slide, i) => {
-        slide?.setAttribute('aria-hidden', String(i !== this.index))
-      })
+    this.slides.forEach((slide, i) => {
+      slide.setAttribute('aria-hidden', String(i !== this.index))
+    })
 
-      this.dots.forEach((dot, i) => {
-        const isActive = i === this.index
-        dot?.classList?.toggle('is-active', isActive)
-        dot?.setAttribute('aria-current', isActive ? 'true' : 'false')
-      })
-    } catch (e) {
-      console.error('Carousel update error:', e)
-    }
+    this.dots.forEach((dot, i) => {
+      const isActive = i === this.index
+      dot.classList.toggle('is-active', isActive)
+      dot.setAttribute('aria-current', isActive ? 'true' : 'false')
+    })
+
+    this.loadVisibleImages()
   }
 
-  /**
-   * Navigate to slide index
-   * @param {number} i - Slide index
-   */
+  loadVisibleImages() {
+    const current = this.slides[this.index]
+    const next = this.slides[(this.index + 1) % this.count]
+    const prev = this.slides[(this.index - 1 + this.count) % this.count]
+    this.loadImage(current?.querySelector('img'))
+    this.loadImage(next?.querySelector('img'))
+    this.loadImage(prev?.querySelector('img'))
+  }
+
   goTo(i) {
-    try {
-      this.index = (i + this.count) % this.count
-      this.update()
-      this.lazyLoadVisible()
-      this.prefetchNext()
-      this.restart()
-    } catch (e) {
-      console.error('Carousel navigation error:', e)
-    }
+    this.index = (i + this.count) % this.count
+    this.update()
+    this.restart()
   }
 
-  /**
-   * Start autoplay
-   */
   start() {
-    if (this.autoplay && !this.timer) {
-      try {
-        this.timer = setInterval(() => {
-          if (!this.isPaused) {
-            this.goTo(this.index + 1)
-          }
-        }, this.autoplay)
-      } catch (e) {
-        console.error('Autoplay start error:', e)
-      }
-    }
+    if (!this.autoplay || this.timer) return
+    this.timer = setInterval(() => {
+      if (!this.isPaused) this.goTo(this.index + 1)
+    }, this.autoplay)
   }
 
-  /**
-   * Pause autoplay
-   */
-  pause() {
-    this.isPaused = true
-  }
+  pause() { this.isPaused = true }
+  resume() { this.isPaused = false }
 
-  /**
-   * Resume autoplay
-   */
-  resume() {
-    this.isPaused = false
-  }
-
-  /**
-   * Restart autoplay timer
-   */
   restart() {
-    try {
-      clearInterval(this.timer)
-      this.timer = null
-      this.start()
-    } catch (e) {
-      console.error('Carousel restart error:', e)
-    }
+    clearInterval(this.timer)
+    this.timer = null
+    this.start()
   }
 
-  /**
-   * Lazy load visible slides
-   */
-  lazyLoadVisible() {
-    try {
-      const loadImg = (slide) => {
-        const img = slide?.querySelector('img')
-        if (img && !img.getAttribute('src') && img.dataset.src) {
-          img.src = img.dataset.src
-        }
-      }
-
-      loadImg(this.slides[this.index])
-      loadImg(this.slides[(this.index + 1) % this.count])
-    } catch (e) {
-      console.error('Lazy load error:', e)
-    }
-  }
-
-  /**
-   * Prefetch next slide image
-   */
-  prefetchNext() {
-    try {
-      const img = this.slides[(this.index + 1) % this.count]?.querySelector('img')
-      if (img?.dataset?.src && !img.getAttribute('src')) {
-        const preload = new Image()
-        preload.src = img.dataset.src
-      }
-    } catch (e) {
-      console.error('Prefetch error:', e)
-    }
-  }
-
-  /**
-   * Cleanup: remove all event listeners and timers
-   */
   destroy() {
-    try {
-      clearInterval(this.timer)
-      this.timer = null
-      this.cleanups.forEach((cleanup) => cleanup())
-      this.cleanups = []
-    } catch (e) {
-      console.error('Carousel destroy error:', e)
-    }
+    clearInterval(this.timer)
+    this.timer = null
+    this.cleanups.forEach((cleanup) => cleanup())
+    this.cleanups = []
+    this.imageObserver?.disconnect()
+    this.imageObserver = null
   }
 }
