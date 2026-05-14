@@ -1,5 +1,4 @@
-.header{position:fixed;top:0;inset-inline:0;backdrop-filter:blur(18px);background:rgba(5,5,5,.55);border-bottom:1px solid rgba(255,255,255,.08);z-index:50}
+.header{position:fixed;top:0;inset-inline:0;backdrop-filter:blur(var(--glass-blur));background:var(--header-bg);border-bottom:1px solid var(--glass-border);z-index:50}
 .header__nav{display:flex;justify-content:space-between;align-items:center;padding:1rem}
 .header__brand{font-size:clamp(1rem,2.5vw,1.4rem)}
 .header__links{display:none;gap:1rem}
-
