@@ -1,4 +1,4 @@
-.header{position:fixed;top:0;inset-inline:0;backdrop-filter:blur(var(--glass-blur));background:linear-gradient(120deg,#0f8d4d,#075f31);border-bottom:1px solid rgba(255,255,255,.25);z-index:50}
+.header{position:fixed;top:0;inset-inline:0;backdrop-filter:blur(var(--glass-blur));background:linear-gradient(120deg,#006a62,#004743);border-bottom:1px solid rgba(255,255,255,.25);z-index:50}
 .header__nav{display:flex;justify-content:center;align-items:center;padding:1rem}
 .header__brand{font-size:clamp(1rem,2.5vw,1.4rem);color:#fff6cc}
 .header__links{display:none;gap:1rem}
