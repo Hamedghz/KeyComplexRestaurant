@@ -27,6 +27,13 @@ export const validators = {
   iranianPhone: (v) => /^09\d{9}$/.test(String(v ?? '')),
 
   /**
+   * Validate international phone number (E.164)
+   * @param {string} v - Phone number to validate
+   * @returns {boolean}
+   */
+  internationalPhone: (v) => /^\+?[1-9]\d{1,14}$/.test(String(v ?? '')),
+
+  /**
    * Validate URL format
    * @param {string} v - URL to validate
    * @returns {boolean}
