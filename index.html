@@ -32,13 +32,41 @@
   <main id="main">
     <section id="home" class="hero" aria-label="Hero">
       <div class="carousel" data-carousel>
-        <div class="carousel-track">
-          <article class="carousel-slide"><img src="assets/images/slide1.svg" data-src="assets/images/slide1.svg" alt="معرفی مجموعه کِی" loading="eager" fetchpriority="high" decoding="async" /><div class="hero-card"><h1>مجموعه رستوران و کافه کِی</h1><p>تجربه‌ای متفاوت از طعم‌های اصیل ایرانی، فست‌فودهای باکیفیت و منوی کامل کافه.</p><div class="hero-actions"><a class="btn" href="#menu">مشاهده منو</a><a class="btn btn--ghost" href="#contact">تماس با ما</a></div></div></article>
-          <article class="carousel-slide"><img data-src="assets/images/slide2.svg" alt="نمایی از محیط مجموعه" loading="lazy" decoding="async" /><div class="hero-card"><h2>فضایی گرم برای دورهمی</h2><p>محیطی دلنشین برای خانواده، دوستان و قرارهای کاری همراه با سرویس حرفه‌ای.</p><div class="hero-actions"><a class="btn" href="#about">درباره ما</a><a class="btn btn--ghost" href="#social">گالری تصاویر</a></div></div></article>
-          <article class="carousel-slide"><img data-src="assets/images/slide3.svg" alt="نمونه‌ای از منو" loading="lazy" decoding="async" /><div class="hero-card"><h2>منوی متنوع و تازه</h2><p>از غذاهای اصیل ایرانی تا آیتم‌های کافه؛ همه‌چیز با مواد اولیه تازه و باکیفیت.</p><div class="hero-actions"><a class="btn" href="#menu">سفارش آنلاین</a><a class="btn btn--ghost" href="#contact">رزرو میز</a></div></div></article>
-          <article class="carousel-slide"><img data-src="assets/images/slide4.svg" alt="خدمات ویژه مجموعه" loading="lazy" decoding="async" /><div class="hero-card"><h2>رزرو سریع و خدمات ویژه</h2><p>برای دورهمی‌های خانوادگی و مناسبت‌ها، رزرو میز و خدمات اختصاصی در دسترس شماست.</p><div class="hero-actions"><a class="btn" href="#contact">رزرو میز</a><a class="btn btn--ghost" href="#menu">مشاهده منو</a></div></div></article>
+        <div class="carousel-track" data-carousel-track>
+          <article class="carousel-slide" data-slide>
+            <picture>
+              <source media="(max-width: 767px)" srcset="assets/images/slide1-mobile.webp" type="image/webp" />
+              <source srcset="assets/images/slide1.webp" type="image/webp" />
+              <img src="assets/images/slide1.svg" alt="مجموعه رستورانی کِی" loading="eager" fetchpriority="high" decoding="async" />
+            </picture>
+            <div class="hero-card"><h1>مجموعه رستوران و کافه کِی</h1><p>طعم اصیل، سرویس سریع و محیطی حرفه‌ای برای هر سلیقه.</p><div class="hero-actions"><a class="btn" href="#menu">مشاهده منو</a><a class="btn btn--ghost" href="#contact">رزرو میز</a></div></div>
+          </article>
+          <article class="carousel-slide" data-slide>
+            <picture>
+              <source media="(max-width: 767px)" srcset="assets/images/slide2-mobile.webp" type="image/webp" />
+              <source srcset="assets/images/slide2.webp" type="image/webp" />
+              <img src="assets/images/slide2.svg" alt="فضای داخلی مجموعه" loading="lazy" decoding="async" />
+            </picture>
+            <div class="hero-card"><h2>فضای گرم برای دورهمی</h2><p>محیطی آرام و زیبا برای خانواده، دوستان و جلسات کاری.</p><div class="hero-actions"><a class="btn" href="#about">درباره ما</a><a class="btn btn--ghost" href="#social">گالری</a></div></div>
+          </article>
+          <article class="carousel-slide" data-slide>
+            <picture>
+              <source media="(max-width: 767px)" srcset="assets/images/slide3-mobile.webp" type="image/webp" />
+              <source srcset="assets/images/slide3.webp" type="image/webp" />
+              <img src="assets/images/slide3.svg" alt="منوی متنوع رستوران" loading="lazy" decoding="async" />
+            </picture>
+            <div class="hero-card"><h2>منوی کامل و تازه</h2><p>صبحانه، غذای ایرانی، فست‌فود و کافه با مواد اولیه باکیفیت.</p><div class="hero-actions"><a class="btn" href="#menu">ثبت سفارش</a><a class="btn btn--ghost" href="#contact">تماس با ما</a></div></div>
+          </article>
+          <article class="carousel-slide" data-slide>
+            <picture>
+              <source media="(max-width: 767px)" srcset="assets/images/slide4-mobile.webp" type="image/webp" />
+              <source srcset="assets/images/slide4.webp" type="image/webp" />
+              <img src="assets/images/slide4.svg" alt="خدمات ویژه مجموعه" loading="lazy" decoding="async" />
+            </picture>
+            <div class="hero-card"><h2>خدمات ویژه برای مهمانی‌ها</h2><p>رزرو سریع میز و پشتیبانی کامل برای مراسم و مناسبت‌های شما.</p><div class="hero-actions"><a class="btn" href="#contact">رزرو سریع</a><a class="btn btn--ghost" href="#menu">منوی ویژه</a></div></div>
+          </article>
         </div>
-        <div class="carousel__controls"><button class="carousel-prev" type="button" aria-label="اسلاید قبلی">&#8250;</button><button class="carousel-next" type="button" aria-label="اسلاید بعدی">&#8249;</button></div>
+        <div class="carousel__controls"><button class="carousel-prev" data-carousel-prev type="button" aria-label="اسلاید قبلی">❯</button><button class="carousel-next" data-carousel-next type="button" aria-label="اسلاید بعدی">❮</button></div>
         <div class="carousel__dots" aria-label="انتخاب اسلاید"><button data-dot="0" class="is-active" aria-label="اسلاید ۱"></button><button data-dot="1" aria-label="اسلاید ۲"></button><button data-dot="2" aria-label="اسلاید ۳"></button><button data-dot="3" aria-label="اسلاید ۴"></button></div>
       </div>
     </section>
