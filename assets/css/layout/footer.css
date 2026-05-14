@@ -4,3 +4,5 @@
 .footer img{width:100%;max-width:280px;height:auto;object-fit:cover;border-radius:12px}
 .footer__contact{display:flex;flex-direction:column;gap:.4rem}
 @media (min-width:992px){.footer{grid-template-columns:repeat(4,1fr);padding-bottom:2rem}}
+
+.footer__copyright{grid-column:1/-1;border-top:1px solid rgba(255,255,255,.18);padding-top:.8rem;font-size:.9rem;color:#d5d5d5}

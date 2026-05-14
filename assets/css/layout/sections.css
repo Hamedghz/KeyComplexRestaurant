@@ -6,3 +6,5 @@
 .carousel-prev,.carousel-next{position:absolute;top:50%;transform:translateY(-50%);background:var(--black-glass);color:var(--white-primary);border:1px solid var(--glass-border);padding:8px;border-radius:50%;box-shadow:var(--teal-glow)}
 .carousel-prev{left:8px}
 .carousel-next{right:8px}
+
+.skip-link small{display:block;font-size:.78rem;line-height:1.2;margin-top:.1rem}

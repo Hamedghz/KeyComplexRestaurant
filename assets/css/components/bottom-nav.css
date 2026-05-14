@@ -3,3 +3,6 @@
 .bottom-nav a:hover,.bottom-nav a.active{background:#0b7a40;color:#fff;box-shadow:0 0 18px rgba(255,215,0,.7);filter:drop-shadow(0 0 10px rgba(255,215,0,.55))}
 .bottom-nav a.is-home{background:#fff;width:3.4rem;height:3.4rem;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;margin-top:-1.1rem;border:1px solid #0b7a40;font-size:1.05rem}
 .bottom-nav a.is-home:hover{background:linear-gradient(135deg,#0b7a40,#d4af37);color:#fff}
+
+.bottom-nav a.is-home.active{color:#0b7a40;background:#fff}
+.bottom-nav a.is-home:hover{color:#0b7a40}
