@@ -39,6 +39,7 @@ export default class Carousel {
 
     try {
       this.update()
+      this.loadAllSlideImages()
       this.bind()
       this.start()
       this.lazyLoadVisible()
@@ -47,6 +48,18 @@ export default class Carousel {
     }
   }
 
+
+  /**
+   * Ensure all slide images are initialized
+   */
+  loadAllSlideImages() {
+    this.slides.forEach((slide) => {
+      const img = slide?.querySelector('img[data-src]')
+      if (img && !img.getAttribute('src')) {
+        img.src = img.dataset.src
+      }
+    })
+  }
   /**
    * Bind all event listeners
    */
@@ -93,11 +106,18 @@ export default class Carousel {
         this._addEventListener(this.root, 'focusout', () => this.resume())
       )
 
-      // Keyboard navigation
+      // Keyboard navigation with RTL awareness
       this.cleanups.push(
         this._addEventListener(this.root, 'keydown', (e) => {
-          if (e.key === 'ArrowRight') this.goTo(this.index + 1)
-          if (e.key === 'ArrowLeft') this.goTo(this.index - 1)
+          const isRTL = document?.documentElement?.dir === 'rtl'
+
+          if (e.key === 'ArrowRight') {
+            this.goTo(isRTL ? this.index - 1 : this.index + 1)
+          }
+
+          if (e.key === 'ArrowLeft') {
+            this.goTo(isRTL ? this.index + 1 : this.index - 1)
+          }
         })
       )
 
@@ -148,7 +168,7 @@ export default class Carousel {
 
       // Set ARIA attributes
       this.root.setAttribute('role', 'region')
-      this.root.setAttribute('aria-label', 'Image carousel')
+      this.root.setAttribute('aria-label', 'اسلایدر تصاویر')
       this.root.setAttribute('tabindex', '0')
     } catch (e) {
       console.error('Carousel bind error:', e)
@@ -264,8 +284,8 @@ export default class Carousel {
   lazyLoadVisible() {
     try {
       const loadImg = (slide) => {
-        const img = slide?.querySelector('img[data-src]')
-        if (img && !img.getAttribute('src')) {
+        const img = slide?.querySelector('img')
+        if (img && !img.getAttribute('src') && img.dataset.src) {
           img.src = img.dataset.src
         }
       }
@@ -282,10 +302,8 @@ export default class Carousel {
    */
   prefetchNext() {
     try {
-      const img = this.slides[(this.index + 1) % this.count]?.querySelector(
-        'img[data-src]'
-      )
-      if (img && !img.getAttribute('src')) {
+      const img = this.slides[(this.index + 1) % this.count]?.querySelector('img')
+      if (img?.dataset?.src && !img.getAttribute('src')) {
         const preload = new Image()
         preload.src = img.dataset.src
       }
