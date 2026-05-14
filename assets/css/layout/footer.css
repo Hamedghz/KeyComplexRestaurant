@@ -1,4 +1,6 @@
-.footer{display:grid;grid-template-columns:1fr;gap:1rem;padding:2rem 1rem 6rem;border-top:1px solid rgba(255,255,255,.12)}
+.footer{display:grid;grid-template-columns:1fr;gap:1rem;padding:2rem 1rem 6rem;border-top:1px solid rgba(212,175,55,.45);background:#050505;color:#fff;text-align:center}
+.footer strong,.footer h3{color:#d4af37}
+.footer p{color:#fff}
 .footer img{width:100%;max-width:280px;height:auto;object-fit:cover;border-radius:12px}
 .footer__contact{display:flex;flex-direction:column;gap:.4rem}
 @media (min-width:992px){.footer{grid-template-columns:repeat(4,1fr);padding-bottom:2rem}}
