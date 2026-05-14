@@ -4,14 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>WebLand V8 | رستوران مدرن</title>
-  <meta name="description" content="وب‌لند V8، صفحه فرود مدرن رستوران با تمرکز بر سرعت، تجربه موبایل و دسترس‌پذیری." />
-  <meta name="keywords" content="رستوران, کافه, منو, رزرو, WebLand" />
-  <link rel="canonical" href="https://webland.example" />
-  <meta property="og:title" content="WebLand V8" />
-  <meta property="og:description" content="صفحه فرود حرفه‌ای رستوران با معماری ماژولار." />
-  <meta property="og:image" content="/public/social-preview.jpg" />
-  <meta property="og:type" content="website" />
-  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="description" content="صفحه فرود لوکس مینیمال رستوران با تمرکز موبایل‌محور، ناوبری سریع و فیلتر منو." />
   <link rel="stylesheet" href="/assets/css/base/variables.css" />
   <link rel="stylesheet" href="/assets/css/base/reset.css" />
   <link rel="stylesheet" href="/assets/css/base/typography.css" />
@@ -22,12 +15,10 @@
   <link rel="stylesheet" href="/assets/css/components/buttons.css" />
   <link rel="stylesheet" href="/assets/css/components/cards.css" />
   <link rel="stylesheet" href="/assets/css/components/tabs.css" />
-  <link rel="stylesheet" href="/assets/css/components/gallery.css" />
   <link rel="stylesheet" href="/assets/css/components/forms.css" />
   <link rel="stylesheet" href="/assets/css/components/bottom-nav.css" />
   <link rel="stylesheet" href="/assets/css/pages/home.css" />
   <link rel="stylesheet" href="/assets/css/responsive.css" />
-  <script type="application/ld+json">{"@context":"https://schema.org","@type":"Restaurant","name":"WebLand V8","telephone":"+98-21-0000-0000","address":{"@type":"PostalAddress","streetAddress":"تهران، خیابان نمونه"}}</script>
 </head>
 <body>
   <a class="skip-link" href="#main">رفتن به محتوا</a>
@@ -35,29 +26,55 @@
     <nav class="header__nav" aria-label="منوی اصلی">
       <a href="#home" class="header__brand">WebLand</a>
       <ul class="header__links">
-        <li><a href="#about">درباره</a></li><li><a href="#menu">منو</a></li><li><a href="#gallery">گالری</a></li><li><a href="#contact">تماس</a></li>
+        <li><a href="#home">خانه</a></li><li><a href="#about">معرفی</a></li><li><a href="#menu">منو</a></li><li><a href="#contact">تماس</a></li>
       </ul>
     </nav>
   </header>
+
   <main id="main">
     <section id="home" class="hero" aria-label="Hero">
       <div class="carousel" data-carousel>
         <div class="carousel-track">
-          <article class="carousel-slide"><img data-src="/assets/images/slide1.jpg" alt="غذا ۱" loading="lazy" decoding="async" /><h1>طعم متفاوت</h1></article>
-          <article class="carousel-slide"><img data-src="/assets/images/slide2.jpg" alt="غذا ۲" loading="lazy" decoding="async" /><h1>کیفیت روز</h1></article>
-          <article class="carousel-slide"><img data-src="/assets/images/slide3.jpg" alt="غذا ۳" loading="lazy" decoding="async" /><h1>فضای مدرن</h1></article>
+          <article class="carousel-slide"><img data-src="/assets/images/slide1.jpg" alt="فضای داخلی" loading="lazy" decoding="async" /><div class="hero-card"><h1>WebLand Restaurant</h1><p>تجربه لوکس مینیمال با طعم حرفه‌ای.</p><div class="hero-actions"><a class="btn" href="#menu">مشاهده منو</a><a class="btn btn--ghost" href="#contact">تماس با ما</a></div></div></article>
+          <article class="carousel-slide"><img data-src="/assets/images/slide2.jpg" alt="غذا" loading="lazy" decoding="async" /><div class="hero-card"><h2>مواد اولیه تازه</h2><p>منوی فصلی با کیفیت پایدار و ارائه سریع.</p><div class="hero-actions"><a class="btn" href="#menu">مشاهده منو</a><a class="btn btn--ghost" href="#contact">تماس با ما</a></div></div></article>
+          <article class="carousel-slide"><img data-src="/assets/images/slide3.jpg" alt="کافی شاپ" loading="lazy" decoding="async" /><div class="hero-card"><h2>کافی‌شاپ تخصصی</h2><p>بار گرم و سرد با استاندارد باریستا.</p><div class="hero-actions"><a class="btn" href="#menu">مشاهده منو</a><a class="btn btn--ghost" href="#contact">تماس با ما</a></div></div></article>
         </div>
-        <div class="carousel__controls"><button class="carousel-prev" aria-label="اسلاید قبلی">‹</button><button class="carousel-next" aria-label="اسلاید بعدی">›</button></div>
+        <div class="carousel__controls"><button class="carousel-prev" type="button" aria-label="اسلاید قبلی">‹</button><button class="carousel-next" type="button" aria-label="اسلاید بعدی">›</button></div>
+        <div class="carousel__dots" aria-label="انتخاب اسلاید"><button data-dot="0" class="is-active" aria-label="اسلاید ۱"></button><button data-dot="1" aria-label="اسلاید ۲"></button><button data-dot="2" aria-label="اسلاید ۳"></button></div>
       </div>
     </section>
-    <section id="about" class="section"><h2>درباره ما</h2><p>رستورانی مدرن با منوی فصلی و مواد اولیه تازه.</p></section>
-    <section id="menu" class="section"><h2>منو</h2><div class="tabs" data-tabs><button role="tab" aria-selected="true" data-tab="main">غذا اصلی</button><button role="tab" data-tab="starter">پیش‌غذا</button><button role="tab" data-tab="drink">نوشیدنی</button><button role="tab" data-tab="dessert">دسر</button></div><div class="tab-panel is-active" data-panel="main">کباب، پاستا</div><div class="tab-panel" data-panel="starter">سوپ، سالاد</div><div class="tab-panel" data-panel="drink">قهوه، اسموتی</div><div class="tab-panel" data-panel="dessert">چیزکیک، تیرامیسو</div></section>
-    <section id="gallery" class="section"><h2>گالری</h2><div class="gallery"><img src="/assets/images/slide1.jpg" alt="گالری ۱" loading="lazy" decoding="async" /><img src="/assets/images/slide2.jpg" alt="گالری ۲" loading="lazy" decoding="async" /><img src="/assets/images/slide3.jpg" alt="گالری ۳" loading="lazy" decoding="async" /></div></section>
-    <section id="club" class="section"><h2>باشگاه مشتریان</h2><form data-club-form><label for="phone">شماره موبایل</label><input id="phone" name="phone" inputmode="numeric" placeholder="09xxxxxxxxx" /><button class="btn" type="submit">عضویت</button><p data-form-message aria-live="polite"></p></form></section>
-    <section id="contact" class="section"><h2>تماس با ما</h2><p>تلفن: ۰۲۱۰۰۰۰۰۰۰۰</p><p>آدرس: تهران، خیابان نمونه</p></section>
+
+    <section id="social" class="section social-section">
+      <h2>ارتباط سریع</h2>
+      <div class="kpi-grid"><article><strong>+۲۵۰۰</strong><span>مشتری فعال</span></article><article><strong>۴.۸/۵</strong><span>رضایت کاربران</span></article><article><strong>۱۵ دقیقه</strong><span>میانگین سرویس</span></article></div>
+      <div class="social-links"><a href="#">اینستاگرام</a><a href="#">واتساپ</a><a href="#">تلگرام</a></div>
+      <form data-club-form class="lead-form"><label for="phone">شماره موبایل</label><input id="phone" name="phone" inputmode="numeric" placeholder="09xxxxxxxxx" /><button class="btn" type="submit">ثبت</button><p data-form-message aria-live="polite"></p></form>
+    </section>
+
+    <section id="about" class="section about-grid">
+      <div><h2>درباره ما</h2><p>WebLand یک تجربه رستورانی خانوادگی با هویت کافی‌شاپ تخصصی است.</p><ul><li>مواد اولیه تازه</li><li>محیط خانوادگی</li><li>کافی‌شاپ تخصصی</li></ul></div>
+      <img src="/assets/images/slide1.jpg" alt="معرفی رستوران" loading="lazy" decoding="async" />
+    </section>
+
+    <section id="menu" class="section">
+      <h2>منو</h2>
+      <div class="tabs" data-tabs><button role="tab" aria-selected="true" data-tab="main">غذاهای اصلی</button><button role="tab" data-tab="starter">پیش غذا</button><button role="tab" data-tab="drink">نوشیدنی</button><button role="tab" data-tab="dessert">دسر</button></div>
+      <div class="tab-panel is-active menu-grid" data-panel="main"><article class="menu-card"><h3>استیک ویژه</h3><p>سس قارچ و سبزیجات گریل</p></article><article class="menu-card"><h3>پاستا آلفردو</h3><p>مرغ، قارچ و پنیر پارمزان</p></article></div>
+      <div class="tab-panel menu-grid" data-panel="starter"><article class="menu-card"><h3>سوپ روز</h3><p>انتخاب روز سرآشپز</p></article></div>
+      <div class="tab-panel menu-grid" data-panel="drink"><article class="menu-card"><h3>لاته</h3><p>قهوه تخصصی</p></article></div>
+      <div class="tab-panel menu-grid" data-panel="dessert"><article class="menu-card"><h3>چیزکیک</h3><p>سبک نیویورکی</p></article></div>
+    </section>
+
+    <section id="contact" class="section"><h2>تماس</h2><p>تلفن: ۰۲۱۰۰۰۰۰۰۰۰</p><p>آدرس: تهران، خیابان نمونه</p></section>
   </main>
-  <footer class="footer"><p>© WebLand V8</p></footer>
-  <nav class="bottom-nav" data-bottom-nav aria-label="ناوبری موبایل"><a href="#home" data-target="#home">خانه</a><a href="#about" data-target="#about">درباره</a><a href="#menu" data-target="#menu">منو</a><a href="#contact" data-target="#contact">تماس</a></nav>
+
+  <footer class="footer">
+    <div><strong>WebLand</strong><p>Luxury Minimal Restaurant</p></div>
+    <div><h3>ساعت کاری</h3><p>هر روز ۱۰ تا ۲۳</p></div>
+    <div><h3>آدرس</h3><p>تهران، خیابان نمونه</p><img src="/assets/images/map-placeholder.jpg" alt="نقشه" /></div>
+  </footer>
+
+  <nav class="bottom-nav" data-bottom-nav aria-label="ناوبری موبایل"><a href="#about" data-target="#about">معرفی</a><a href="#menu" data-target="#menu">منو</a><a class="is-home" href="#home" data-target="#home">خانه</a><a href="#contact" data-target="#contact">تماس</a><a href="#social" data-target="#social">شبکه‌ها</a></nav>
   <script type="module" src="/assets/js/app.js"></script>
 </body>
 </html>
