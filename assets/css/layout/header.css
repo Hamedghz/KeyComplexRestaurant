@@ -1,1 +1,4 @@
-.header{position:fixed;top:0;inset-inline:0;backdrop-filter:blur(10px);background:rgb(17 17 17 / 50%);z-index:50;transition:box-shadow .3s}.header.is-scrolled{box-shadow:0 4px 20px rgb(0 0 0 / 25%)}.header__nav{display:flex;justify-content:space-between;align-items:center;padding:1rem}.header__links{display:flex;gap:1rem}
+.header{position:fixed;top:0;inset-inline:0;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);background:rgba(5,5,5,.55);border-bottom:1px solid rgba(255,255,255,.08);z-index:50;transition:box-shadow .3s}
+.header.is-scrolled{box-shadow:var(--glass-shadow)}
+.header__nav{display:flex;justify-content:space-between;align-items:center;padding:1rem}
+.header__links{display:flex;gap:1rem}

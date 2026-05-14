@@ -1,10 +1,50 @@
-/* CSS variables */
+/* Restaurant Key V8 — Liquid Glass Palette */
 :root{
-  --color-primary:#0b7285;
-  --color-bg:#fff;
-  --color-text:#222;
-  --radius:8px;
+  /* Brand core */
+  --primary-teal:#0F4C5C;
+  --primary-teal-dark:#082F3A;
+  --primary-teal-light:#1B6B7D;
+
+  --gold-primary:#D4AF37;
+  --gold-light:#F6D365;
+  --gold-hover:#FFD700;
+
+  --black-primary:#050505;
+  --black-soft:#0F0F0F;
+  --black-glass:rgba(0,0,0,0.45);
+
+  --white-primary:#FFFFFF;
+  --white-soft:#E5E7EB;
+  --white-muted:#BFC7CF;
+
+  /* Effects */
+  --glass-bg:rgba(255,255,255,0.08);
+  --glass-border:rgba(255,255,255,0.12);
+  --glass-shadow:0 8px 32px rgba(0,0,0,0.35);
+
+  --hero-overlay:rgba(0,0,0,0.55);
+  --caption-glass:rgba(15,76,92,0.28);
+
+  --signature-gradient:linear-gradient(135deg,#050505 0%,#082F3A 45%,#0F4C5C 100%);
+  --btn-primary:linear-gradient(135deg,#D4AF37,#F6D365);
+  --btn-text:#050505;
+
+  --gold-glow:0 0 24px rgba(212,175,55,0.35);
+  --teal-glow:0 0 24px rgba(15,76,92,0.35);
+
+  /* Legacy aliases */
+  --color-primary:var(--primary-teal);
+  --color-bg:var(--black-primary);
+  --color-text:var(--white-soft);
+
+  --radius:12px;
   --max-width:1200px;
   --transition:200ms ease;
 }
-@media (prefers-color-scheme:dark){:root{--color-bg:#0b1220;--color-text:#e6eef8}}
+
+@media (prefers-color-scheme:dark){
+  :root{
+    --color-bg:var(--black-primary);
+    --color-text:var(--white-soft);
+  }
+}

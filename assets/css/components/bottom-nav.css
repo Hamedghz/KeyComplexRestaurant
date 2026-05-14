@@ -1,2 +1,4 @@
-.bottom-nav{position:fixed;bottom:0;inset-inline:0;display:flex;justify-content:space-around;background:#111;padding:.75rem;z-index:60}.bottom-nav a{color:#bbb}.bottom-nav a.active{color:#fff}
+.bottom-nav{position:fixed;bottom:0;inset-inline:0;display:flex;justify-content:space-around;background:rgba(5,5,5,.82);padding:.75rem;z-index:60;border-top:1px solid rgba(255,255,255,.08);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+.bottom-nav a{color:var(--white-muted);text-decoration:none}
+.bottom-nav a.active{color:var(--gold-primary)}
 @media (min-width: 992px){.bottom-nav{display:none}}
