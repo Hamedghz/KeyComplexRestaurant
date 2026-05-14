@@ -8,8 +8,9 @@ body{padding-block:4.5rem 5rem}
 .carousel-slide img{width:100%;height:100svh;object-fit:cover}
 .hero-card{position:absolute;bottom:12%;right:5%;z-index:2;max-width:min(88vw,420px);background:var(--caption-glass);backdrop-filter:blur(14px);padding:1rem;border:1px solid var(--glass-border);border-radius:var(--radius)}
 .hero-actions{display:flex;gap:.5rem;margin-top:.75rem}
-.carousel__controls{position:absolute;z-index:2;inset:auto 1rem 1rem auto;display:flex;gap:.5rem}
+.carousel__controls{position:absolute;z-index:2;inset:50% 1rem auto 1rem;display:flex;justify-content:space-between;transform:translateY(-50%);pointer-events:none}
 .carousel__controls button{width:2.2rem;height:2.2rem;border-radius:50%;border:1px solid var(--glass-border);background:var(--black-glass);color:var(--white-primary);box-shadow:var(--teal-glow)}
+.carousel__controls button{pointer-events:auto}
 .carousel__dots{position:absolute;z-index:2;bottom:1.2rem;left:1rem;display:flex;gap:.45rem}
 .carousel__dots button{width:.6rem;height:.6rem;border-radius:50%;border:1px solid var(--glass-border);background:transparent}
 .carousel__dots button.is-active{background:var(--gold-primary);box-shadow:var(--gold-glow)}
@@ -23,4 +24,12 @@ body{padding-block:4.5rem 5rem}
 .menu-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.8rem}
 .menu-card{background:var(--caption-glass);border:1px solid var(--glass-border);padding:.9rem;border-radius:12px;min-height:110px;transition:transform .2s ease}
 .menu-card:hover{transform:translateY(-3px)}
+.menu-card img{width:100%;height:120px;object-fit:cover;border-radius:10px;margin-bottom:.6rem}
+[data-tabs]{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem}
+[role="tab"]{background:transparent;border:1px solid var(--glass-border);border-radius:999px;color:var(--white-soft);padding:.5rem .9rem}
+[role="tab"][aria-selected="true"]{background:var(--gold-primary);color:var(--black-primary);border-color:var(--gold-primary)}
+.tab-panel{display:none}
+.tab-panel.is-active{display:grid}
+.social-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.75rem;margin-top:1rem}
+.social-card{display:flex;align-items:center;justify-content:center;min-height:60px;border:1px solid var(--glass-border);border-radius:12px;background:var(--caption-glass);font-weight:600}
 @media (min-width:992px){.about-grid{grid-template-columns:1fr 1fr;align-items:center}}
