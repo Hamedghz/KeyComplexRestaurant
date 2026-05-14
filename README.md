@@ -1,3 +1,49 @@
-# webland
+# WebLand V8
 
-Scaffolded frontend structure: HTML, CSS modular layout, JS modules (carousel, bottom-nav), storage abstraction and basic tooling (vite).
+لندینگ‌پیج مدرن و راست‌به‌چپ (RTL) برای رستوران/کافی‌شاپ با معماری ماژولار، طراحی موبایل‌محور و آماده‌ی توسعه با Vite.
+
+## امکانات
+
+- اسلایدر Hero با کنترل دکمه‌ای و دات‌های ناوبری.
+- تب‌بندی منو (غذای اصلی، پیش‌غذا، نوشیدنی، دسر).
+- فرم عضویت سریع با اعتبارسنجی سمت کاربر.
+- نوار ناوبری پایین مخصوص موبایل.
+- ساختار CSS ماژولار (base / components / layout / pages).
+- کدنویسی ES Modules برای JS.
+
+## ساختار پروژه
+
+```text
+assets/
+  css/
+  js/
+  images/
+index.html
+```
+
+## اسکریپت‌ها
+
+- `npm run dev` اجرای محیط توسعه
+- `npm run build` بیلد production
+- `npm run preview` پیش‌نمایش بیلد
+- `npm run lint` بررسی ESLint
+- `npm test` اجرای تست‌های CI (در حال حاضر معادل lint)
+
+## تصاویر
+
+فایل‌های تصویری پروژه در `assets/images` قرار دارند و شامل موارد زیر هستند:
+
+- `slide1.svg`, `slide2.svg`, `slide3.svg` برای اسلایدر هدر
+- `map-placeholder.svg` برای فوتر
+- `home-preview.svg` پیش‌نمایش بصری صفحه‌ی اول
+
+> برای جایگزینی با عکس واقعی، فقط مسیر فایل‌ها را در `index.html` تغییر دهید.
+
+## اجرا
+
+```bash
+npm install
+npm run dev
+```
+
+سپس در مرورگر روی آدرس پیش‌فرض Vite (معمولاً `http://localhost:5173`) صفحه را مشاهده کنید.

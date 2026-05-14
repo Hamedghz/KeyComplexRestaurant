@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-labelledby="t d">
+  <title id="t">فضای داخلی رستوران</title>
+  <desc id="d">پس‌زمینه تزئینی برای اسلایدر صفحه اصلی وب‌لند</desc>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1b1b1b" />
+      <stop offset="1" stop-color="#5c3d2e" />
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#g)"/>
+  <circle cx="320" cy="260" r="180" fill="#d4a373" opacity="0.35"/>
+  <circle cx="1250" cy="620" r="220" fill="#e9c46a" opacity="0.22"/>
+  <text x="80" y="790" fill="#fff" font-size="68" font-family="sans-serif">WebLand • Interior Mood</text>
+</svg>
