@@ -1,4 +1,17 @@
 @media (max-width:575px){.header__links{display:none}}
+@media (max-width:767px){
+  .header__nav{grid-template-columns:auto minmax(0,1fr);padding:.7rem .75rem;min-height:64px}
+  .header__brand{grid-column:2;justify-self:start;text-align:right;font-size:clamp(1rem,5.2vw,1.35rem);line-height:1.35}
+  .header__call{grid-column:1;justify-self:end;padding:.6rem .8rem;font-size:.9rem}
+  .hero{min-height:88svh}
+  .carousel-slide img{height:88svh}
+  .hero-card{bottom:16%;width:min(94vw,460px);padding:.85rem .9rem}
+  .hero-card h1,.hero-card h2{font-size:clamp(1.1rem,5vw,1.5rem);line-height:1.4;margin-bottom:.4rem}
+  .hero-card p{font-size:.92rem;line-height:1.7}
+  .hero-actions{display:grid;grid-template-columns:1fr;gap:.45rem}
+  .carousel__controls{inset:46% .65rem auto .65rem}
+  .carousel__controls button{width:2.7rem;height:2.7rem;font-size:1.5rem}
+}
 @media (min-width:768px){.section{padding:5rem 2rem}}
 @media (min-width:992px){.section{padding:6rem 4rem}}
 @media (min-width:1200px){.section{max-width:1200px;margin-inline:auto}}
