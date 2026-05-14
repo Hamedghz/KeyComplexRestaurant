@@ -12,6 +12,7 @@ class App {
   constructor() {
     this.cleanups = [] // Track cleanup functions
     this.carouselInstance = null
+    this.isInitialized = false
     this.init()
   }
 
@@ -30,6 +31,9 @@ class App {
   }
 
   onDOMReady() {
+    if (this.isInitialized) return
+    this.isInitialized = true
+
     try {
       // Header scroll effect
       this.initHeaderScroll()
@@ -118,7 +122,8 @@ class App {
       const tabs = document.querySelector('[data-tabs]')
       if (!tabs) return
 
-      initTabs(tabs)
+      const cleanup = initTabs(tabs)
+      this.cleanups.push(cleanup)
     } catch (e) {
       console.error('Tabs initialization error:', e)
     }
