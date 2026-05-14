@@ -30,9 +30,10 @@ main,.section,.hero-card,.footer,.bottom-nav{text-align:center}
 .about-grid ul{padding:0;list-style:none}
 .about-grid img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:12px}
 .menu-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.8rem}
-.menu-card{background:rgba(255,255,255,.98);color:#0c7d42;border:1px solid rgba(12,125,66,.2);padding:.9rem;border-radius:12px;min-height:110px;transition:transform .2s ease,box-shadow .25s ease}
+.menu-card{background:rgba(255,255,255,.98);color:#0c7d42;border:1px solid rgba(12,125,66,.2);padding:0;border-radius:12px;overflow:hidden;min-height:110px;transition:transform .2s ease,box-shadow .25s ease}
 .menu-card:hover{transform:translateY(-3px);box-shadow:0 0 20px rgba(255,215,0,.45)}
-.menu-card img{width:100%;height:170px;object-fit:cover;border-radius:10px;margin-bottom:.6rem}
+.menu-card img{display:block;width:100%;height:170px;object-fit:cover;margin:0}
+.menu-card__content{padding:.85rem}
 [data-tabs]{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1.2rem;padding-bottom:.75rem;border-bottom:4px solid #d4af37;justify-content:center}
 [role="tab"]{background:#fff;border:1px solid #0b7a40;border-radius:999px;color:#0b7a40;padding:.5rem .9rem;transition:all .25s ease}
 [role="tab"]:hover{box-shadow:0 0 18px rgba(255,215,0,.55);filter:drop-shadow(0 0 8px rgba(255,215,0,.4))}

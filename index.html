@@ -21,9 +21,9 @@
   <link rel="stylesheet" href="assets/css/responsive.css" />
 </head>
 <body>
-  <a class="btn" href="tel:09153497502">تماس<br><small>۰۹۱۵۳۴۹۷۵۰۲</small></a>
   <header class="header" role="banner">
     <nav class="header__nav" aria-label="منوی اصلی">
+      <a class="header__call btn" href="tel:09153497502">تماس <small>۰۹۱۵۳۴۹۷۵۰۲</small></a>
       <a href="#home" class="header__brand">مجموعه رستورانی کِی</a>
     </nav>
   </header>
@@ -34,7 +34,7 @@
         <div class="carousel-track">
           <article class="carousel-slide"><img data-src="assets/images/slide1.svg" alt="معرفی مجموعه کِی" loading="lazy" decoding="async" /><div class="hero-card"><h1>مجموعه رستوران و کافه کِی</h1><p>تجربه‌ای متفاوت از طعم‌های اصیل ایرانی، فست‌فودهای باکیفیت و منوی کامل کافه.</p><div class="hero-actions"><a class="btn" href="#menu">مشاهده منو</a><a class="btn btn--ghost" href="#contact">تماس با ما</a></div></div></article>
           <article class="carousel-slide"><img data-src="assets/images/slide2.svg" alt="غذاهای ایرانی و فست فود" loading="lazy" decoding="async" /><div class="hero-card"><h2>کیفیت، طعم و رضایت</h2><p>صبحانه کامل، غذاهای ایرانی، فست‌فود تازه و دسرهای خاص در محیطی گرم و صمیمی.</p><div class="hero-actions"><a class="btn" href="#menu">مشاهده منو</a><a class="btn btn--ghost" href="#contact">تماس با ما</a></div></div></article>
-          <article class="carousel-slide"><img data-src="assets/images/slide3.svg" alt="کافیشاپ مجموعه کِی" loading="lazy" decoding="async" /><div class="hero-card"><h2>کافیشاپ تخصصی کِی</h2><p>انواع نوشیدنی‌های گرم و سرد با دستگاه‌های حرفه‌ای و باریستاهای مجموعه.</p><div class="hero-actions"><a class="btn" href="#menu">مشاهده منو</a><a ز href="#contact">تماس با ما</a></div></div></article>
+          <article class="carousel-slide"><img data-src="assets/images/slide3.svg" alt="کافیشاپ مجموعه کِی" loading="lazy" decoding="async" /><div class="hero-card"><h2>کافیشاپ تخصصی کِی</h2><p>انواع نوشیدنی‌های گرم و سرد با دستگاه‌های حرفه‌ای و باریستاهای مجموعه.</p><div class="hero-actions"><a class="btn" href="#menu">مشاهده منو</a><a class="btn btn--ghost" href="#contact">تماس با ما</a></div></div></article>
         </div>
         <div class="carousel__controls"><button class="carousel-prev" type="button" aria-label="اسلاید قبلی">&lt;</button><button class="carousel-next" type="button" aria-label="اسلاید بعدی">&gt;</button></div>
         <div class="carousel__dots" aria-label="انتخاب اسلاید"><button data-dot="0" class="is-active" aria-label="اسلاید ۱"></button><button data-dot="1" aria-label="اسلاید ۲"></button><button data-dot="2" aria-label="اسلاید ۳"></button></div>
@@ -56,10 +56,10 @@
     <section id="menu" class="section">
       <h2>منو</h2>
       <div class="tabs" data-tabs><button role="tab" aria-selected="true" data-tab="main">صبحانه</button><button role="tab" data-tab="starter">غذاهای ایرانی</button><button role="tab" data-tab="drink">فست فود</button><button role="tab" data-tab="dessert">کافیشاپ و دسر</button></div>
-      <div class="tab-panel is-active menu-grid" data-panel="main"><article class="menu-card"><img src="assets/images/slide2.svg" alt="صبحانه سنتی" loading="lazy" decoding="async" /><h3>صبحانه کامل</h3><p>نان تازه، صبحانه‌های سنتی، املت و نوشیدنی‌های گرم و سرد.</p></article><article class="menu-card"><img src="assets/images/slide1.svg" alt="عصرانه" loading="lazy" decoding="async" /><h3>عصرانه</h3><p>میان‌وعده‌های سبک و نوشیدنی‌های متنوع در محیطی آرام.</p></article></div>
-      <div class="tab-panel menu-grid" data-panel="starter"><article class="menu-card"><img src="assets/images/slide1.svg" alt="غذای ایرانی" loading="lazy" decoding="async" /><h3>غذاهای ایرانی</h3><p>برنج ایرانی باکیفیت، کباب‌های اصیل و خورشت‌های سنتی روزانه.</p></article></div>
-      <div class="tab-panel menu-grid" data-panel="drink"><article class="menu-card"><img src="assets/images/slide3.svg" alt="فست فود" loading="lazy" decoding="async" /><h3>فست فود</h3><p>انواع برگر، پیتزا، ساندویچ و پیش‌غذاهای متنوع، آماده‌سازی در لحظه.</p></article></div>
-      <div class="tab-panel menu-grid" data-panel="dessert"><article class="menu-card"><img src="assets/images/slide2.svg" alt="دسر و کافه" loading="lazy" decoding="async" /><h3>کافیشاپ و دسر</h3><p>انواع قهوه، چای، دمنوش، شیک، بستنی و دسرهای ویژه سرآشپز.</p></article></div>
+      <div class="tab-panel is-active menu-grid" data-panel="main"><article class="menu-card"><img src="assets/images/slide2.svg" alt="صبحانه سنتی" loading="lazy" decoding="async" /><div class="menu-card__content"><h3>صبحانه کامل</h3><p>نان تازه، صبحانه‌های سنتی، املت و نوشیدنی‌های گرم و سرد.</p></div></article><article class="menu-card"><img src="assets/images/slide1.svg" alt="عصرانه" loading="lazy" decoding="async" /><div class="menu-card__content"><h3>عصرانه</h3><p>میان‌وعده‌های سبک و نوشیدنی‌های متنوع در محیطی آرام.</p></div></article></div>
+      <div class="tab-panel menu-grid" data-panel="starter"><article class="menu-card"><img src="assets/images/slide1.svg" alt="غذای ایرانی" loading="lazy" decoding="async" /><div class="menu-card__content"><h3>غذاهای ایرانی</h3><p>برنج ایرانی باکیفیت، کباب‌های اصیل و خورشت‌های سنتی روزانه.</p></div></article></div>
+      <div class="tab-panel menu-grid" data-panel="drink"><article class="menu-card"><img src="assets/images/slide3.svg" alt="فست فود" loading="lazy" decoding="async" /><div class="menu-card__content"><h3>فست فود</h3><p>انواع برگر، پیتزا، ساندویچ و پیش‌غذاهای متنوع، آماده‌سازی در لحظه.</p></div></article></div>
+      <div class="tab-panel menu-grid" data-panel="dessert"><article class="menu-card"><img src="assets/images/slide2.svg" alt="دسر و کافه" loading="lazy" decoding="async" /><div class="menu-card__content"><h3>کافیشاپ و دسر</h3><p>انواع قهوه، چای، دمنوش، شیک، بستنی و دسرهای ویژه سرآشپز.</p></div></article></div>
     </section>
   </main>
 
