@@ -11,13 +11,253 @@ require_once __DIR__ . '/core/models/MenuItem.php';
 $settingModel = new Setting();
 $menuModel = new MenuItem();
 
+// Homepage helpers
+function homeEscape($value) {
+    return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+}
+
+function homeSafeHtml($value) {
+    return strip_tags((string)$value, '<p><br><strong><b><em><i><ul><ol><li><span><a>');
+}
+
+function normalizeAssetPath($path) {
+    $path = trim((string)$path);
+
+    if ($path === '') {
+        return '';
+    }
+
+    if (preg_match('/^https?:\/\//i', $path)) {
+        return $path;
+    }
+
+    return '/' . ltrim($path, '/');
+}
+
+function normalizeTelLink($phone) {
+    return preg_replace('/[^0-9+]/', '', (string)$phone);
+}
+
+function getOpeningWindow($value) {
+    if (is_array($value)) {
+        $isClosed = !empty($value['closed']) || (isset($value['is_open']) && !$value['is_open']);
+
+        if ($isClosed) {
+            return null;
+        }
+
+        $open = $value['open'] ?? $value['from'] ?? null;
+        $close = $value['close'] ?? $value['to'] ?? null;
+
+        if ($open && $close) {
+            return [$open, $close];
+        }
+
+        return null;
+    }
+
+    $value = trim((string)$value);
+
+    if ($value === '' || in_array(strtolower($value), ['closed', 'off'], true)) {
+        return null;
+    }
+
+    $parts = preg_split('/\s*-\s*/', $value);
+
+    if (count($parts) !== 2) {
+        return null;
+    }
+
+    return [$parts[0], $parts[1]];
+}
+
+function timeToMinutes($time) {
+    $time = trim((string)$time);
+
+    if ($time === '24:00') {
+        return 1440;
+    }
+
+    if (!preg_match('/^(\d{1,2}):(\d{2})$/', $time, $matches)) {
+        return null;
+    }
+
+    $hours = (int)$matches[1];
+    $minutes = (int)$matches[2];
+
+    if ($hours > 23 || $minutes > 59) {
+        return null;
+    }
+
+    return ($hours * 60) + $minutes;
+}
+
+function isOpenNow($openingHours, $dayKey, DateTimeInterface $now) {
+    if (!is_array($openingHours) || empty($openingHours[$dayKey])) {
+        return false;
+    }
+
+    $window = getOpeningWindow($openingHours[$dayKey]);
+
+    if (!$window) {
+        return false;
+    }
+
+    [$open, $close] = $window;
+    $openMinutes = timeToMinutes($open);
+    $closeMinutes = timeToMinutes($close);
+
+    if ($openMinutes === null || $closeMinutes === null) {
+        return false;
+    }
+
+    $currentMinutes = ((int)$now->format('G') * 60) + (int)$now->format('i');
+
+    if ($closeMinutes <= $openMinutes) {
+        return $currentMinutes >= $openMinutes || $currentMinutes < $closeMinutes;
+    }
+
+    return $currentMinutes >= $openMinutes && $currentMinutes < $closeMinutes;
+}
+
+function formatOpeningHours($value) {
+    $window = getOpeningWindow($value);
+
+    if (!$window) {
+        return 'تعطیل';
+    }
+
+    return $window[0] . ' تا ' . $window[1];
+}
+
+function getSettingLinks($value, $fallback) {
+    return is_array($value) && !empty($value) ? $value : $fallback;
+}
+
+$newsletterMessage = '';
+$newsletterStatus = '';
+$newsletterInput = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_name'] ?? '') === 'newsletter') {
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        session_start();
+    }
+
+    $newsletterInput = trim((string)($_POST['subscriber_contact'] ?? ''));
+    $submittedToken = (string)($_POST[CSRF_TOKEN_NAME] ?? '');
+
+    if (!verifyCSRFToken($submittedToken)) {
+        $newsletterStatus = 'error';
+        $newsletterMessage = 'درخواست نامعتبر است. لطفاً دوباره تلاش کنید.';
+    } elseif ($newsletterInput === '') {
+        $newsletterStatus = 'error';
+        $newsletterMessage = 'لطفاً شماره تماس یا ایمیل خود را وارد کنید.';
+    } else {
+        $isEmail = filter_var($newsletterInput, FILTER_VALIDATE_EMAIL);
+        $phoneCandidate = preg_replace('/[\s\-()]/', '', $newsletterInput);
+        $isPhone = (bool)preg_match('/^\+?[0-9]{8,15}$/', $phoneCandidate);
+
+        if (!$isEmail && !$isPhone) {
+            $newsletterStatus = 'error';
+            $newsletterMessage = 'فرمت شماره تماس یا ایمیل معتبر نیست.';
+        } else {
+            try {
+                $db = Database::getInstance()->getConnection();
+                $stmt = $db->prepare("
+                    INSERT INTO newsletter_subscribers (phone, email, is_active)
+                    VALUES (:phone, :email, 1)
+                    ON DUPLICATE KEY UPDATE is_active = 1
+                ");
+                $stmt->execute([
+                    'phone' => $isPhone ? $phoneCandidate : null,
+                    'email' => $isEmail ? $newsletterInput : null,
+                ]);
+
+                $newsletterStatus = 'success';
+                $newsletterMessage = 'عضویت شما با موفقیت ثبت شد.';
+                $newsletterInput = '';
+            } catch (PDOException $e) {
+                error_log('Newsletter subscription error: ' . $e->getMessage());
+                $newsletterStatus = 'error';
+                $newsletterMessage = 'ثبت عضویت در حال حاضر امکان‌پذیر نیست. لطفاً بعداً تلاش کنید.';
+            }
+        }
+    }
+}
+
 // Get settings
 $siteName = $settingModel->get('site_name_fa', 'KEY رستوران و کافه');
+$siteNameEn = $settingModel->get('site_name_en', 'KEY Restaurant & Coffeehouse');
 $heroTitle = $settingModel->get('hero_title_fa', 'KEY رستوران و کافه');
 $heroSubtitle = $settingModel->get('hero_subtitle_fa', 'تجربه‌ای بی‌نظیر از غذا و نوشیدنی');
 $ctaText = $settingModel->get('hero_cta_text_fa', 'سفارش آنلاین');
 $primaryColor = $settingModel->get('primary_color', '#004647');
 $accentColor = $settingModel->get('accent_color', '#D4AF37');
+$menuTitle = $settingModel->get('featured_menu_title_fa', 'منوی ویژه');
+$aboutTitle = $settingModel->get('about_title_fa', 'درباره مجموعه');
+$aboutContent = $settingModel->get('about_content_fa', 'روایت طعم‌های اصیل، قهوه‌های منتخب و میزبانی گرم در فضایی لوکس و آرام.');
+$aboutImage = normalizeAssetPath($settingModel->get('about_image', ''));
+$addressFa = $settingModel->get('address_fa', 'آدرس مجموعه');
+$addressEn = $settingModel->get('address_en', 'Restaurant address');
+$phoneNumber = $settingModel->get('phone_number', '+98 21 1234 5678');
+$email = $settingModel->get('email', 'info@keyrestaurant.com');
+$locationLat = $settingModel->get('location_lat', '35.6892');
+$locationLng = $settingModel->get('location_lng', '51.3890');
+$instagramUrl = $settingModel->get('instagram_url', 'https://instagram.com/keyrestaurant');
+$telegramUrl = $settingModel->get('telegram_url', 'https://t.me/keyrestaurant');
+$whatsappNumber = $settingModel->get('whatsapp_number', '+989121234567');
+$locationTitle = $settingModel->get('location_title_fa', 'موقعیت و تماس');
+$hoursTitle = $settingModel->get('opening_hours_title_fa', 'ساعت کاری');
+$newsletterTitle = $settingModel->get('newsletter_title_fa', 'باشگاه مشتریان');
+$newsletterText = $settingModel->get('newsletter_text_fa', 'برای دریافت خبرهای تازه، پیشنهادهای ویژه و رویدادهای مجموعه، شماره تماس یا ایمیل خود را ثبت کنید.');
+$footerQuickLinksTitle = $settingModel->get('footer_quick_links_title_fa', 'دسترسی سریع');
+$footerContactTitle = $settingModel->get('footer_contact_title_fa', 'اطلاعات تماس');
+$footerCopyright = $settingModel->get('footer_copyright_fa', 'تمامی حقوق محفوظ است.');
+$quickLinks = getSettingLinks($settingModel->get('footer_quick_links', []), [
+    ['label' => 'منو', 'url' => '#menu'],
+    ['label' => 'درباره ما', 'url' => '#about'],
+    ['label' => 'موقعیت', 'url' => '#location'],
+    ['label' => 'باشگاه مشتریان', 'url' => '#newsletter'],
+]);
+$openingHours = $settingModel->get('opening_hours', [
+    'saturday' => '09:00-23:00',
+    'sunday' => '09:00-23:00',
+    'monday' => '09:00-23:00',
+    'tuesday' => '09:00-23:00',
+    'wednesday' => '09:00-23:00',
+    'thursday' => '09:00-23:00',
+    'friday' => '10:00-24:00',
+]);
+
+if (!is_array($openingHours)) {
+    $openingHours = [];
+}
+
+$weekDays = [
+    'saturday' => 'شنبه',
+    'sunday' => 'یکشنبه',
+    'monday' => 'دوشنبه',
+    'tuesday' => 'سه‌شنبه',
+    'wednesday' => 'چهارشنبه',
+    'thursday' => 'پنجشنبه',
+    'friday' => 'جمعه',
+];
+$dayMap = [
+    'Sat' => 'saturday',
+    'Sun' => 'sunday',
+    'Mon' => 'monday',
+    'Tue' => 'tuesday',
+    'Wed' => 'wednesday',
+    'Thu' => 'thursday',
+    'Fri' => 'friday',
+];
+$now = new DateTimeImmutable('now');
+$currentDayKey = $dayMap[$now->format('D')] ?? 'saturday';
+$isCurrentlyOpen = isOpenNow($openingHours, $currentDayKey, $now);
+$baladMapUrl = 'https://balad.ir/location?latitude=' . rawurlencode((string)$locationLat) . '&longitude=' . rawurlencode((string)$locationLng);
+$telLink = normalizeTelLink($phoneNumber);
+$whatsappLink = $whatsappNumber !== '' ? 'https://wa.me/' . ltrim(normalizeTelLink($whatsappNumber), '+') : '';
+$newsletterToken = generateCSRFToken();
 
 // Get WebGL settings
 $webglSettings = $settingModel->getWebGLSettings();
@@ -30,8 +270,8 @@ $featuredItems = $menuModel->getFeatured(6);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars($siteName); ?></title>
-    <meta name="description" content="<?php echo htmlspecialchars($heroSubtitle); ?>">
+    <title><?php echo homeEscape($siteName); ?></title>
+    <meta name="description" content="<?php echo homeEscape($heroSubtitle); ?>">
     <style>
         * {
             margin: 0;
@@ -310,19 +550,378 @@ $featuredItems = $menuModel->getFeatured(6);
             font-weight: 700;
         }
         
+        /* Shared premium sections */
+        .premium-section {
+            padding: 100px 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .premium-section::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at 20% 10%, rgba(212, 175, 55, 0.14), transparent 28%),
+                        radial-gradient(circle at 80% 85%, rgba(0, 70, 71, 0.35), transparent 30%);
+            pointer-events: none;
+        }
+
+        .premium-section .container {
+            position: relative;
+            z-index: 1;
+        }
+
+        .section-eyebrow {
+            color: rgba(212, 175, 55, 0.75);
+            font-size: 14px;
+            letter-spacing: 4px;
+            text-align: center;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.06);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 28px;
+            box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+        }
+
+        .about-section {
+            background: linear-gradient(180deg, var(--primary) 0%, var(--black) 100%);
+        }
+
+        .about-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(280px, 0.85fr);
+            gap: 34px;
+            align-items: center;
+        }
+
+        .about-copy {
+            padding: 42px;
+            line-height: 2;
+            font-size: 18px;
+            color: rgba(255, 255, 255, 0.82);
+        }
+
+        .about-copy p:not(:last-child),
+        .about-copy ul:not(:last-child),
+        .about-copy ol:not(:last-child) {
+            margin-bottom: 18px;
+        }
+
+        .about-copy a {
+            color: var(--accent);
+        }
+
+        .about-image-wrap {
+            min-height: 430px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .about-image-wrap img {
+            width: 100%;
+            height: 100%;
+            min-height: 430px;
+            object-fit: cover;
+            display: block;
+            filter: saturate(0.9) contrast(1.08);
+        }
+
+        .about-image-placeholder {
+            height: 430px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: rgba(212, 175, 55, 0.45);
+            font-size: 96px;
+            background: linear-gradient(135deg, rgba(212, 175, 55, 0.12), rgba(0, 70, 71, 0.35));
+        }
+
+        .location-section {
+            background: linear-gradient(180deg, var(--black) 0%, rgba(0, 70, 71, 0.72) 100%);
+        }
+
+        .location-grid {
+            display: grid;
+            grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.2fr);
+            gap: 28px;
+        }
+
+        .contact-card,
+        .newsletter-card {
+            padding: 34px;
+        }
+
+        .contact-list {
+            list-style: none;
+            display: grid;
+            gap: 20px;
+            margin-bottom: 28px;
+        }
+
+        .contact-label {
+            display: block;
+            color: var(--accent);
+            font-size: 14px;
+            margin-bottom: 6px;
+        }
+
+        .contact-value,
+        .contact-value-en {
+            color: rgba(255, 255, 255, 0.82);
+            line-height: 1.8;
+        }
+
+        .contact-value-en {
+            direction: ltr;
+            text-align: right;
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.62);
+        }
+
+        .section-actions {
+            display: flex;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+
+        .secondary-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 14px 24px;
+            border-radius: 999px;
+            color: var(--white);
+            text-decoration: none;
+            border: 1px solid rgba(212, 175, 55, 0.38);
+            background: rgba(212, 175, 55, 0.12);
+            transition: all 0.3s;
+        }
+
+        .secondary-button:hover {
+            background: rgba(212, 175, 55, 0.22);
+            transform: translateY(-2px);
+        }
+
+        .map-frame {
+            min-height: 390px;
+            overflow: hidden;
+        }
+
+        .map-frame iframe {
+            width: 100%;
+            height: 100%;
+            min-height: 390px;
+            border: 0;
+            filter: grayscale(0.15) contrast(1.04);
+        }
+
+        .hours-section {
+            background: var(--black);
+        }
+
+        .hours-status {
+            width: fit-content;
+            margin: -30px auto 38px;
+            padding: 12px 22px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: var(--white);
+            background: rgba(255, 255, 255, 0.07);
+        }
+
+        .hours-status.is-open {
+            border-color: rgba(88, 214, 141, 0.45);
+            color: #8ef2b3;
+        }
+
+        .hours-status.is-closed {
+            border-color: rgba(255, 118, 117, 0.45);
+            color: #ffb1ad;
+        }
+
+        .hours-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+        }
+
+        .hours-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            padding: 18px 20px;
+            color: rgba(255, 255, 255, 0.72);
+        }
+
+        .hours-row.current-day {
+            border-color: rgba(212, 175, 55, 0.5);
+            color: var(--white);
+            box-shadow: 0 18px 38px rgba(212, 175, 55, 0.12);
+        }
+
+        .hours-day {
+            font-weight: 700;
+        }
+
+        .hours-time {
+            color: var(--accent);
+            direction: ltr;
+        }
+
+        .newsletter-section {
+            background: linear-gradient(180deg, rgba(0, 70, 71, 0.72) 0%, var(--black) 100%);
+        }
+
+        .newsletter-card {
+            max-width: 760px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .newsletter-text {
+            color: rgba(255, 255, 255, 0.72);
+            line-height: 1.9;
+            margin-bottom: 28px;
+        }
+
+        .newsletter-form {
+            display: flex;
+            gap: 12px;
+            padding: 8px;
+            border-radius: 999px;
+            background: rgba(0, 0, 0, 0.26);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .newsletter-form input {
+            flex: 1;
+            min-width: 0;
+            border: 0;
+            background: transparent;
+            color: var(--white);
+            padding: 0 18px;
+            font-size: 16px;
+            outline: none;
+            direction: ltr;
+            text-align: right;
+        }
+
+        .newsletter-form input::placeholder {
+            color: rgba(255, 255, 255, 0.45);
+        }
+
+        .newsletter-message {
+            margin-bottom: 18px;
+            padding: 12px 18px;
+            border-radius: 18px;
+            color: var(--white);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .newsletter-message.success {
+            color: #8ef2b3;
+            border: 1px solid rgba(88, 214, 141, 0.35);
+        }
+
+        .newsletter-message.error {
+            color: #ffb1ad;
+            border: 1px solid rgba(255, 118, 117, 0.35);
+        }
+
         /* Footer */
         .footer {
             background: var(--black);
-            padding: 40px 20px;
-            text-align: center;
+            padding: 70px 20px 32px;
             border-top: 1px solid rgba(255, 255, 255, 0.1);
         }
-        
-        .footer p {
+
+        .footer-grid {
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr 1fr;
+            gap: 34px;
+            text-align: right;
+            margin-bottom: 36px;
+        }
+
+        .footer-title {
+            color: var(--accent);
+            margin-bottom: 18px;
+            font-size: 20px;
+        }
+
+        .footer-text,
+        .footer-link,
+        .footer-contact li {
+            color: rgba(255, 255, 255, 0.62);
+            line-height: 1.9;
+        }
+
+        .footer-link {
+            display: block;
+            text-decoration: none;
+            margin-bottom: 10px;
+            transition: color 0.3s;
+        }
+
+        .footer-link:hover {
+            color: var(--accent);
+        }
+
+        .footer-contact {
+            list-style: none;
+            display: grid;
+            gap: 8px;
+        }
+
+        .footer-social {
+            display: flex;
+            gap: 12px;
+            margin-top: 18px;
+            flex-wrap: wrap;
+        }
+
+        .footer-social a {
+            width: 42px;
+            height: 42px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            color: var(--white);
+            text-decoration: none;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .footer-bottom {
             color: rgba(255, 255, 255, 0.5);
+            text-align: center;
+            padding-top: 24px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
         }
         
         /* Responsive */
+        @media (max-width: 900px) {
+            .about-layout,
+            .location-grid,
+            .footer-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .about-image-wrap,
+            .about-image-wrap img,
+            .about-image-placeholder,
+            .map-frame,
+            .map-frame iframe {
+                min-height: 320px;
+            }
+        }
+
         @media (max-width: 768px) {
             .social-links {
                 left: 15px;
@@ -330,6 +929,31 @@ $featuredItems = $menuModel->getFeatured(6);
             
             .menu-grid {
                 grid-template-columns: 1fr;
+            }
+
+            .premium-section,
+            .menu-section {
+                padding: 72px 16px;
+            }
+
+            .section-title {
+                font-size: 36px;
+                margin-bottom: 44px;
+            }
+
+            .about-copy,
+            .contact-card,
+            .newsletter-card {
+                padding: 26px;
+            }
+
+            .newsletter-form {
+                border-radius: 24px;
+                flex-direction: column;
+            }
+
+            .newsletter-form input {
+                min-height: 52px;
             }
         }
     </style>
@@ -380,15 +1004,21 @@ $featuredItems = $menuModel->getFeatured(6);
     
     <!-- Social Links -->
     <div class="social-links">
-        <a href="https://instagram.com/keyrestaurant" class="social-link" target="_blank">📷</a>
-        <a href="https://t.me/keyrestaurant" class="social-link" target="_blank">✈️</a>
-        <a href="tel:+982112345678" class="social-link">📞</a>
+        <?php if ($instagramUrl !== '#'): ?>
+            <a href="<?php echo homeEscape($instagramUrl); ?>" class="social-link" target="_blank" rel="noopener" aria-label="Instagram">📷</a>
+        <?php endif; ?>
+        <?php if ($telegramUrl !== '#'): ?>
+            <a href="<?php echo homeEscape($telegramUrl); ?>" class="social-link" target="_blank" rel="noopener" aria-label="Telegram">✈️</a>
+        <?php endif; ?>
+        <?php if ($telLink !== ''): ?>
+            <a href="tel:<?php echo homeEscape($telLink); ?>" class="social-link" aria-label="Call">📞</a>
+        <?php endif; ?>
     </div>
     
     <!-- Menu Section -->
     <section id="menu" class="menu-section">
         <div class="container">
-            <h2 class="section-title">منوی ویژه</h2>
+            <h2 class="section-title"><?php echo homeEscape($menuTitle); ?></h2>
             
             <div class="menu-grid">
                 <?php foreach ($featuredItems as $item): ?>
@@ -406,10 +1036,144 @@ $featuredItems = $menuModel->getFeatured(6);
             </div>
         </div>
     </section>
+
+    <!-- About / Story Section -->
+    <section id="about" class="premium-section about-section">
+        <div class="container">
+            <div class="section-eyebrow">KEY STORY</div>
+            <h2 class="section-title"><?php echo homeEscape($aboutTitle); ?></h2>
+            <div class="about-layout">
+                <div class="about-copy glass-panel">
+                    <?php echo homeSafeHtml($aboutContent); ?>
+                </div>
+                <div class="about-image-wrap glass-panel">
+                    <?php if ($aboutImage !== ''): ?>
+                        <img src="<?php echo homeEscape($aboutImage); ?>" alt="<?php echo homeEscape($aboutTitle); ?>" loading="lazy">
+                    <?php else: ?>
+                        <div class="about-image-placeholder" aria-hidden="true">✦</div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Location + Map Section -->
+    <section id="location" class="premium-section location-section">
+        <div class="container">
+            <div class="section-eyebrow">VISIT US</div>
+            <h2 class="section-title"><?php echo homeEscape($locationTitle); ?></h2>
+            <div class="location-grid">
+                <div class="contact-card glass-panel">
+                    <ul class="contact-list">
+                        <li>
+                            <span class="contact-label">آدرس</span>
+                            <div class="contact-value"><?php echo homeEscape($addressFa); ?></div>
+                            <div class="contact-value-en"><?php echo homeEscape($addressEn); ?></div>
+                        </li>
+                        <li>
+                            <span class="contact-label">تلفن</span>
+                            <div class="contact-value"><?php echo homeEscape($phoneNumber); ?></div>
+                        </li>
+                    </ul>
+                    <div class="section-actions">
+                        <?php if ($telLink !== ''): ?>
+                            <a class="secondary-button" href="tel:<?php echo homeEscape($telLink); ?>">تماس فوری</a>
+                        <?php endif; ?>
+                        <a class="secondary-button" href="<?php echo homeEscape($baladMapUrl); ?>" target="_blank" rel="noopener">باز کردن در بلد</a>
+                    </div>
+                </div>
+                <div class="map-frame glass-panel">
+                    <iframe title="Balad map" src="<?php echo homeEscape($baladMapUrl); ?>" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Opening Hours Section -->
+    <section id="hours" class="premium-section hours-section">
+        <div class="container">
+            <div class="section-eyebrow">OPENING HOURS</div>
+            <h2 class="section-title"><?php echo homeEscape($hoursTitle); ?></h2>
+            <div class="hours-status <?php echo $isCurrentlyOpen ? 'is-open' : 'is-closed'; ?>">
+                <?php echo $isCurrentlyOpen ? 'هم‌اکنون باز است' : 'هم‌اکنون بسته است'; ?>
+            </div>
+            <div class="hours-grid">
+                <?php foreach ($weekDays as $dayKey => $dayLabel): ?>
+                    <div class="hours-row glass-panel <?php echo $dayKey === $currentDayKey ? 'current-day' : ''; ?>">
+                        <span class="hours-day"><?php echo homeEscape($dayLabel); ?></span>
+                        <span class="hours-time"><?php echo homeEscape(formatOpeningHours($openingHours[$dayKey] ?? null)); ?></span>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    </section>
+
+    <!-- Newsletter / Customer Club Section -->
+    <section id="newsletter" class="premium-section newsletter-section">
+        <div class="container">
+            <div class="newsletter-card glass-panel">
+                <div class="section-eyebrow">CUSTOMER CLUB</div>
+                <h2 class="section-title"><?php echo homeEscape($newsletterTitle); ?></h2>
+                <p class="newsletter-text"><?php echo homeEscape($newsletterText); ?></p>
+                <?php if ($newsletterMessage !== ''): ?>
+                    <div class="newsletter-message <?php echo homeEscape($newsletterStatus); ?>">
+                        <?php echo homeEscape($newsletterMessage); ?>
+                    </div>
+                <?php endif; ?>
+                <form class="newsletter-form" method="post" action="#newsletter" novalidate>
+                    <input type="hidden" name="form_name" value="newsletter">
+                    <input type="hidden" name="<?php echo homeEscape(CSRF_TOKEN_NAME); ?>" value="<?php echo homeEscape($newsletterToken); ?>">
+                    <input type="text" name="subscriber_contact" value="<?php echo homeEscape($newsletterInput); ?>" placeholder="شماره تماس یا ایمیل" inputmode="email" aria-label="شماره تماس یا ایمیل" required>
+                    <button type="submit" class="secondary-button">عضویت</button>
+                </form>
+            </div>
+        </div>
+    </section>
     
     <!-- Footer -->
     <footer class="footer">
-        <p>&copy; <?php echo date('Y'); ?> KEY Restaurant & Coffeehouse. All rights reserved.</p>
+        <div class="container">
+            <div class="footer-grid">
+                <div>
+                    <h3 class="footer-title"><?php echo homeEscape($siteName); ?></h3>
+                    <p class="footer-text"><?php echo homeEscape($heroSubtitle); ?></p>
+                    <div class="footer-social">
+                        <?php if ($instagramUrl !== '#'): ?>
+                            <a href="<?php echo homeEscape($instagramUrl); ?>" target="_blank" rel="noopener" aria-label="Instagram">📷</a>
+                        <?php endif; ?>
+                        <?php if ($telegramUrl !== '#'): ?>
+                            <a href="<?php echo homeEscape($telegramUrl); ?>" target="_blank" rel="noopener" aria-label="Telegram">✈️</a>
+                        <?php endif; ?>
+                        <?php if ($whatsappLink !== ''): ?>
+                            <a href="<?php echo homeEscape($whatsappLink); ?>" target="_blank" rel="noopener" aria-label="WhatsApp">💬</a>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="footer-title"><?php echo homeEscape($footerQuickLinksTitle); ?></h3>
+                    <?php foreach ($quickLinks as $link): ?>
+                        <?php
+                            $linkLabel = is_array($link) ? ($link['label'] ?? '') : '';
+                            $linkUrl = is_array($link) ? ($link['url'] ?? '#') : '#';
+                        ?>
+                        <?php if ($linkLabel !== ''): ?>
+                            <a class="footer-link" href="<?php echo homeEscape($linkUrl); ?>"><?php echo homeEscape($linkLabel); ?></a>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                </div>
+                <div>
+                    <h3 class="footer-title"><?php echo homeEscape($footerContactTitle); ?></h3>
+                    <ul class="footer-contact">
+                        <li><?php echo homeEscape($phoneNumber); ?></li>
+                        <li><?php echo homeEscape($email); ?></li>
+                        <li><?php echo homeEscape($addressFa); ?></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                &copy; <?php echo date('Y'); ?> <?php echo homeEscape($siteNameEn); ?> — <?php echo homeEscape($footerCopyright); ?>
+            </div>
+        </div>
     </footer>
     
     <!-- WebGL Script -->
