@@ -7,13 +7,13 @@ START TRANSACTION;
 SET time_zone = "+00:00";
 
 -- Database creation
-CREATE DATABASE IF NOT EXISTS `key_restaurant` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE `key_restaurant`;
+-- CREATE DATABASE IF NOT EXISTS `keycir_keykavoos` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- USE `keycir_keykavoos`;
 
 -- ============================================
 -- ADMINS TABLE
 -- ============================================
-CREATE TABLE `admins` (
+CREATE TABLE IF NOT EXISTS `admins` (
   `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
   `username` varchar(50) NOT NULL,
   `email` varchar(100) NOT NULL,
@@ -32,13 +32,12 @@ CREATE TABLE `admins` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Default admin: username=admin, password=admin123 (CHANGE THIS!)
-INSERT INTO `admins` (`username`, `email`, `password`, `full_name`, `role`) VALUES
-('admin', 'admin@keyrestaurant.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'مدیر سیستم', 'super_admin');
+
 
 -- ============================================
 -- USERS TABLE
 -- ============================================
-CREATE TABLE `users` (
+CREATE TABLE IF NOT EXISTS `users` (
   `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
   `phone` varchar(20) NOT NULL,
   `full_name` varchar(100) DEFAULT NULL,
@@ -61,7 +60,7 @@ CREATE TABLE `users` (
 -- ============================================
 -- MENU CATEGORIES TABLE
 -- ============================================
-CREATE TABLE `menu_categories` (
+CREATE TABLE IF NOT EXISTS `menu_categories` (
   `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
   `name_fa` varchar(100) NOT NULL,
   `name_en` varchar(100) NOT NULL,
@@ -91,7 +90,7 @@ INSERT INTO `menu_categories` (`name_fa`, `name_en`, `slug`, `icon`, `sort_order
 -- ============================================
 -- MENU ITEMS TABLE
 -- ============================================
-CREATE TABLE `menu_items` (
+CREATE TABLE IF NOT EXISTS `menu_items` (
   `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
   `category_id` int(11) UNSIGNED NOT NULL,
   `name_fa` varchar(150) NOT NULL,
@@ -136,7 +135,7 @@ INSERT INTO `menu_items` (`category_id`, `name_fa`, `name_en`, `slug`, `descript
 -- ============================================
 -- ORDERS TABLE
 -- ============================================
-CREATE TABLE `orders` (
+CREATE TABLE IF NOT EXISTS `orders` (
   `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
   `user_id` int(11) UNSIGNED DEFAULT NULL,
   `order_number` varchar(20) NOT NULL,
@@ -174,7 +173,7 @@ CREATE TABLE `orders` (
 -- ============================================
 -- ORDER ITEMS TABLE
 -- ============================================
-CREATE TABLE `order_items` (
+CREATE TABLE IF NOT EXISTS `order_items` (
   `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
   `order_id` int(11) UNSIGNED NOT NULL,
   `menu_item_id` int(11) UNSIGNED NOT NULL,
@@ -195,7 +194,7 @@ CREATE TABLE `order_items` (
 -- ============================================
 -- FEEDBACK TABLE
 -- ============================================
-CREATE TABLE `feedback` (
+CREATE TABLE IF NOT EXISTS `feedback` (
   `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
   `user_id` int(11) UNSIGNED DEFAULT NULL,
   `order_id` int(11) UNSIGNED DEFAULT NULL,
@@ -226,7 +225,7 @@ CREATE TABLE `feedback` (
 -- ============================================
 -- MEDIA TABLE
 -- ============================================
-CREATE TABLE `media` (
+CREATE TABLE IF NOT EXISTS `media` (
   `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
   `filename` varchar(255) NOT NULL,
   `original_name` varchar(255) NOT NULL,
@@ -251,7 +250,7 @@ CREATE TABLE `media` (
 -- ============================================
 -- SETTINGS TABLE
 -- ============================================
-CREATE TABLE `settings` (
+CREATE TABLE IF NOT EXISTS `settings` (
   `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
   `setting_key` varchar(100) NOT NULL,
   `setting_value` text DEFAULT NULL,
@@ -267,7 +266,7 @@ CREATE TABLE `settings` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Default settings
-INSERT INTO \`settings\` (\`setting_key\`, \`setting_value\`, \`setting_type\`, \`category\`, \`is_public\`) VALUES
+INSERT INTO `settings` (`setting_key`, `setting_value`, `setting_type`, `category`, `is_public`) VALUES
 ('site_name_fa', 'KEY رستوران و کافه', 'text', 'general', 1),
 ('site_name_en', 'KEY Restaurant & Coffeehouse', 'text', 'general', 1),
 ('site_tagline_fa', 'تجربه‌ای لوکس از غذا و نوشیدنی', 'text', 'general', 1),
@@ -302,63 +301,69 @@ INSERT INTO \`settings\` (\`setting_key\`, \`setting_value\`, \`setting_type\`, 
 
 -- ============================================
 -- MEMBERSHIPS TABLE
--- ============================================
-CREATE TABLE \`memberships\` (
-  \`id\` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-  \`user_id\` int(11) UNSIGNED NOT NULL,
-  \`level\` enum('bronze','silver','gold','platinum') NOT NULL,
-  \`discount_percentage\` decimal(5,2) DEFAULT 0.00,
-  \`points_earned\` int(11) DEFAULT 0,
-  \`points_redeemed\` int(11) DEFAULT 0,
-  \`started_at\` datetime NOT NULL,
-  \`expires_at\` datetime DEFAULT NULL,
-  \`is_active\` tinyint(1) DEFAULT 1,
-  \`created_at\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  \`updated_at\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (\`id\`),
-  KEY \`user_id\` (\`user_id\`),
-  KEY \`level\` (\`level\`),
-  KEY \`is_active\` (\`is_active\`),
-  CONSTRAINT \`fk_memberships_user\` FOREIGN KEY (\`user_id\`) REFERENCES \`users\` (\`id\`) ON DELETE CASCADE
+-- ============================================ 
+CREATE TABLE IF NOT EXISTS `memberships` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) UNSIGNED NOT NULL,
+  `level` enum('bronze','silver','gold','platinum') NOT NULL,
+  `discount_percentage` decimal(5,2) DEFAULT 0.00,
+  `points_earned` int(11) DEFAULT 0,
+  `points_redeemed` int(11) DEFAULT 0,
+  `started_at` datetime NOT NULL,
+  `expires_at` datetime DEFAULT NULL,
+  `is_active` tinyint(1) DEFAULT 1,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`),
+  KEY `level` (`level`),
+  KEY `is_active` (`is_active`),
+  CONSTRAINT `fk_memberships_user`
+    FOREIGN KEY (`user_id`) REFERENCES `users` (`id`)
+    ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================
 -- ADMIN SESSIONS TABLE
 -- ============================================
-CREATE TABLE \`admin_sessions\` (
-  \`id\` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-  \`admin_id\` int(11) UNSIGNED NOT NULL,
-  \`session_token\` varchar(255) NOT NULL,
-  \`ip_address\` varchar(45) DEFAULT NULL,
-  \`user_agent\` varchar(255) DEFAULT NULL,
-  \`expires_at\` datetime NOT NULL,
-  \`created_at\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (\`id\`),
-  UNIQUE KEY \`session_token\` (\`session_token\`),
-  KEY \`admin_id\` (\`admin_id\`),
-  KEY \`expires_at\` (\`expires_at\`),
-  CONSTRAINT \`fk_sessions_admin\` FOREIGN KEY (\`admin_id\`) REFERENCES \`admins\` (\`id\`) ON DELETE CASCADE
+CREATE TABLE IF NOT EXISTS `admin_sessions` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `admin_id` int(11) UNSIGNED NOT NULL,
+  `session_token` varchar(255) NOT NULL,
+  `ip_address` varchar(45) DEFAULT NULL,
+  `user_agent` varchar(255) DEFAULT NULL,
+  `expires_at` datetime NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `session_token` (`session_token`),
+  KEY `admin_id` (`admin_id`),
+  KEY `expires_at` (`expires_at`),
+  CONSTRAINT `fk_sessions_admin`
+    FOREIGN KEY (`admin_id`) REFERENCES `admins` (`id`)
+    ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================
 -- ACTIVITY LOG TABLE
 -- ============================================
-CREATE TABLE \`activity_log\` (
-  \`id\` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-  \`admin_id\` int(11) UNSIGNED DEFAULT NULL,
-  \`action\` varchar(100) NOT NULL,
-  \`entity_type\` varchar(50) DEFAULT NULL,
-  \`entity_id\` int(11) DEFAULT NULL,
-  \`description\` text DEFAULT NULL,
-  \`ip_address\` varchar(45) DEFAULT NULL,
-  \`user_agent\` varchar(255) DEFAULT NULL,
-  \`created_at\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (\`id\`),
-  KEY \`admin_id\` (\`admin_id\`),
-  KEY \`action\` (\`action\`),
-  KEY \`entity_type\` (\`entity_type\`),
-  KEY \`created_at\` (\`created_at\`),
-  CONSTRAINT \`fk_activity_admin\` FOREIGN KEY (\`admin_id\`) REFERENCES \`admins\` (\`id\`) ON DELETE SET NULL
+CREATE TABLE IF NOT EXISTS `activity_log` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `admin_id` int(11) UNSIGNED DEFAULT NULL,
+  `action` varchar(100) NOT NULL,
+  `entity_type` varchar(50) DEFAULT NULL,
+  `entity_id` int(11) DEFAULT NULL,
+  `description` text DEFAULT NULL,
+  `ip_address` varchar(45) DEFAULT NULL,
+  `user_agent` varchar(255) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `admin_id` (`admin_id`),
+  KEY `action` (`action`),
+  KEY `entity_type` (`entity_type`),
+  KEY `created_at` (`created_at`),
+  CONSTRAINT `fk_activity_admin`
+    FOREIGN KEY (`admin_id`) REFERENCES `admins` (`id`)
+    ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 COMMIT;
