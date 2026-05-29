@@ -4,9 +4,8 @@
  * Liquid Glass RTL Design
  */
 
-require_once __DIR__ . '/../config/config.php';
-require_once __DIR__ . '/../config/database.php';
-require_once __DIR__ . '/../core/models/Survey.php';
+require_once __DIR__ . '/core/bootstrap.php';
+require_once __DIR__ . '/core/models/Survey.php';
 
 $surveyModel = new Survey();
 $form = $surveyModel->getActiveForm();
@@ -480,7 +479,7 @@ $orderId = $_GET['order'] ?? null;
             document.getElementById('loading').classList.add('active');
             
             try {
-                const response = await fetch('api/survey-submit.php', {
+                const response = await fetch('/api/survey-submit.php', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'

@@ -4,10 +4,9 @@
  * Frontend Homepage
  */
 
-require_once __DIR__ . '/../config/config.php';
-require_once __DIR__ . '/../config/database.php';
-require_once __DIR__ . '/../core/models/Setting.php';
-require_once __DIR__ . '/../core/models/MenuItem.php';
+require_once __DIR__ . '/core/bootstrap.php';
+require_once __DIR__ . '/core/models/Setting.php';
+require_once __DIR__ . '/core/models/MenuItem.php';
 
 $settingModel = new Setting();
 $menuModel = new MenuItem();
@@ -394,7 +393,7 @@ $featuredItems = $menuModel->getFeatured(6);
             <div class="menu-grid">
                 <?php foreach ($featuredItems as $item): ?>
                     <div class="menu-card">
-                        <img src="uploads/menu/<?php echo htmlspecialchars($item['image'] ?? 'placeholder.jpg'); ?>" 
+                        <img src="/uploads/menu/<?php echo htmlspecialchars($item['image'] ?? 'placeholder.jpg'); ?>" 
                              alt="<?php echo htmlspecialchars($item['name_fa']); ?>" 
                              class="menu-card-image">
                         <div class="menu-card-content">

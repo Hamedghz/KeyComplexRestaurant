@@ -4,7 +4,7 @@
  * Provides common database operations
  */
 
-require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../bootstrap.php';
 
 abstract class Model {
     protected $db;
