@@ -163,4 +163,4 @@ class App {
 }
 
 // Initialize app
-const app = new App()
+new App()

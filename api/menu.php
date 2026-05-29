@@ -3,7 +3,8 @@
  * Menu API Endpoint
  */
 
-require_once __DIR__ . '/../../core/models/MenuItem.php';
+require_once __DIR__ . '/../core/models/MenuItem.php';
+$method = $method ?? $_SERVER['REQUEST_METHOD'];
 
 $menuModel = new MenuItem();
 

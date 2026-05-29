@@ -4,7 +4,8 @@
  * Returns public settings for frontend
  */
 
-require_once __DIR__ . '/../../core/models/Setting.php';
+require_once __DIR__ . '/../core/models/Setting.php';
+$method = $method ?? $_SERVER['REQUEST_METHOD'];
 
 $settingModel = new Setting();
 

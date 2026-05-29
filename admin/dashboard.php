@@ -5,10 +5,10 @@
 
 session_start();
 
-require_once __DIR__ . '/../../config/config.php';
-require_once __DIR__ . '/../../core/Auth.php';
-require_once __DIR__ . '/../../core/models/Order.php';
-require_once __DIR__ . '/../../core/models/MenuItem.php';
+require_once __DIR__ . '/../core/bootstrap.php';
+require_once __DIR__ . '/../core/Auth.php';
+require_once __DIR__ . '/../core/models/Order.php';
+require_once __DIR__ . '/../core/models/MenuItem.php';
 
 $auth = new Auth();
 

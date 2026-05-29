@@ -3,8 +3,9 @@
  * Order API Endpoint
  */
 
-require_once __DIR__ . '/../../core/models/Order.php';
-require_once __DIR__ . '/../../core/models/MenuItem.php';
+require_once __DIR__ . '/../core/models/Order.php';
+require_once __DIR__ . '/../core/models/MenuItem.php';
+$method = $method ?? $_SERVER['REQUEST_METHOD'];
 
 $orderModel = new Order();
 $menuModel = new MenuItem();
