@@ -7,7 +7,7 @@
 session_start();
 
 // Security: Disable after first successful install
-if (file_exists(__DIR__ . '/config/installed.lock')) {
+if (file_exists(__DIR__ . '/../config/installed.lock')) {
     die('
     <!DOCTYPE html>
     <html lang="fa" dir="rtl">
@@ -119,12 +119,33 @@ function executeInstallation() {
         $pdo->exec("USE `{$config['name']}`");
         
         // Execute schema
-        $schema = file_get_contents(__DIR__ . '/database/schema.sql');
+        $schema = file_get_contents(__DIR__ . '/../database/schema.sql');
         
         // Remove database creation from schema (already done)
         $schema = preg_replace('/CREATE DATABASE.*?;/s', '', $schema);
         $schema = preg_replace('/USE .*?;/s', '', $schema);
         
+        // لیست جدول‌ها برای recreate
+	$tables = [
+	    'activity_log',
+	    'admin_sessions',
+	    'memberships',
+	    'settings',
+	    'media',
+	    'feedback',
+	    'order_items',
+	    'orders',
+	    'menu_items',
+	    'menu_categories',
+	    'users',
+	    'admins'
+	];
+
+	// اگر قبلاً وجود داشت حذف کن
+	foreach ($tables as $table) {
+	    $pdo->exec("DROP TABLE IF EXISTS `$table`");
+	}
+
         // Execute SQL statements
         $statements = array_filter(array_map('trim', explode(';', $schema)));
         foreach ($statements as $statement) {
@@ -153,22 +174,22 @@ function executeInstallation() {
         // Create config.php
         $configContent = generateConfigFile($config);
         
-        if (!is_dir(__DIR__ . '/config')) {
-            mkdir(__DIR__ . '/config', 0755, true);
+        if (!is_dir(__DIR__ . '/../config')) {
+            mkdir(__DIR__ . '/../config', 0755, true);
         }
         
-        file_put_contents(__DIR__ . '/config/database.php', $configContent);
+        file_put_contents(__DIR__ . '/../config/database.php', $configContent);
         
         // Create lock file
-        file_put_contents(__DIR__ . '/config/installed.lock', date('Y-m-d H:i:s'));
+        file_put_contents(__DIR__ . '/../config/installed.lock', date('Y-m-d H:i:s'));
         
         // Create necessary directories
         $dirs = [
-            'public_html/uploads/menu',
-            'public_html/uploads/logo',
-            'public_html/uploads/hero',
-            'storage/logs',
-            'storage/cache'
+            '/uploads/menu',
+            '/uploads/logo',
+            '/uploads/hero',
+            '/../storage/logs',
+            '/../storage/cache'
         ];
         
         foreach ($dirs as $dir) {
