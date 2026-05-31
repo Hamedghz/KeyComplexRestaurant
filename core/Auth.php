@@ -175,10 +175,10 @@ class Auth {
             return false;
         }
         
-        $roles = ['manager' => 1, 'admin' => 2, 'super_admin' => 3];
-        $currentRole = $_SESSION['admin_role'] ?? 'manager';
+        $roles = ['employee' => 0, 'manager' => 1, 'admin' => 2, 'super_admin' => 3];
+        $currentRole = $_SESSION['admin_role'] ?? 'employee';
         
-        return $roles[$currentRole] >= $roles[$requiredRole];
+        return ($roles[$currentRole] ?? -1) >= ($roles[$requiredRole] ?? 0);
     }
     
     /**

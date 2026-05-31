@@ -64,7 +64,9 @@ define('DB_PASS', $db['pass'] ?? '');
 define('DB_CHARSET', $db['charset'] ?? 'utf8mb4');
 
 define('MAX_FILE_SIZE', (int)($app['max_file_size'] ?? (5 * 1024 * 1024)));
-define('ALLOWED_IMAGE_TYPES', ['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+define('ALLOWED_IMAGE_TYPES', ['image/jpeg', 'image/png', 'image/webp']);
+define('ALLOWED_IMAGE_EXTENSIONS', ['jpg', 'jpeg', 'png', 'webp']);
+define('ALLOWED_IMPORT_EXTENSIONS', ['csv', 'xlsx']);
 define('ALLOWED_MODEL_TYPES', ['model/gltf-binary', 'application/octet-stream']);
 define('CSRF_TOKEN_NAME', 'csrf_token');
 define('SESSION_LIFETIME', 7200);
@@ -100,6 +102,9 @@ if (!function_exists('generateCSRFToken')) {
 
 if (!function_exists('verifyCSRFToken')) {
     function verifyCSRFToken($token) {
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            session_start();
+        }
         return isset($_SESSION[CSRF_TOKEN_NAME]) && hash_equals($_SESSION[CSRF_TOKEN_NAME], (string)$token);
     }
 }
@@ -133,6 +138,158 @@ if (!function_exists('formatPrice')) {
     }
 }
 
+
+
+if (!function_exists('sendSecurityHeaders')) {
+    function sendSecurityHeaders() {
+        if (headers_sent()) {
+            return;
+        }
+
+        header('X-Frame-Options: SAMEORIGIN');
+        header('X-Content-Type-Options: nosniff');
+        header('Referrer-Policy: strict-origin-when-cross-origin');
+        header('Permissions-Policy: camera=(), microphone=(), geolocation=(self)');
+        header("Content-Security-Policy: default-src 'self'; img-src 'self' data: blob:; font-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'");
+    }
+}
+
+if (!function_exists('assetUrl')) {
+    function assetUrl($path) {
+        $path = '/' . ltrim((string)$path, '/');
+        $fullPath = PUBLIC_PATH . $path;
+        $version = is_file($fullPath) ? (string)filemtime($fullPath) : date('Ymd');
+        return BASE_URL . $path . '?v=' . rawurlencode($version);
+    }
+}
+
+if (!function_exists('localFontPreloadLinks')) {
+    function localFontPreloadLinks() {
+        return '<link rel="preload" href="' . htmlspecialchars(assetUrl('assets/fonts/Vazirmatn-Regular.woff2'), ENT_QUOTES, 'UTF-8') . '" as="font" type="font/woff2" crossorigin>' . "\n"
+            . '<link rel="preload" href="' . htmlspecialchars(assetUrl('assets/fonts/Vazirmatn-Bold.woff2'), ENT_QUOTES, 'UTF-8') . '" as="font" type="font/woff2" crossorigin>';
+    }
+}
+
+if (!function_exists('renderSeoMeta')) {
+    function renderSeoMeta($title, $description, $image = '', $canonical = '', $keywords = '') {
+        $canonical = $canonical !== '' ? $canonical : BASE_URL . strtok($_SERVER['REQUEST_URI'] ?? '/', '?');
+        $image = $image !== '' ? $image : assetUrl('assets/images/home-preview.svg');
+        $title = htmlspecialchars((string)$title, ENT_QUOTES, 'UTF-8');
+        $description = htmlspecialchars((string)$description, ENT_QUOTES, 'UTF-8');
+        $canonical = htmlspecialchars($canonical, ENT_QUOTES, 'UTF-8');
+        $image = htmlspecialchars($image, ENT_QUOTES, 'UTF-8');
+        $keywordsTag = $keywords !== '' ? '<meta name="keywords" content="' . htmlspecialchars($keywords, ENT_QUOTES, 'UTF-8') . '">' . "\n" : '';
+
+        return '<title>' . $title . '</title>' . "\n"
+            . '<meta name="description" content="' . $description . '">' . "\n"
+            . $keywordsTag
+            . '<link rel="canonical" href="' . $canonical . '">' . "\n"
+            . '<meta property="og:locale" content="fa_IR">' . "\n"
+            . '<meta property="og:type" content="website">' . "\n"
+            . '<meta property="og:title" content="' . $title . '">' . "\n"
+            . '<meta property="og:description" content="' . $description . '">' . "\n"
+            . '<meta property="og:image" content="' . $image . '">' . "\n"
+            . '<meta name="twitter:card" content="summary_large_image">' . "\n"
+            . '<meta name="twitter:title" content="' . $title . '">' . "\n"
+            . '<meta name="twitter:description" content="' . $description . '">' . "\n"
+            . '<meta name="twitter:image" content="' . $image . '">' . "\n"
+            . '<link rel="icon" href="' . htmlspecialchars(assetUrl('assets/images/home-preview.svg'), ENT_QUOTES, 'UTF-8') . '" type="image/svg+xml">';
+    }
+}
+
+if (!function_exists('verifyRequestCsrf')) {
+    function verifyRequestCsrf() {
+        $token = $_POST[CSRF_TOKEN_NAME] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+        return verifyCSRFToken((string)$token);
+    }
+}
+
+if (!function_exists('requireValidCsrf')) {
+    function requireValidCsrf() {
+        if (!verifyRequestCsrf()) {
+            http_response_code(419);
+            throw new RuntimeException('درخواست نامعتبر است. لطفاً صفحه را تازه‌سازی کنید.');
+        }
+    }
+}
+
+if (!function_exists('validateUploadedFile')) {
+    function validateUploadedFile($file, $allowedExtensions, $allowedMimeTypes, $maxSize = null) {
+        if (empty($file) || !isset($file['error']) || $file['error'] !== UPLOAD_ERR_OK) {
+            return ['valid' => false, 'message' => 'فایل معتبر ارسال نشده است.'];
+        }
+
+        $maxSize = $maxSize ?? MAX_FILE_SIZE;
+        if ((int)$file['size'] > $maxSize) {
+            return ['valid' => false, 'message' => 'حجم فایل بیش از حد مجاز است.'];
+        }
+
+        $extension = strtolower(pathinfo((string)$file['name'], PATHINFO_EXTENSION));
+        if (!in_array($extension, $allowedExtensions, true)) {
+            return ['valid' => false, 'message' => 'پسوند فایل مجاز نیست.'];
+        }
+
+        $mime = '';
+        if (is_file($file['tmp_name'])) {
+            $mime = mime_content_type($file['tmp_name']) ?: '';
+        }
+
+        if ($allowedMimeTypes && !in_array($mime, $allowedMimeTypes, true)) {
+            return ['valid' => false, 'message' => 'نوع فایل مجاز نیست.'];
+        }
+
+        return ['valid' => true, 'extension' => $extension, 'mime' => $mime];
+    }
+}
+
+if (!function_exists('optimizeUploadedImage')) {
+    function optimizeUploadedImage($tmpPath, $destinationDirectory, $baseName) {
+        if (!is_dir($destinationDirectory)) {
+            mkdir($destinationDirectory, 0755, true);
+        }
+
+        $info = getimagesize($tmpPath);
+        if (!$info) {
+            throw new RuntimeException('تصویر معتبر نیست.');
+        }
+
+        $mime = $info['mime'] ?? '';
+        $target = $destinationDirectory . '/' . $baseName . '.webp';
+
+        if (function_exists('imagewebp')) {
+            $source = null;
+            if ($mime === 'image/jpeg') {
+                $source = imagecreatefromjpeg($tmpPath);
+            } elseif ($mime === 'image/png') {
+                $source = imagecreatefrompng($tmpPath);
+                if ($source) {
+                    imagepalettetotruecolor($source);
+                    imagealphablending($source, true);
+                    imagesavealpha($source, true);
+                }
+            } elseif ($mime === 'image/webp') {
+                $source = imagecreatefromwebp($tmpPath);
+            }
+
+            if ($source) {
+                imagewebp($source, $target, 82);
+                imagedestroy($source);
+                return basename($target);
+            }
+        }
+
+        $extension = $mime === 'image/png' ? 'png' : ($mime === 'image/webp' ? 'webp' : 'jpg');
+        $fallback = $destinationDirectory . '/' . $baseName . '.' . $extension;
+        if (!move_uploaded_file($tmpPath, $fallback)) {
+            throw new RuntimeException('ذخیره فایل ناموفق بود.');
+        }
+        return basename($fallback);
+    }
+}
+
+if (PHP_SAPI !== 'cli') {
+    sendSecurityHeaders();
+}
 
 if (!function_exists('normalizeMobile')) {
     function normalizeMobile($mobile) {

@@ -16,12 +16,14 @@ $schemaFiles = [
     $baseDir . '/database/schema.sql',
     $baseDir . '/database/survey_schema.sql',
     $baseDir . '/database/migrations/2026_05_31_admin_crm_prediction_content.sql',
+    $baseDir . '/database/migrations/2026_05_31_security_performance_update.sql',
 ];
 $uploadDirs = [
     $baseDir . '/uploads',
     $baseDir . '/uploads/menu',
     $baseDir . '/uploads/logo',
     $baseDir . '/uploads/hero',
+    $baseDir . '/uploads/banners',
     $baseDir . '/uploads/textures',
     $baseDir . '/uploads/models',
     $baseDir . '/storage',

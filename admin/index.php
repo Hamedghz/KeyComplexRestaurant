@@ -20,12 +20,15 @@ $error = '';
 
 // Handle login form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!verifyRequestCsrf()) {
+        $error = 'درخواست نامعتبر است. لطفاً دوباره تلاش کنید.';
+    }
     $username = $_POST['username'] ?? '';
     $password = $_POST['password'] ?? '';
     
-    if (empty($username) || empty($password)) {
+    if ($error === '' && (empty($username) || empty($password))) {
         $error = 'لطفاً نام کاربری و رمز عبور را وارد کنید';
-    } else {
+    } elseif ($error === '') {
         $result = $auth->login($username, $password);
         
         if ($result['success']) {
@@ -38,12 +41,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 ?>
 <!DOCTYPE html>
-<html lang="fa" dir="rtl">
+<html lang="fa-IR" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ورود به پنل مدیریت - KEY</title>
     <style>
+        @font-face { font-family: Vazirmatn; src: url('../assets/fonts/Vazirmatn-Regular.woff2') format('woff2'); font-display: swap; }
         * {
             margin: 0;
             padding: 0;
@@ -51,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: Vazirmatn, Tahoma, sans-serif;
             background: linear-gradient(135deg, #004647 0%, #002829 100%);
             min-height: 100vh;
             display: flex;
@@ -166,6 +170,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php endif; ?>
         
         <form method="POST" action="">
+            <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo htmlspecialchars(generateCSRFToken(), ENT_QUOTES, 'UTF-8'); ?>">
             <div class="form-group">
                 <label for="username">نام کاربری یا ایمیل</label>
                 <input type="text" id="username" name="username" required autofocus>

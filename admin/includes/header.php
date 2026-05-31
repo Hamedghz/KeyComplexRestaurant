@@ -1,10 +1,13 @@
 <!DOCTYPE html>
-<html lang="fa" dir="rtl">
+<html lang="fa-IR" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo $pageTitle ?? 'پنل مدیریت'; ?> - KEY Admin</title>
+    <?php echo localFontPreloadLinks(); ?>
     <style>
+        @font-face { font-family: Vazirmatn; src: url('../assets/fonts/Vazirmatn-Regular.woff2') format('woff2'); font-display: swap; }
+        @font-face { font-family: Vazirmatn; src: url('../assets/fonts/Vazirmatn-Bold.woff2') format('woff2'); font-weight: 700; font-display: swap; }
         * {
             margin: 0;
             padding: 0;
@@ -24,7 +27,7 @@
         }
         
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: Vazirmatn, Tahoma, sans-serif;
             background: #f5f6fa;
             direction: rtl;
         }
@@ -441,6 +444,9 @@
             </a>
             <a href="settings.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'settings.php' ? 'active' : ''; ?>">
                 <span>⚙️</span> تنظیمات
+            </a>
+            <a href="system-update.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'system-update.php' ? 'active' : ''; ?>">
+                <span>⬆️</span> بروزرسانی سیستم
             </a>
         </nav>
         

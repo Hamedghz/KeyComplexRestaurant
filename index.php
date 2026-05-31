@@ -265,12 +265,16 @@ $webglSettings = $settingModel->getWebGLSettings();
 // Get dynamic hero banners and filterable menu categories/items
 $db = Database::getInstance()->getConnection();
 try {
-    $heroBanners = $db->query("SELECT * FROM hero_banners WHERE active_status = 1 AND (start_date IS NULL OR start_date <= NOW()) AND (end_date IS NULL OR end_date >= NOW()) ORDER BY display_order ASC, id DESC")->fetchAll();
+    $heroStmt = $db->prepare("SELECT * FROM hero_banners WHERE active_status = 1 AND (start_date IS NULL OR start_date <= NOW()) AND (end_date IS NULL OR end_date >= NOW()) ORDER BY display_order ASC, id DESC");
+    $heroStmt->execute();
+    $heroBanners = $heroStmt->fetchAll();
 } catch (Throwable $e) {
     $heroBanners = [];
 }
 try {
-    $menuCategories = $db->query("SELECT * FROM menu_categories WHERE COALESCE(is_active, 1) = 1 ORDER BY sort_order ASC, name_fa ASC")->fetchAll();
+    $categoryStmt = $db->prepare("SELECT * FROM menu_categories WHERE COALESCE(is_active, 1) = 1 ORDER BY sort_order ASC, name_fa ASC");
+    $categoryStmt->execute();
+    $menuCategories = $categoryStmt->fetchAll();
     $menuItemsByCategory = [];
     foreach ($menuCategories as $category) {
         $menuItemsByCategory[$category['id']] = $menuModel->getByCategory($category['id']);
@@ -283,13 +287,16 @@ try {
 $featuredItems = $menuModel->getFeatured(6);
 ?>
 <!DOCTYPE html>
-<html lang="fa" dir="rtl">
+<html lang="fa-IR" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo homeEscape($siteName); ?></title>
-    <meta name="description" content="<?php echo homeEscape($heroSubtitle); ?>">
+    <?php echo renderSeoMeta($siteName, $heroSubtitle, assetUrl('assets/images/home-preview.svg'), BASE_URL . '/', 'رستوران, کافه, KEY, منو, سفارش غذا'); ?>
+    <?php echo localFontPreloadLinks(); ?>
+    <link rel="preload" href="<?php echo homeEscape(assetUrl('assets/images/home-preview.svg')); ?>" as="image" type="image/svg+xml">
     <style>
+        @font-face { font-family: Vazirmatn; src: url('assets/fonts/Vazirmatn-Regular.woff2') format('woff2'); font-display: swap; }
+        @font-face { font-family: Vazirmatn; src: url('assets/fonts/Vazirmatn-Bold.woff2') format('woff2'); font-weight: 700; font-display: swap; }
         * {
             margin: 0;
             padding: 0;
@@ -304,7 +311,7 @@ $featuredItems = $menuModel->getFeatured(6);
         }
         
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: Vazirmatn, Tahoma, sans-serif;
             background: var(--black);
             color: var(--white);
             direction: rtl;
@@ -319,13 +326,29 @@ $featuredItems = $menuModel->getFeatured(6);
             overflow: hidden;
         }
         
-        #webgl-canvas {
+        #webgl-canvas,
+        .hero-static-fallback {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
         }
+
+        .hero-static-fallback {
+            background: radial-gradient(circle at 50% 35%, rgba(212,175,55,0.22), transparent 32%), linear-gradient(135deg, #004647, #061819 72%);
+            opacity: 0;
+            transform: scale(1.03);
+            transition: opacity .4s ease, transform 2s ease;
+        }
+
+        .no-webgl .hero-static-fallback,
+        .reduced-webgl .hero-static-fallback {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .no-webgl #webgl-canvas { display: none; }
         
         .hero-overlay {
             position: absolute;
@@ -942,6 +965,7 @@ $featuredItems = $menuModel->getFeatured(6);
 
         .hero-banner-slide { display: none; animation: fadeIn 0.7s ease; }
         .hero-banner-slide.active { display: block; }
+        .hero-banner-art { max-width: min(520px, 82vw); max-height: 34vh; object-fit: cover; border-radius: 28px; margin-bottom: 20px; box-shadow: 0 24px 70px rgba(0,0,0,.35); }
         .hero-banner-description { max-width: 680px; margin: 1rem auto; color: rgba(255,255,255,0.88); line-height: 1.9; }
         .hero-banner-dots { display:flex; gap:8px; justify-content:center; margin-top:18px; }
         .hero-banner-dots button { width:10px; height:10px; border-radius:50%; border:0; background:rgba(255,255,255,.45); cursor:pointer; }
@@ -995,7 +1019,8 @@ $featuredItems = $menuModel->getFeatured(6);
 <body>
     <!-- Hero Section with WebGL -->
     <section id="hero-section">
-        <canvas id="webgl-canvas"></canvas>
+        <canvas id="webgl-canvas" aria-hidden="true"></canvas>
+        <div class="hero-static-fallback" aria-hidden="true"></div>
         <div class="hero-overlay"></div>
         
         <div class="hero-content">
@@ -1024,6 +1049,13 @@ $featuredItems = $menuModel->getFeatured(6);
                 <div class="hero-banner-slider" data-hero-slider>
                     <?php foreach ($heroBanners as $index => $banner): ?>
                         <div class="hero-banner-slide <?php echo $index === 0 ? 'active' : ''; ?>" data-hero-slide>
+                            <?php if (!empty($banner['image'])): ?>
+                                <picture>
+                                    <?php if (!empty($banner['mobile_image'])): ?><source media="(max-width: 640px)" srcset="/uploads/banners/<?php echo homeEscape($banner['mobile_image']); ?>"><?php endif; ?>
+                                    <source srcset="/uploads/banners/<?php echo homeEscape($banner['image']); ?>" type="image/webp">
+                                    <img class="hero-banner-art" src="/uploads/banners/<?php echo homeEscape($banner['image']); ?>" alt="<?php echo homeEscape($banner['title']); ?>" <?php echo $index === 0 ? 'fetchpriority="high"' : 'loading="lazy"'; ?> decoding="async">
+                                </picture>
+                            <?php endif; ?>
                             <h1 class="hero-title"><?php echo homeEscape($banner['title']); ?></h1>
                             <?php if (!empty($banner['subtitle'])): ?><p class="hero-subtitle"><?php echo homeEscape($banner['subtitle']); ?></p><?php endif; ?>
                             <?php if (!empty($banner['description'])): ?><p class="hero-banner-description"><?php echo homeEscape($banner['description']); ?></p><?php endif; ?>
@@ -1083,7 +1115,10 @@ $featuredItems = $menuModel->getFeatured(6);
                         <div class="menu-grid">
                             <?php foreach (($menuItemsByCategory[$category['id']] ?? []) as $item): ?>
                                 <div class="menu-card">
-                                    <img src="/uploads/menu/<?php echo htmlspecialchars($item['image'] ?? 'placeholder.jpg'); ?>" alt="<?php echo htmlspecialchars($item['name_fa']); ?>" class="menu-card-image">
+                                    <picture>
+                                        <source srcset="/uploads/menu/<?php echo htmlspecialchars($item['image'] ?? 'placeholder.webp'); ?>" type="image/webp">
+                                        <img src="/uploads/menu/<?php echo htmlspecialchars($item['image'] ?? 'placeholder.jpg'); ?>" alt="<?php echo htmlspecialchars($item['name_fa']); ?>" class="menu-card-image" loading="lazy" decoding="async">
+                                    </picture>
                                     <div class="menu-card-content">
                                         <h3 class="menu-card-title"><?php echo htmlspecialchars($item['name_fa']); ?></h3>
                                         <p class="menu-card-description"><?php echo htmlspecialchars($item['description_fa']); ?></p>
@@ -1098,7 +1133,7 @@ $featuredItems = $menuModel->getFeatured(6);
                 <div class="menu-grid">
                     <?php foreach ($featuredItems as $item): ?>
                         <div class="menu-card">
-                            <img src="/uploads/menu/<?php echo htmlspecialchars($item['image'] ?? 'placeholder.jpg'); ?>" alt="<?php echo htmlspecialchars($item['name_fa']); ?>" class="menu-card-image">
+                            <picture><source srcset="/uploads/menu/<?php echo htmlspecialchars($item['image'] ?? 'placeholder.webp'); ?>" type="image/webp"><img src="/uploads/menu/<?php echo htmlspecialchars($item['image'] ?? 'placeholder.jpg'); ?>" alt="<?php echo htmlspecialchars($item['name_fa']); ?>" class="menu-card-image" loading="lazy" decoding="async"></picture>
                             <div class="menu-card-content"><h3 class="menu-card-title"><?php echo htmlspecialchars($item['name_fa']); ?></h3><p class="menu-card-description"><?php echo htmlspecialchars($item['description_fa']); ?></p><div class="menu-card-price"><?php echo number_format($item['price'], 0); ?> تومان</div></div>
                         </div>
                     <?php endforeach; ?>
@@ -1248,50 +1283,38 @@ $featuredItems = $menuModel->getFeatured(6);
     
     <!-- WebGL Script -->
     <script>
-        // WebGL Hero Scene
+        // Progressive WebGL Hero Scene: full, reduced, static fallback.
         const canvas = document.getElementById('webgl-canvas');
-        const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-        
+        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const lowMemory = navigator.deviceMemory && navigator.deviceMemory <= 2;
+        const gl = canvas && !prefersReducedMotion ? (canvas.getContext('webgl', { powerPreference: lowMemory ? 'low-power' : 'high-performance' }) || canvas.getContext('experimental-webgl')) : null;
+
         if (!gl) {
-            console.error('WebGL not supported');
+            document.documentElement.classList.add('no-webgl');
         } else {
-            // Resize canvas
+            if (lowMemory) document.documentElement.classList.add('reduced-webgl');
+            const frameStep = lowMemory ? 0.004 : 0.01;
+            let animationId = 0;
             function resizeCanvas() {
-                canvas.width = window.innerWidth;
-                canvas.height = window.innerHeight;
+                const ratio = lowMemory ? 1 : Math.min(window.devicePixelRatio || 1, 2);
+                canvas.width = Math.floor(window.innerWidth * ratio);
+                canvas.height = Math.floor(window.innerHeight * ratio);
                 gl.viewport(0, 0, canvas.width, canvas.height);
             }
-            
             resizeCanvas();
-            window.addEventListener('resize', resizeCanvas);
-            
-            // Simple animated gradient background
+            window.addEventListener('resize', resizeCanvas, { passive: true });
             let time = 0;
-            
             function render() {
-                time += 0.01;
-                
-                // Create animated teal gradient
-                const r = 0.0 + Math.sin(time * 0.5) * 0.05;
-                const g = 0.27 + Math.sin(time * 0.3) * 0.1;
-                const b = 0.28 + Math.sin(time * 0.4) * 0.1;
-                
-                gl.clearColor(r, g, b, 1.0);
+                time += frameStep;
+                gl.clearColor(Math.max(0, Math.sin(time * 0.5) * 0.05), 0.27 + Math.sin(time * 0.3) * 0.08, 0.28 + Math.sin(time * 0.4) * 0.08, 1);
                 gl.clear(gl.COLOR_BUFFER_BIT);
-                
-                requestAnimationFrame(render);
+                animationId = requestAnimationFrame(render);
             }
-            
-            render();
-            
-            // Mouse interaction
-            let mouseX = 0;
-            let mouseY = 0;
-            
-            canvas.addEventListener('mousemove', (e) => {
-                mouseX = (e.clientX / window.innerWidth) * 2 - 1;
-                mouseY = -(e.clientY / window.innerHeight) * 2 + 1;
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) cancelAnimationFrame(animationId);
+                else render();
             });
+            render();
         }
         
         // Smooth scroll
