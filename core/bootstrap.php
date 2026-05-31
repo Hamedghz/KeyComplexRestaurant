@@ -133,6 +133,101 @@ if (!function_exists('formatPrice')) {
     }
 }
 
+
+if (!function_exists('normalizeMobile')) {
+    function normalizeMobile($mobile) {
+        $mobile = preg_replace('/[^0-9+]/', '', (string)$mobile);
+        if (str_starts_with($mobile, '+98')) {
+            $mobile = '0' . substr($mobile, 3);
+        } elseif (str_starts_with($mobile, '98') && strlen($mobile) === 12) {
+            $mobile = '0' . substr($mobile, 2);
+        }
+        return $mobile;
+    }
+}
+
+if (!function_exists('gregorianToJalaliParts')) {
+    function gregorianToJalaliParts($gy, $gm, $gd) {
+        $g_d_m = [0,31,59,90,120,151,181,212,243,273,304,334];
+        $gy2 = ($gm > 2) ? ($gy + 1) : $gy;
+        $days = 355666 + (365 * $gy) + (int)(($gy2 + 3) / 4) - (int)(($gy2 + 99) / 100) + (int)(($gy2 + 399) / 400) + $gd + $g_d_m[$gm - 1];
+        $jy = -1595 + (33 * (int)($days / 12053));
+        $days %= 12053;
+        $jy += 4 * (int)($days / 1461);
+        $days %= 1461;
+        if ($days > 365) {
+            $jy += (int)(($days - 1) / 365);
+            $days = ($days - 1) % 365;
+        }
+        if ($days < 186) {
+            $jm = 1 + (int)($days / 31);
+            $jd = 1 + ($days % 31);
+        } else {
+            $jm = 7 + (int)(($days - 186) / 30);
+            $jd = 1 + (($days - 186) % 30);
+        }
+        return [$jy, $jm, $jd];
+    }
+}
+
+if (!function_exists('jalaliToGregorianParts')) {
+    function jalaliToGregorianParts($jy, $jm, $jd) {
+        $jy += 1595;
+        $days = -355668 + (365 * $jy) + ((int)($jy / 33) * 8) + (int)((($jy % 33) + 3) / 4) + $jd + (($jm < 7) ? (($jm - 1) * 31) : ((($jm - 7) * 30) + 186));
+        $gy = 400 * (int)($days / 146097);
+        $days %= 146097;
+        if ($days > 36524) {
+            $gy += 100 * (int)(--$days / 36524);
+            $days %= 36524;
+            if ($days >= 365) $days++;
+        }
+        $gy += 4 * (int)($days / 1461);
+        $days %= 1461;
+        if ($days > 365) {
+            $gy += (int)(($days - 1) / 365);
+            $days = ($days - 1) % 365;
+        }
+        $gd = $days + 1;
+        $sal_a = [0,31,(($gy % 4 == 0 && $gy % 100 != 0) || ($gy % 400 == 0)) ? 29 : 28,31,30,31,30,31,31,30,31,30,31];
+        for ($gm = 1; $gm <= 12 && $gd > $sal_a[$gm]; $gm++) {
+            $gd -= $sal_a[$gm];
+        }
+        return [$gy, $gm, $gd];
+    }
+}
+
+if (!function_exists('formatJalaliDateTime')) {
+    function formatJalaliDateTime($datetime, $includeTime = true) {
+        if (empty($datetime)) return '';
+        $timestamp = strtotime((string)$datetime);
+        if (!$timestamp) return '';
+        [$jy, $jm, $jd] = gregorianToJalaliParts((int)date('Y', $timestamp), (int)date('n', $timestamp), (int)date('j', $timestamp));
+        $date = sprintf('%04d/%02d/%02d', $jy, $jm, $jd);
+        return $includeTime ? $date . ' ' . date('H:i', $timestamp) : $date;
+    }
+}
+
+if (!function_exists('parsePersianDate')) {
+    function parsePersianDate($value, $withTime = false) {
+        $value = trim((string)$value);
+        if ($value === '') return null;
+        $value = strtr($value, ['۰'=>'0','۱'=>'1','۲'=>'2','۳'=>'3','۴'=>'4','۵'=>'5','۶'=>'6','۷'=>'7','۸'=>'8','۹'=>'9','٠'=>'0','١'=>'1','٢'=>'2','٣'=>'3','٤'=>'4','٥'=>'5','٦'=>'6','٧'=>'7','٨'=>'8','٩'=>'9']);
+        $parts = preg_split('/\s+/', $value);
+        $datePart = str_replace('-', '/', $parts[0]);
+        $date = explode('/', $datePart);
+        if (count($date) !== 3) return $value;
+        [$y, $m, $d] = array_map('intval', $date);
+        if ($y < 1700) {
+            [$gy, $gm, $gd] = jalaliToGregorianParts($y, $m, $d);
+        } else {
+            [$gy, $gm, $gd] = [$y, $m, $d];
+        }
+        $time = $parts[1] ?? '00:00:00';
+        if (strlen($time) === 5) $time .= ':00';
+        return sprintf('%04d-%02d-%02d%s', $gy, $gm, $gd, $withTime ? ' ' . $time : '');
+    }
+}
+
 class Database {
     private static $instance = null;
     private $connection;

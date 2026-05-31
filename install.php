@@ -15,6 +15,7 @@ $lockPath = $baseDir . '/installed.lock';
 $schemaFiles = [
     $baseDir . '/database/schema.sql',
     $baseDir . '/database/survey_schema.sql',
+    $baseDir . '/database/migrations/2026_05_31_admin_crm_prediction_content.sql',
 ];
 $uploadDirs = [
     $baseDir . '/uploads',

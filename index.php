@@ -262,7 +262,24 @@ $newsletterToken = generateCSRFToken();
 // Get WebGL settings
 $webglSettings = $settingModel->getWebGLSettings();
 
-// Get featured menu items
+// Get dynamic hero banners and filterable menu categories/items
+$db = Database::getInstance()->getConnection();
+try {
+    $heroBanners = $db->query("SELECT * FROM hero_banners WHERE active_status = 1 AND (start_date IS NULL OR start_date <= NOW()) AND (end_date IS NULL OR end_date >= NOW()) ORDER BY display_order ASC, id DESC")->fetchAll();
+} catch (Throwable $e) {
+    $heroBanners = [];
+}
+try {
+    $menuCategories = $db->query("SELECT * FROM menu_categories WHERE COALESCE(is_active, 1) = 1 ORDER BY sort_order ASC, name_fa ASC")->fetchAll();
+    $menuItemsByCategory = [];
+    foreach ($menuCategories as $category) {
+        $menuItemsByCategory[$category['id']] = $menuModel->getByCategory($category['id']);
+    }
+} catch (Throwable $e) {
+    $menuCategories = [];
+    $menuItemsByCategory = [];
+}
+// Backward-compatible fallback for older databases without the new content tables.
 $featuredItems = $menuModel->getFeatured(6);
 ?>
 <!DOCTYPE html>
@@ -922,6 +939,23 @@ $featuredItems = $menuModel->getFeatured(6);
             }
         }
 
+
+        .hero-banner-slide { display: none; animation: fadeIn 0.7s ease; }
+        .hero-banner-slide.active { display: block; }
+        .hero-banner-description { max-width: 680px; margin: 1rem auto; color: rgba(255,255,255,0.88); line-height: 1.9; }
+        .hero-banner-dots { display:flex; gap:8px; justify-content:center; margin-top:18px; }
+        .hero-banner-dots button { width:10px; height:10px; border-radius:50%; border:0; background:rgba(255,255,255,.45); cursor:pointer; }
+        .hero-banner-dots button.active { background: var(--accent); }
+        .menu-category-tabs { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-bottom:28px; }
+        .menu-category-tab { border:1px solid rgba(212,175,55,.5); background:rgba(255,255,255,.08); color:#fff; padding:10px 18px; border-radius:999px; cursor:pointer; }
+        .menu-category-tab.active { background:var(--accent); color:#112; }
+        .menu-category-tab.hidden-category { display:none; }
+        .menu-category-tab.hidden-category.is-visible { display:inline-flex; }
+        .menu-category-panel { display:none; }
+        .menu-category-panel.active { display:block; }
+        .show-more-categories { display:block; margin:0 auto 24px; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
         @media (max-width: 768px) {
             .social-links {
                 left: 15px;
@@ -986,10 +1020,25 @@ $featuredItems = $menuModel->getFeatured(6);
                 </svg>
             </div>
             
-            <h1 class="hero-title"><?php echo htmlspecialchars($heroTitle); ?></h1>
-            <p class="hero-subtitle"><?php echo htmlspecialchars($heroSubtitle); ?></p>
-            
-            <a href="#menu" class="glass-button"><?php echo htmlspecialchars($ctaText); ?></a>
+            <?php if (!empty($heroBanners)): ?>
+                <div class="hero-banner-slider" data-hero-slider>
+                    <?php foreach ($heroBanners as $index => $banner): ?>
+                        <div class="hero-banner-slide <?php echo $index === 0 ? 'active' : ''; ?>" data-hero-slide>
+                            <h1 class="hero-title"><?php echo homeEscape($banner['title']); ?></h1>
+                            <?php if (!empty($banner['subtitle'])): ?><p class="hero-subtitle"><?php echo homeEscape($banner['subtitle']); ?></p><?php endif; ?>
+                            <?php if (!empty($banner['description'])): ?><p class="hero-banner-description"><?php echo homeEscape($banner['description']); ?></p><?php endif; ?>
+                            <?php if (!empty($banner['button_text'])): ?><a href="<?php echo homeEscape($banner['button_link'] ?: '#menu'); ?>" class="glass-button"><?php echo homeEscape($banner['button_text']); ?></a><?php endif; ?>
+                        </div>
+                    <?php endforeach; ?>
+                    <div class="hero-banner-dots" aria-label="انتخاب بنر">
+                        <?php foreach ($heroBanners as $index => $banner): ?><button type="button" class="<?php echo $index === 0 ? 'active' : ''; ?>" data-hero-dot="<?php echo $index; ?>"></button><?php endforeach; ?>
+                    </div>
+                </div>
+            <?php else: ?>
+                <h1 class="hero-title"><?php echo htmlspecialchars($heroTitle); ?></h1>
+                <p class="hero-subtitle"><?php echo htmlspecialchars($heroSubtitle); ?></p>
+                <a href="#menu" class="glass-button"><?php echo htmlspecialchars($ctaText); ?></a>
+            <?php endif; ?>
         </div>
         
         <div class="scroll-indicator">
@@ -1020,20 +1069,41 @@ $featuredItems = $menuModel->getFeatured(6);
         <div class="container">
             <h2 class="section-title"><?php echo homeEscape($menuTitle); ?></h2>
             
-            <div class="menu-grid">
-                <?php foreach ($featuredItems as $item): ?>
-                    <div class="menu-card">
-                        <img src="/uploads/menu/<?php echo htmlspecialchars($item['image'] ?? 'placeholder.jpg'); ?>" 
-                             alt="<?php echo htmlspecialchars($item['name_fa']); ?>" 
-                             class="menu-card-image">
-                        <div class="menu-card-content">
-                            <h3 class="menu-card-title"><?php echo htmlspecialchars($item['name_fa']); ?></h3>
-                            <p class="menu-card-description"><?php echo htmlspecialchars($item['description_fa']); ?></p>
-                            <div class="menu-card-price"><?php echo number_format($item['price'], 0); ?> تومان</div>
+            <?php if (!empty($menuCategories)): ?>
+                <div class="menu-category-tabs" data-menu-tabs>
+                    <?php foreach ($menuCategories as $index => $category): ?>
+                        <button type="button" class="menu-category-tab <?php echo $index === 0 ? 'active' : ''; ?> <?php echo $index >= 3 ? 'hidden-category' : ''; ?>" data-category-target="cat-<?php echo (int)$category['id']; ?>">
+                            <?php echo homeEscape(($category['icon'] ? $category['icon'] . ' ' : '') . $category['name_fa']); ?>
+                        </button>
+                    <?php endforeach; ?>
+                </div>
+                <?php if (count($menuCategories) > 3): ?><button type="button" class="glass-button show-more-categories" data-show-more-categories>Show More</button><?php endif; ?>
+                <?php foreach ($menuCategories as $index => $category): ?>
+                    <div class="menu-category-panel <?php echo $index === 0 ? 'active' : ''; ?>" id="cat-<?php echo (int)$category['id']; ?>">
+                        <div class="menu-grid">
+                            <?php foreach (($menuItemsByCategory[$category['id']] ?? []) as $item): ?>
+                                <div class="menu-card">
+                                    <img src="/uploads/menu/<?php echo htmlspecialchars($item['image'] ?? 'placeholder.jpg'); ?>" alt="<?php echo htmlspecialchars($item['name_fa']); ?>" class="menu-card-image">
+                                    <div class="menu-card-content">
+                                        <h3 class="menu-card-title"><?php echo htmlspecialchars($item['name_fa']); ?></h3>
+                                        <p class="menu-card-description"><?php echo htmlspecialchars($item['description_fa']); ?></p>
+                                        <div class="menu-card-price"><?php echo number_format((float)($item['discount_price'] ?: $item['price']), 0); ?> تومان</div>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
                         </div>
                     </div>
                 <?php endforeach; ?>
-            </div>
+            <?php else: ?>
+                <div class="menu-grid">
+                    <?php foreach ($featuredItems as $item): ?>
+                        <div class="menu-card">
+                            <img src="/uploads/menu/<?php echo htmlspecialchars($item['image'] ?? 'placeholder.jpg'); ?>" alt="<?php echo htmlspecialchars($item['name_fa']); ?>" class="menu-card-image">
+                            <div class="menu-card-content"><h3 class="menu-card-title"><?php echo htmlspecialchars($item['name_fa']); ?></h3><p class="menu-card-description"><?php echo htmlspecialchars($item['description_fa']); ?></p><div class="menu-card-price"><?php echo number_format($item['price'], 0); ?> تومان</div></div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
         </div>
     </section>
 
@@ -1233,6 +1303,22 @@ $featuredItems = $menuModel->getFeatured(6);
                     target.scrollIntoView({ behavior: 'smooth' });
                 }
             });
+        });
+    </script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const slides = Array.from(document.querySelectorAll('[data-hero-slide]'));
+            const dots = Array.from(document.querySelectorAll('[data-hero-dot]'));
+            let current = 0;
+            function showSlide(index) { if (!slides.length) return; slides[current].classList.remove('active'); dots[current]?.classList.remove('active'); current = index % slides.length; slides[current].classList.add('active'); dots[current]?.classList.add('active'); }
+            dots.forEach((dot, index) => dot.addEventListener('click', () => showSlide(index)));
+            if (slides.length > 1) setInterval(() => showSlide((current + 1) % slides.length), 6000);
+
+            const tabs = Array.from(document.querySelectorAll('[data-category-target]'));
+            const panels = Array.from(document.querySelectorAll('.menu-category-panel'));
+            tabs.forEach(tab => tab.addEventListener('click', () => { tabs.forEach(t => t.classList.remove('active')); panels.forEach(p => p.classList.remove('active')); tab.classList.add('active'); document.getElementById(tab.dataset.categoryTarget)?.classList.add('active'); }));
+            document.querySelector('[data-show-more-categories]')?.addEventListener('click', function () { document.querySelectorAll('.hidden-category').forEach(el => el.classList.add('is-visible')); this.remove(); });
         });
     </script>
 </body>
