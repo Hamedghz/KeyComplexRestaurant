@@ -1,10 +1,13 @@
 <!DOCTYPE html>
-<html lang="fa" dir="rtl">
+<html lang="fa-IR" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo $pageTitle ?? 'پنل مدیریت'; ?> - KEY Admin</title>
+    <?php echo localFontPreloadLinks(); ?>
     <style>
+        @font-face { font-family: Vazirmatn; src: url('../assets/fonts/Vazirmatn-Regular.woff2') format('woff2'); font-display: swap; }
+        @font-face { font-family: Vazirmatn; src: url('../assets/fonts/Vazirmatn-Bold.woff2') format('woff2'); font-weight: 700; font-display: swap; }
         * {
             margin: 0;
             padding: 0;
@@ -24,7 +27,7 @@
         }
         
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: Vazirmatn, Tahoma, sans-serif;
             background: #f5f6fa;
             direction: rtl;
         }
@@ -370,6 +373,12 @@
         .mt-3 { margin-top: 1rem; }
         .mb-3 { margin-bottom: 1rem; }
         
+
+        .admin-filter { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:10px; margin-bottom:20px; }
+        .import-box { margin: 15px 0; padding: 15px; background:#fff8e1; border-radius:8px; }
+        .alert { padding: 12px 15px; border-radius: 8px; margin-bottom: 15px; }
+        .alert-info { background:#d1ecf1; color:#0c5460; }
+        .btn-sm { padding: 6px 10px; font-size: 12px; }
         /* Responsive */
         @media (max-width: 768px) {
             .sidebar {
@@ -397,14 +406,32 @@
             <a href="dashboard.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'dashboard.php' ? 'active' : ''; ?>">
                 <span>📊</span> داشبورد
             </a>
-            <a href="orders.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'orders.php' ? 'active' : ''; ?>">
-                <span>📋</span> سفارشات
+            <a href="crm.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'crm.php' ? 'active' : ''; ?>">
+                <span>👤</span> CRM
             </a>
-            <a href="menu-items.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'menu-items.php' ? 'active' : ''; ?>">
-                <span>🍽️</span> مدیریت منو
+            <a href="matches.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'matches.php' ? 'active' : ''; ?>">
+                <span>⚽</span> مسابقات
+            </a>
+            <a href="predictions.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'predictions.php' ? 'active' : ''; ?>">
+                <span>🏆</span> پیش‌بینی
+            </a>
+            <a href="banners.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'banners.php' ? 'active' : ''; ?>">
+                <span>🖼️</span> بنر اصلی
             </a>
             <a href="categories.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'categories.php' ? 'active' : ''; ?>">
-                <span>📁</span> دسته‌بندی‌ها
+                <span>📁</span> فیلترهای منو
+            </a>
+            <a href="menu-items.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'menu-items.php' ? 'active' : ''; ?>">
+                <span>🍽️</span> آیتم‌های منو
+            </a>
+            <a href="surveys.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'surveys.php' ? 'active' : ''; ?>">
+                <span>📝</span> نظرسنجی‌ها
+            </a>
+            <a href="survey-responses.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'survey-responses.php' ? 'active' : ''; ?>">
+                <span>📨</span> پاسخ‌های نظرسنجی
+            </a>
+            <a href="orders.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'orders.php' ? 'active' : ''; ?>">
+                <span>📋</span> سفارشات
             </a>
             <a href="users.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'users.php' ? 'active' : ''; ?>">
                 <span>👥</span> کاربران
@@ -413,10 +440,13 @@
                 <span>⭐</span> نظرات
             </a>
             <a href="media.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'media.php' ? 'active' : ''; ?>">
-                <span>🖼️</span> رسانه‌ها
+                <span>🗂️</span> رسانه‌ها
             </a>
             <a href="settings.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'settings.php' ? 'active' : ''; ?>">
                 <span>⚙️</span> تنظیمات
+            </a>
+            <a href="system-update.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'system-update.php' ? 'active' : ''; ?>">
+                <span>⬆️</span> بروزرسانی سیستم
             </a>
         </nav>
         

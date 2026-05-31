@@ -17,6 +17,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
+if (!verifyRequestCsrf()) {
+    http_response_code(419);
+    echo json_encode(['success' => false, 'message' => 'درخواست نامعتبر است'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 // Get JSON input
 $input = json_decode(file_get_contents('php://input'), true);
 

@@ -17,7 +17,7 @@ if (!$form) {
 $orderId = $_GET['order'] ?? null;
 ?>
 <!DOCTYPE html>
-<html lang="fa" dir="rtl">
+<html lang="fa-IR" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -323,6 +323,7 @@ $orderId = $_GET['order'] ?? null;
         <div id="alertContainer"></div>
         
         <form id="surveyForm">
+            <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo htmlspecialchars(generateCSRFToken(), ENT_QUOTES, 'UTF-8'); ?>">
             <input type="hidden" name="form_id" value="<?php echo $form['id']; ?>">
             <?php if ($orderId): ?>
                 <input type="hidden" name="order_id" value="<?php echo htmlspecialchars($orderId); ?>">
@@ -469,7 +470,7 @@ $orderId = $_GET['order'] ?? null;
             const data = {};
             
             formData.forEach((value, key) => {
-                if (key !== 'form_id' && key !== 'order_id') {
+                if (key !== 'form_id' && key !== 'order_id' && key !== '<?php echo CSRF_TOKEN_NAME; ?>') {
                     data[key] = value;
                 }
             });
@@ -482,7 +483,8 @@ $orderId = $_GET['order'] ?? null;
                 const response = await fetch('/api/survey-submit.php', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': formData.get('<?php echo CSRF_TOKEN_NAME; ?>')
                     },
                     body: JSON.stringify({
                         form_id: formData.get('form_id'),

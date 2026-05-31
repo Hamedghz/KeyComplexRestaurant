@@ -5,6 +5,10 @@
 
 require_once __DIR__ . '/../core/models/MenuItem.php';
 $method = $method ?? $_SERVER['REQUEST_METHOD'];
+header('Content-Type: application/json; charset=utf-8');
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    header('Cache-Control: public, max-age=120, stale-while-revalidate=60');
+}
 
 $menuModel = new MenuItem();
 
