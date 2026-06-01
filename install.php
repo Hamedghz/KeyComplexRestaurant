@@ -75,11 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
 
             foreach ($schemaFiles as $schemaFile) {
-                $sql = file_get_contents($schemaFile);
-                if ($sql === false) {
-                    throw new RuntimeException('Could not read schema file: ' . basename($schemaFile));
-                }
-                $pdo->exec($sql);
+                installSqlFile($pdo, $schemaFile);
             }
 
             $adminStmt = $pdo->prepare(
@@ -138,6 +134,133 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = $e->getMessage();
         }
     }
+}
+
+
+function installSqlFile(PDO $pdo, string $schemaFile): void {
+    $sql = file_get_contents($schemaFile);
+    if ($sql === false) {
+        throw new RuntimeException('Could not read schema file: ' . basename($schemaFile));
+    }
+
+    $sql = makeSeedInsertsIdempotent($sql);
+
+    foreach (splitSqlStatements($sql) as $statement) {
+        try {
+            $pdo->exec($statement);
+        } catch (PDOException $e) {
+            if (isRecoverableInstallSqlError($e)) {
+                continue;
+            }
+
+            throw new RuntimeException(
+                'Could not apply ' . basename($schemaFile) . ': ' . $e->getMessage(),
+                (int)$e->getCode(),
+                $e
+            );
+        }
+    }
+}
+
+function makeSeedInsertsIdempotent(string $sql): string {
+    return preg_replace(
+        '/INSERT\s+INTO\s+`(menu_categories|menu_items|settings|dynamic_forms)`/i',
+        'INSERT IGNORE INTO `$1`',
+        $sql
+    ) ?? $sql;
+}
+
+function isRecoverableInstallSqlError(PDOException $e): bool {
+    $errorInfo = $e->errorInfo;
+    $driverCode = isset($errorInfo[1]) ? (int)$errorInfo[1] : 0;
+
+    return in_array($driverCode, [1060, 1061, 1062, 1826], true);
+}
+
+function splitSqlStatements(string $sql): array {
+    $statements = [];
+    $buffer = '';
+    $length = strlen($sql);
+    $quote = null;
+    $lineComment = false;
+    $blockComment = false;
+
+    for ($i = 0; $i < $length; $i++) {
+        $char = $sql[$i];
+        $next = $i + 1 < $length ? $sql[$i + 1] : '';
+
+        if ($lineComment) {
+            $buffer .= $char;
+            if ($char === "\n") {
+                $lineComment = false;
+            }
+            continue;
+        }
+
+        if ($blockComment) {
+            $buffer .= $char;
+            if ($char === '*' && $next === '/') {
+                $buffer .= $next;
+                $i++;
+                $blockComment = false;
+            }
+            continue;
+        }
+
+        if ($quote !== null) {
+            $buffer .= $char;
+            if ($char === '\\' && $next !== '') {
+                $buffer .= $next;
+                $i++;
+                continue;
+            }
+            if ($char === $quote) {
+                $quote = null;
+            }
+            continue;
+        }
+
+        if (($char === '-' && $next === '-') || $char === '#') {
+            $lineComment = true;
+            $buffer .= $char;
+            if ($char === '-') {
+                $buffer .= $next;
+                $i++;
+            }
+            continue;
+        }
+
+        if ($char === '/' && $next === '*') {
+            $blockComment = true;
+            $buffer .= $char . $next;
+            $i++;
+            continue;
+        }
+
+        if ($char === "'" || $char === '"' || $char === '`') {
+            $quote = $char;
+            $buffer .= $char;
+            continue;
+        }
+
+        if ($char === ';') {
+            $statement = trim($buffer);
+            if ($statement !== '') {
+                $statements[] = $statement;
+            }
+            $buffer = '';
+            continue;
+        }
+
+        $buffer .= $char;
+    }
+
+    $statement = trim($buffer);
+    if ($statement !== '') {
+        $statements[] = $statement;
+    }
+
+    return $statements;
 }
 
 function oldValue($name, $fallback = '') {
