@@ -39,13 +39,16 @@ class Setting extends Model {
         $stmt = $this->db->prepare("
             INSERT INTO settings (setting_key, setting_value, setting_type)
             VALUES (:key, :value, :type)
-            ON DUPLICATE KEY UPDATE setting_value = :value, setting_type = :type
+            ON DUPLICATE KEY UPDATE setting_value = :update_value, setting_type = :update_type
         ");
         
+        $settingValue = is_array($value) ? json_encode($value, JSON_UNESCAPED_UNICODE) : $value;
         $result = $stmt->execute([
             'key' => $key,
-            'value' => is_array($value) ? json_encode($value, JSON_UNESCAPED_UNICODE) : $value,
-            'type' => $type
+            'value' => $settingValue,
+            'type' => $type,
+            'update_value' => $settingValue,
+            'update_type' => $type
         ]);
         
         // Clear cache

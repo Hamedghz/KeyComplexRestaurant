@@ -64,8 +64,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $value = trim((string)($_POST[$key] ?? ''));
                 }
                 $type = in_array($meta['type'], ['url','email'], true) ? $meta['type'] : ($meta['type'] === 'boolean' ? 'boolean' : ($key === 'opening_hours' ? 'json' : 'text'));
-                $stmt = $db->prepare('INSERT INTO settings (setting_key, setting_value, setting_type, category, is_public) VALUES (:k,:v,:t,:c,1) ON DUPLICATE KEY UPDATE setting_value=:v, setting_type=:t, category=:c');
-                $stmt->execute(['k' => $key, 'v' => $value, 't' => $type, 'c' => $category]);
+                $stmt = $db->prepare('INSERT INTO settings (setting_key, setting_value, setting_type, category, is_public) VALUES (:k,:v,:t,:c,1) ON DUPLICATE KEY UPDATE setting_value=:update_v, setting_type=:update_t, category=:update_c');
+                $stmt->execute(['k' => $key, 'v' => $value, 't' => $type, 'c' => $category, 'update_v' => $value, 'update_t' => $type, 'update_c' => $category]);
             }
         }
         $message = 'تنظیمات ذخیره شد.';
