@@ -22,6 +22,26 @@ class SystemUpdater {
         return $code === 0 ? $hash : 'unknown';
     }
 
+    public function updateLogs() {
+        $logFiles = [STORAGE_PATH . '/pending-migrations.txt', STORAGE_PATH . '/last-backup.txt'];
+        $logs = [];
+        foreach ($logFiles as $file) {
+            if (is_file($file)) {
+                $logs[basename($file)] = trim((string)file_get_contents($file));
+            }
+        }
+        return $logs;
+    }
+
+    public function migrationStatus() {
+        $migrationDir = ROOT_PATH . '/database/migrations';
+        return [
+            'directory' => $migrationDir,
+            'files' => is_dir($migrationDir) ? array_map('basename', glob($migrationDir . '/*.sql') ?: []) : [],
+            'pending_file' => STORAGE_PATH . '/pending-migrations.txt',
+        ];
+    }
+
     public function check() {
         $code = 0;
         $this->run(['git', 'fetch', '--dry-run', '--quiet'], $code);

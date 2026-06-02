@@ -442,6 +442,9 @@
             <a href="media.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'media.php' ? 'active' : ''; ?>">
                 <span>🗂️</span> رسانه‌ها
             </a>
+            <a href="employee-performance.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'employee-performance.php' ? 'active' : ''; ?>">
+                <span>📈</span> عملکرد کارکنان
+            </a>
             <a href="settings.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'settings.php' ? 'active' : ''; ?>">
                 <span>⚙️</span> تنظیمات
             </a>
