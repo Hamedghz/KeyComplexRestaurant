@@ -18,12 +18,17 @@ class Auth {
      */
     public function login($username, $password) {
         try {
+            $loginIdentifier = trim((string)$username);
+
             $stmt = $this->db->prepare("
                 SELECT id, username, email, password, full_name, role, is_active 
                 FROM admins 
-                WHERE (username = :username OR email = :username) AND is_active = 1
+                WHERE (username = :username OR email = :email) AND is_active = 1
             ");
-            $stmt->execute(['username' => $username]);
+            $stmt->execute([
+                'username' => $loginIdentifier,
+                'email' => $loginIdentifier
+            ]);
             $admin = $stmt->fetch();
             
             if ($admin && password_verify($password, $admin['password'])) {

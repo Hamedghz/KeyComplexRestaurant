@@ -12,8 +12,8 @@ try {
             $db->prepare('DELETE FROM employee_performance WHERE id=?')->execute([(int)$_POST['id']]);
             redirectTo('employee-performance.php?deleted=1');
         }
-        $db->prepare('INSERT INTO employee_performance (admin_id,period_month,score,reward,penalty,evaluation_notes,evaluated_by) VALUES (:admin_id,:period_month,:score,:reward,:penalty,:evaluation_notes,:evaluated_by) ON DUPLICATE KEY UPDATE score=:score,reward=:reward,penalty=:penalty,evaluation_notes=:evaluation_notes,evaluated_by=:evaluated_by')
-            ->execute(['admin_id'=>(int)$_POST['admin_id'], 'period_month'=>preg_match('/^\d{4}-\d{2}$/', (string)$_POST['period_month']) ? $_POST['period_month'] : date('Y-m'), 'score'=>(float)$_POST['score'], 'reward'=>trim((string)$_POST['reward']), 'penalty'=>trim((string)$_POST['penalty']), 'evaluation_notes'=>trim((string)$_POST['evaluation_notes']), 'evaluated_by'=>$currentAdmin['id']]);
+        $db->prepare('INSERT INTO employee_performance (admin_id,period_month,score,reward,penalty,evaluation_notes,evaluated_by) VALUES (:admin_id,:period_month,:score,:reward,:penalty,:evaluation_notes,:evaluated_by) ON DUPLICATE KEY UPDATE score=:update_score,reward=:update_reward,penalty=:update_penalty,evaluation_notes=:update_evaluation_notes,evaluated_by=:update_evaluated_by')
+            ->execute(['admin_id'=>(int)$_POST['admin_id'], 'period_month'=>preg_match('/^\d{4}-\d{2}$/', (string)$_POST['period_month']) ? $_POST['period_month'] : date('Y-m'), 'score'=>(float)$_POST['score'], 'reward'=>trim((string)$_POST['reward']), 'penalty'=>trim((string)$_POST['penalty']), 'evaluation_notes'=>trim((string)$_POST['evaluation_notes']), 'evaluated_by'=>$currentAdmin['id'], 'update_score'=>(float)$_POST['score'], 'update_reward'=>trim((string)$_POST['reward']), 'update_penalty'=>trim((string)$_POST['penalty']), 'update_evaluation_notes'=>trim((string)$_POST['evaluation_notes']), 'update_evaluated_by'=>$currentAdmin['id']]);
         redirectTo('employee-performance.php?saved=1&period_month=' . urlencode((string)$_POST['period_month']));
     }
 } catch (Throwable $e) { $error = $e->getMessage(); }
