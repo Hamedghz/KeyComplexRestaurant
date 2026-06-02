@@ -7,6 +7,8 @@ $pageTitle = 'بروزرسانی سیستم';
 $message = '';
 $error = '';
 $status = [];
+$logs = [];
+$migrationStatus = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
@@ -31,6 +33,8 @@ try {
     $error = $error ?: $e->getMessage();
     $status = ['current' => $updater->currentVersion(), 'latest' => 'unknown', 'update_available' => false];
 }
+$logs = $updater->updateLogs();
+$migrationStatus = $updater->migrationStatus();
 
 include __DIR__ . '/includes/header.php';
 ?>
@@ -52,4 +56,6 @@ include __DIR__ . '/includes/header.php';
         <p class="text-muted mt-3">قواعد ایمنی: دیتابیس blind overwrite نمی‌شود؛ قبل از apply بکاپ tar.gz ساخته می‌شود؛ migrationهای SQL جدید در `storage/pending-migrations.txt` ثبت می‌شوند تا در phpMyAdmin بررسی/اعمال شوند.</p>
     </div>
 </div>
+<div class="card"><div class="card-header"><h2>Migration Status</h2></div><div class="card-body"><p>مسیر migration: <?php echo h($migrationStatus['directory'] ?? ''); ?></p><ul><?php foreach (($migrationStatus['files'] ?? []) as $file): ?><li><?php echo h($file); ?></li><?php endforeach; ?></ul></div></div>
+<div class="card"><div class="card-header"><h2>Update Logs</h2></div><div class="card-body"><?php if (!$logs): ?><p class="text-muted">لاگی ثبت نشده است.</p><?php endif; ?><?php foreach ($logs as $name => $content): ?><h3><?php echo h($name); ?></h3><pre style="white-space:pre-wrap;background:#f8f9fa;padding:12px;border-radius:8px"><?php echo h($content); ?></pre><?php endforeach; ?></div></div>
 <?php include __DIR__ . '/includes/footer.php'; ?>

@@ -190,6 +190,13 @@ $siteName = $settingModel->get('site_name_fa', 'KEY رستوران و کافه')
 $siteNameEn = $settingModel->get('site_name_en', 'KEY Restaurant & Coffeehouse');
 $heroTitle = $settingModel->get('hero_title_fa', 'KEY رستوران و کافه');
 $heroSubtitle = $settingModel->get('hero_subtitle_fa', 'تجربه‌ای بی‌نظیر از غذا و نوشیدنی');
+$lotusLogoImage = normalizeAssetPath($settingModel->get('lotus_logo_image', ''));
+$lotusTitle = $settingModel->get('lotus_title_fa', $heroTitle);
+$lotusSubtitle = $settingModel->get('lotus_subtitle_fa', $heroSubtitle);
+$lotusDescription = $settingModel->get('lotus_description_fa', '');
+$lotusCtaText = $settingModel->get('lotus_cta_text_fa', '');
+$lotusCtaLink = $settingModel->get('lotus_cta_link', '#menu');
+$lotusActive = (bool)$settingModel->get('lotus_active', true);
 $ctaText = $settingModel->get('hero_cta_text_fa', 'سفارش آنلاین');
 $primaryColor = $settingModel->get('primary_color', '#004647');
 $accentColor = $settingModel->get('accent_color', '#D4AF37');
@@ -254,7 +261,7 @@ $dayMap = [
 $now = new DateTimeImmutable('now');
 $currentDayKey = $dayMap[$now->format('D')] ?? 'saturday';
 $isCurrentlyOpen = isOpenNow($openingHours, $currentDayKey, $now);
-$baladMapUrl = 'https://balad.ir/location?latitude=' . rawurlencode((string)$locationLat) . '&longitude=' . rawurlencode((string)$locationLng);
+$baladMapUrl = $settingModel->get('balad_map_url', 'https://balad.ir/location?latitude=' . rawurlencode((string)$locationLat) . '&longitude=' . rawurlencode((string)$locationLng));
 $telLink = normalizeTelLink($phoneNumber);
 $whatsappLink = $whatsappNumber !== '' ? 'https://wa.me/' . ltrim(normalizeTelLink($whatsappNumber), '+') : '';
 $newsletterToken = generateCSRFToken();
@@ -322,8 +329,9 @@ $featuredItems = $menuModel->getFeatured(6);
         #hero-section {
             position: relative;
             width: 100%;
-            height: 100vh;
+            min-height: 100vh;
             overflow: hidden;
+            padding: 0;
         }
         
         #webgl-canvas,
@@ -363,7 +371,7 @@ $featuredItems = $menuModel->getFeatured(6);
         .hero-content {
             position: relative;
             z-index: 2;
-            height: 100%;
+            min-height: 100vh;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -381,6 +389,14 @@ $featuredItems = $menuModel->getFeatured(6);
             width: 120px;
             height: 120px;
             margin: 0 auto 20px;
+            object-fit: contain;
+        }
+
+        .lotus-admin-copy {
+            max-width: 620px;
+            margin: 0 auto 24px;
+            color: rgba(255,255,255,.82);
+            line-height: 1.9;
         }
         
         .lotus-petal {
@@ -963,9 +979,13 @@ $featuredItems = $menuModel->getFeatured(6);
         }
 
 
-        .hero-banner-slide { display: none; animation: fadeIn 0.7s ease; }
+        .hero-banner-slider { position:absolute; inset:0; width:100%; min-height:100vh; z-index:0; }
+        .hero-banner-slide { display: none; animation: fadeIn 0.7s ease; position:absolute; inset:0; width:100%; min-height:100vh; }
         .hero-banner-slide.active { display: block; }
-        .hero-banner-art { max-width: min(520px, 82vw); max-height: 34vh; object-fit: cover; border-radius: 28px; margin-bottom: 20px; box-shadow: 0 24px 70px rgba(0,0,0,.35); }
+        .hero-banner-slide picture { position:absolute; inset:0; width:100%; height:100%; }
+        .hero-banner-art { width:100%; min-height:100vh; height:100%; object-fit: cover; object-position:center; background-position:center; background-size:cover; display:block; border-radius:0; margin:0; box-shadow:none; }
+        .hero-banner-copy { position:relative; z-index:2; min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:20px; }
+        .hero-banner-copy::before { content:''; position:absolute; inset:0; z-index:-1; background:linear-gradient(180deg, rgba(0,70,71,.25), rgba(0,0,0,.68)); }
         .hero-banner-description { max-width: 680px; margin: 1rem auto; color: rgba(255,255,255,0.88); line-height: 1.9; }
         .hero-banner-dots { display:flex; gap:8px; justify-content:center; margin-top:18px; }
         .hero-banner-dots button { width:10px; height:10px; border-radius:50%; border:0; background:rgba(255,255,255,.45); cursor:pointer; }
@@ -973,11 +993,12 @@ $featuredItems = $menuModel->getFeatured(6);
         .menu-category-tabs { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-bottom:28px; }
         .menu-category-tab { border:1px solid rgba(212,175,55,.5); background:rgba(255,255,255,.08); color:#fff; padding:10px 18px; border-radius:999px; cursor:pointer; }
         .menu-category-tab.active { background:var(--accent); color:#112; }
-        .menu-category-tab.hidden-category { display:none; }
-        .menu-category-tab.hidden-category.is-visible { display:inline-flex; }
+
         .menu-category-panel { display:none; }
         .menu-category-panel.active { display:block; }
-        .show-more-categories { display:block; margin:0 auto 24px; }
+        .menu-card.hidden-menu-item { display:none; }
+        .menu-card.hidden-menu-item.is-visible { display:block; }
+        .show-more-items { display:block; margin:28px auto 0; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
         @media (max-width: 768px) {
@@ -1023,53 +1044,66 @@ $featuredItems = $menuModel->getFeatured(6);
         <div class="hero-static-fallback" aria-hidden="true"></div>
         <div class="hero-overlay"></div>
         
-        <div class="hero-content">
-            <div class="logo-container">
-                <!-- 9-Petal Lotus Logo -->
-                <svg class="lotus-logo" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-                    <g transform="translate(100, 100)">
-                        <!-- Center circle -->
-                        <circle cx="0" cy="0" r="15" fill="var(--accent)" opacity="0.8"/>
-                        
-                        <!-- 9 petals arranged in circle -->
-                        <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(0)"/>
-                        <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(40)"/>
-                        <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(80)"/>
-                        <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(120)"/>
-                        <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(160)"/>
-                        <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(200)"/>
-                        <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(240)"/>
-                        <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(280)"/>
-                        <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(320)"/>
-                    </g>
-                </svg>
-            </div>
-            
-            <?php if (!empty($heroBanners)): ?>
-                <div class="hero-banner-slider" data-hero-slider>
-                    <?php foreach ($heroBanners as $index => $banner): ?>
-                        <div class="hero-banner-slide <?php echo $index === 0 ? 'active' : ''; ?>" data-hero-slide>
-                            <?php if (!empty($banner['image'])): ?>
-                                <picture>
-                                    <?php if (!empty($banner['mobile_image'])): ?><source media="(max-width: 640px)" srcset="/uploads/banners/<?php echo homeEscape($banner['mobile_image']); ?>"><?php endif; ?>
-                                    <source srcset="/uploads/banners/<?php echo homeEscape($banner['image']); ?>" type="image/webp">
-                                    <img class="hero-banner-art" src="/uploads/banners/<?php echo homeEscape($banner['image']); ?>" alt="<?php echo homeEscape($banner['title']); ?>" <?php echo $index === 0 ? 'fetchpriority="high"' : 'loading="lazy"'; ?> decoding="async">
-                                </picture>
-                            <?php endif; ?>
-                            <h1 class="hero-title"><?php echo homeEscape($banner['title']); ?></h1>
-                            <?php if (!empty($banner['subtitle'])): ?><p class="hero-subtitle"><?php echo homeEscape($banner['subtitle']); ?></p><?php endif; ?>
-                            <?php if (!empty($banner['description'])): ?><p class="hero-banner-description"><?php echo homeEscape($banner['description']); ?></p><?php endif; ?>
-                            <?php if (!empty($banner['button_text'])): ?><a href="<?php echo homeEscape($banner['button_link'] ?: '#menu'); ?>" class="glass-button"><?php echo homeEscape($banner['button_text']); ?></a><?php endif; ?>
-                        </div>
-                    <?php endforeach; ?>
-                    <div class="hero-banner-dots" aria-label="انتخاب بنر">
-                        <?php foreach ($heroBanners as $index => $banner): ?><button type="button" class="<?php echo $index === 0 ? 'active' : ''; ?>" data-hero-dot="<?php echo $index; ?>"></button><?php endforeach; ?>
+        <?php if (!empty($heroBanners)): ?>
+            <div class="hero-banner-slider" data-hero-slider>
+                <?php foreach ($heroBanners as $index => $banner): ?>
+                    <div class="hero-banner-slide <?php echo $index === 0 ? 'active' : ''; ?>" data-hero-slide>
+                        <?php if (!empty($banner['image'])): ?>
+                            <picture>
+                                <?php if (!empty($banner['mobile_image'])): ?><source media="(max-width: 640px)" srcset="/uploads/banners/<?php echo homeEscape($banner['mobile_image']); ?>"><?php endif; ?>
+                                <img class="hero-banner-art" src="/uploads/banners/<?php echo homeEscape($banner['image']); ?>" alt="<?php echo homeEscape($banner['title']); ?>" <?php echo $index === 0 ? 'fetchpriority="high"' : 'loading="lazy"'; ?> decoding="async">
+                            </picture>
+                        <?php endif; ?>
+                        <?php if (!$lotusActive): ?>
+                            <div class="hero-banner-copy">
+                                <h1 class="hero-title"><?php echo homeEscape($banner['title']); ?></h1>
+                                <?php if (!empty($banner['subtitle'])): ?><p class="hero-subtitle"><?php echo homeEscape($banner['subtitle']); ?></p><?php endif; ?>
+                                <?php if (!empty($banner['description'])): ?><p class="hero-banner-description"><?php echo homeEscape($banner['description']); ?></p><?php endif; ?>
+                                <?php if (!empty($banner['button_text'])): ?><a href="<?php echo homeEscape($banner['button_link'] ?: '#menu'); ?>" class="glass-button"><?php echo homeEscape($banner['button_text']); ?></a><?php endif; ?>
+                            </div>
+                        <?php endif; ?>
                     </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+
+        <div class="hero-content">
+            <?php if ($lotusActive): ?>
+                <div class="logo-container">
+                    <?php if ($lotusLogoImage !== ''): ?>
+                        <img class="lotus-logo" src="<?php echo homeEscape($lotusLogoImage); ?>" alt="<?php echo homeEscape($lotusTitle); ?>">
+                    <?php else: ?>
+                        <!-- 9-Petal Lotus Logo -->
+                        <svg class="lotus-logo" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+                            <g transform="translate(100, 100)">
+                                <circle cx="0" cy="0" r="15" fill="var(--accent)" opacity="0.8"/>
+                                <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(0)"/>
+                                <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(40)"/>
+                                <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(80)"/>
+                                <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(120)"/>
+                                <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(160)"/>
+                                <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(200)"/>
+                                <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(240)"/>
+                                <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(280)"/>
+                                <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(320)"/>
+                            </g>
+                        </svg>
+                    <?php endif; ?>
+                    <h1 class="hero-title"><?php echo homeEscape($lotusTitle); ?></h1>
+                    <?php if ($lotusSubtitle !== ''): ?><p class="hero-subtitle"><?php echo homeEscape($lotusSubtitle); ?></p><?php endif; ?>
+                    <?php if ($lotusDescription !== ''): ?><div class="lotus-admin-copy"><?php echo homeSafeHtml($lotusDescription); ?></div><?php endif; ?>
+                    <?php if ($lotusCtaText !== ''): ?><a href="<?php echo homeEscape($lotusCtaLink ?: '#menu'); ?>" class="glass-button"><?php echo homeEscape($lotusCtaText); ?></a><?php endif; ?>
                 </div>
-            <?php else: ?>
+            <?php elseif (empty($heroBanners)): ?>
                 <h1 class="hero-title"><?php echo htmlspecialchars($heroTitle); ?></h1>
                 <p class="hero-subtitle"><?php echo htmlspecialchars($heroSubtitle); ?></p>
                 <a href="#menu" class="glass-button"><?php echo htmlspecialchars($ctaText); ?></a>
+            <?php endif; ?>
+
+            <?php if (!empty($heroBanners) && count($heroBanners) > 1): ?>
+                <div class="hero-banner-dots" aria-label="انتخاب بنر">
+                    <?php foreach ($heroBanners as $index => $banner): ?><button type="button" class="<?php echo $index === 0 ? 'active' : ''; ?>" data-hero-dot="<?php echo $index; ?>"></button><?php endforeach; ?>
+                </div>
             <?php endif; ?>
         </div>
         
@@ -1104,17 +1138,17 @@ $featuredItems = $menuModel->getFeatured(6);
             <?php if (!empty($menuCategories)): ?>
                 <div class="menu-category-tabs" data-menu-tabs>
                     <?php foreach ($menuCategories as $index => $category): ?>
-                        <button type="button" class="menu-category-tab <?php echo $index === 0 ? 'active' : ''; ?> <?php echo $index >= 3 ? 'hidden-category' : ''; ?>" data-category-target="cat-<?php echo (int)$category['id']; ?>">
+                        <button type="button" class="menu-category-tab <?php echo $index === 0 ? 'active' : ''; ?>" data-category-target="cat-<?php echo (int)$category['id']; ?>">
                             <?php echo homeEscape(($category['icon'] ? $category['icon'] . ' ' : '') . $category['name_fa']); ?>
                         </button>
                     <?php endforeach; ?>
                 </div>
-                <?php if (count($menuCategories) > 3): ?><button type="button" class="glass-button show-more-categories" data-show-more-categories>Show More</button><?php endif; ?>
                 <?php foreach ($menuCategories as $index => $category): ?>
                     <div class="menu-category-panel <?php echo $index === 0 ? 'active' : ''; ?>" id="cat-<?php echo (int)$category['id']; ?>">
                         <div class="menu-grid">
-                            <?php foreach (($menuItemsByCategory[$category['id']] ?? []) as $item): ?>
-                                <div class="menu-card">
+                            <?php $categoryItems = $menuItemsByCategory[$category['id']] ?? []; ?>
+                            <?php foreach ($categoryItems as $itemIndex => $item): ?>
+                                <div class="menu-card <?php echo $itemIndex >= 3 ? 'hidden-menu-item' : ''; ?>" data-menu-item="cat-<?php echo (int)$category['id']; ?>">
                                     <picture>
                                         <source srcset="/uploads/menu/<?php echo htmlspecialchars($item['image'] ?? 'placeholder.webp'); ?>" type="image/webp">
                                         <img src="/uploads/menu/<?php echo htmlspecialchars($item['image'] ?? 'placeholder.jpg'); ?>" alt="<?php echo htmlspecialchars($item['name_fa']); ?>" class="menu-card-image" loading="lazy" decoding="async">
@@ -1127,6 +1161,9 @@ $featuredItems = $menuModel->getFeatured(6);
                                 </div>
                             <?php endforeach; ?>
                         </div>
+                        <?php if (count($categoryItems) > 3): ?>
+                            <button type="button" class="glass-button show-more-items" data-show-more-items="cat-<?php echo (int)$category['id']; ?>">Show More</button>
+                        <?php endif; ?>
                     </div>
                 <?php endforeach; ?>
             <?php else: ?>
@@ -1272,6 +1309,7 @@ $featuredItems = $menuModel->getFeatured(6);
                         <li><?php echo homeEscape($phoneNumber); ?></li>
                         <li><?php echo homeEscape($email); ?></li>
                         <li><?php echo homeEscape($addressFa); ?></li>
+                        <li><a class="footer-link" href="<?php echo homeEscape($baladMapUrl); ?>" target="_blank" rel="noopener noreferrer">مشاهده نقشه بلد</a></li>
                     </ul>
                 </div>
             </div>
@@ -1341,7 +1379,12 @@ $featuredItems = $menuModel->getFeatured(6);
             const tabs = Array.from(document.querySelectorAll('[data-category-target]'));
             const panels = Array.from(document.querySelectorAll('.menu-category-panel'));
             tabs.forEach(tab => tab.addEventListener('click', () => { tabs.forEach(t => t.classList.remove('active')); panels.forEach(p => p.classList.remove('active')); tab.classList.add('active'); document.getElementById(tab.dataset.categoryTarget)?.classList.add('active'); }));
-            document.querySelector('[data-show-more-categories]')?.addEventListener('click', function () { document.querySelectorAll('.hidden-category').forEach(el => el.classList.add('is-visible')); this.remove(); });
+            document.querySelectorAll('[data-show-more-items]').forEach(button => {
+                button.addEventListener('click', function () {
+                    document.querySelectorAll('[data-menu-item="' + this.dataset.showMoreItems + '"].hidden-menu-item').forEach(el => el.classList.add('is-visible'));
+                    this.remove();
+                });
+            });
         });
     </script>
 </body>
