@@ -64,6 +64,36 @@ function ensureAdminSchema(): array {
         }
     };
 
+    $run("CREATE TABLE IF NOT EXISTS `admin_sessions` (
+        `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        `admin_id` int(11) UNSIGNED NOT NULL,
+        `session_token` varchar(64) NOT NULL,
+        `ip_address` varchar(45) DEFAULT NULL,
+        `user_agent` text DEFAULT NULL,
+        `expires_at` datetime NOT NULL,
+        `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`),
+        UNIQUE KEY `uniq_admin_session_token` (`session_token`),
+        KEY `idx_admin_sessions_admin` (`admin_id`),
+        KEY `idx_admin_sessions_expires` (`expires_at`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول admin_sessions');
+
+    $run("CREATE TABLE IF NOT EXISTS `activity_log` (
+        `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        `admin_id` int(11) UNSIGNED DEFAULT NULL,
+        `action` varchar(120) NOT NULL,
+        `entity_type` varchar(120) DEFAULT NULL,
+        `entity_id` varchar(120) DEFAULT NULL,
+        `description` text DEFAULT NULL,
+        `ip_address` varchar(45) DEFAULT NULL,
+        `user_agent` text DEFAULT NULL,
+        `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`),
+        KEY `idx_activity_admin` (`admin_id`),
+        KEY `idx_activity_action` (`action`),
+        KEY `idx_activity_created` (`created_at`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول activity_log');
+
     if (tableExists('admins')) {
         if (!columnExists('admins', 'department')) {
             $run("ALTER TABLE `admins` ADD COLUMN `department` varchar(100) DEFAULT NULL AFTER `role`", 'افزودن department به admins');

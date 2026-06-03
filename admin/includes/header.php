@@ -515,6 +515,9 @@
             <a href="settings.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'settings.php' ? 'active' : ''; ?>">
                 <span>⚙️</span> تنظیمات
             </a>
+            <a href="social-links.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'social-links.php' ? 'active' : ''; ?>">
+                <span>🔗</span> شبکه‌های اجتماعی
+            </a>
             <a href="key-story.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'key-story.php' ? 'active' : ''; ?>">
                 <span>📖</span> مدیریت داستان KEY
             </a>

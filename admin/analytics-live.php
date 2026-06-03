@@ -5,7 +5,7 @@ ensureAdminSchema();
 $db = adminDb();
 $pageTitle = 'Live Visitors';
 $db->exec("UPDATE visitor_sessions SET is_active = 0 WHERE last_activity < (NOW() - INTERVAL 5 MINUTE)");
-$rows = $db->query("SELECT vs.*, tl.country, tl.city, tl.browser, tl.os, tl.device, tl.landing_page, tl.referrer FROM visitor_sessions vs LEFT JOIN traffic_logs tl ON tl.session_id = vs.session_id WHERE vs.is_active = 1 AND vs.last_activity >= (NOW() - INTERVAL 5 MINUTE) GROUP BY vs.id ORDER BY vs.last_activity DESC LIMIT 200")->fetchAll();
+$rows = $db->query("SELECT vs.*, tl.country, tl.city, tl.browser, tl.os, tl.device, tl.landing_page, tl.referrer FROM visitor_sessions vs LEFT JOIN (SELECT session_id, MAX(id) AS max_log_id FROM traffic_logs GROUP BY session_id) latest ON latest.session_id = vs.session_id LEFT JOIN traffic_logs tl ON tl.id = latest.max_log_id WHERE vs.is_active = 1 AND vs.last_activity >= (NOW() - INTERVAL 5 MINUTE) ORDER BY vs.last_activity DESC LIMIT 200")->fetchAll();
 include __DIR__ . '/includes/header.php';
 ?>
 <meta http-equiv="refresh" content="5">

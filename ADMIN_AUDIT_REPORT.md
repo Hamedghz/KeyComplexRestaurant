@@ -1,6 +1,6 @@
 # KEY Admin Production Audit Report
 
-Generated during the final production implementation pass. This report maps every required admin menu item to a physical PHP route and verifies syntax-level load blockers that commonly cause HTTP 500 errors. Runtime database connectivity still depends on the deployed `config.php` credentials and MySQL server.
+Generated during the final production implementation pass. This report maps every required admin menu item to a physical PHP route, verifies PHP syntax-level load blockers, and documents MySQL schema bootstrap coverage for modules that previously risked HTTP 500 errors.
 
 ## Admin menu and route audit
 
@@ -33,7 +33,8 @@ Generated during the final production implementation pass. This report maps ever
 | Geographic Analytics | `admin/analytics-geographic.php` | Yes | pass | Uses `adminGuard()`/`ensureAdminSchema()` or admin CRUD model where applicable |
 | Device Analytics | `admin/analytics-device.php` | Yes | pass | Uses `adminGuard()`/`ensureAdminSchema()` or admin CRUD model where applicable |
 | Export Center | `admin/analytics-export.php` | Yes | pass | Uses `adminGuard()`/`ensureAdminSchema()` or admin CRUD model where applicable |
-| System Update | `admin/system-update.php` | Yes | pass | Uses `adminGuard()`/`ensureAdminSchema()` or admin CRUD model where applicable |
+| System Update | `admin/system-update.php` | Yes | pass | Uses `adminGuard()`/`SystemUpdater` with GitHub, backup, migration, and rollback actions |
+| Social Network Management | `admin/social-links.php` | Yes | pass | Dynamic `social_links` MySQL table, linked from unified settings |
 
 ## AJAX/API endpoint audit
 
@@ -47,16 +48,24 @@ Generated during the final production implementation pass. This report maps ever
 
 ## Database schema audit
 
-The admin bootstrap now calls `ensureAdminSchema()` from high-risk modules so required tables/columns are created if missing: acquisition sources, social links, KEY story, pool leads, traffic analytics tables, employee evaluation/performance tables, match result fields, prediction filter fields, and user RBAC columns. Optional form values are normalized to NULL in shared CRUD collection logic unless explicitly required by business rules.
+The admin bootstrap now calls `ensureAdminSchema()` from high-risk modules so required tables/columns are created if missing: auth sessions/activity log, acquisition sources, social links, KEY story, pool leads, traffic analytics tables, employee evaluation/performance tables, match result fields, prediction filter fields, and user RBAC columns. Optional form values are normalized to NULL in shared CRUD collection logic unless explicitly required by business rules.
 
 ## Fixed production blockers in this pass
 
 - Added missing analytics routes referenced by the admin menu: traffic sources, live visitors, geographic analytics, device analytics, and export center.
 - Reworked the system updater to compare local and GitHub commits, fetch release/tag metadata, show changelog data, back up files and database, run migrations, clear cache, and rollback on failure.
 - Added the sticky administrator header requested by production spec while preserving the existing sidebar navigation.
+- Completed RBAC user management with role validation, activation/deactivation, reset password, department assignment, and structured permissions assignment.
+- Completed employee portal password change, permission-controlled coworker evaluations, all required scoring categories, private evaluation history, and automatic monthly score generation.
+- Moved visual branding responsibility to the fixed frontend header and removed the duplicate logo mark from hero content, leaving hero title/subtitle/buttons clickable above the background.
+- Replaced the map preview image with a fully clickable Balad card so no broken map image can render.
 
 ## Verification commands
 
 - `find . -path ./node_modules -prune -o -name "*.php" -print | sort | xargs -n1 php -l`
 - `php -l core/SystemUpdater.php`
 - `php -l admin/includes/header.php`
+- `php -l admin/users.php`
+- `php -l admin/employee-dashboard.php`
+- `php -l admin/employee-evaluations.php`
+- `php -l index.php`
