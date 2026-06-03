@@ -460,8 +460,29 @@
             <a href="settings.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'settings.php' ? 'active' : ''; ?>">
                 <span>⚙️</span> تنظیمات
             </a>
-            <a href="social-links.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'social-links.php' ? 'active' : ''; ?>">
-                <span>🔗</span> شبکه‌های اجتماعی
+            <a href="key-story.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'key-story.php' ? 'active' : ''; ?>">
+                <span>📖</span> مدیریت داستان KEY
+            </a>
+            <a href="pool-leads.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'pool-leads.php' ? 'active' : ''; ?>">
+                <span>🏊</span> لیدهای استخر
+            </a>
+            <a href="analytics.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'analytics.php' ? 'active' : ''; ?>">
+                <span>📈</span> Visitor Logs
+            </a>
+            <a href="analytics-traffic-sources.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'analytics-traffic-sources.php' ? 'active' : ''; ?>">
+                <span>🧭</span> Traffic Sources
+            </a>
+            <a href="analytics-live.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'analytics-live.php' ? 'active' : ''; ?>">
+                <span>🟢</span> Live Visitors
+            </a>
+            <a href="analytics-geographic.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'analytics-geographic.php' ? 'active' : ''; ?>">
+                <span>🌍</span> Geographic Analytics
+            </a>
+            <a href="analytics-device.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'analytics-device.php' ? 'active' : ''; ?>">
+                <span>📱</span> Device Analytics
+            </a>
+            <a href="analytics-export.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'analytics-export.php' ? 'active' : ''; ?>">
+                <span>📤</span> Export Center
             </a>
             <a href="system-update.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'system-update.php' ? 'active' : ''; ?>">
                 <span>⬆️</span> بروزرسانی سیستم

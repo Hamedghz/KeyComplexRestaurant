@@ -10,43 +10,54 @@ $message = '';
 $error = '';
 
 $catalog = [
-    'general' => ['title' => 'تنظیمات عمومی', 'fields' => [
+    'general' => ['title' => 'General', 'fields' => [
         'site_name_fa' => ['label' => 'عنوان سایت', 'type' => 'text'],
         'site_description_fa' => ['label' => 'توضیح سایت', 'type' => 'textarea'],
-        'logo_image' => ['label' => 'لوگو', 'type' => 'image'],
         'default_language' => ['label' => 'زبان پیش‌فرض', 'type' => 'text'],
         'jalali_calendar_enabled' => ['label' => 'تقویم جلالی فعال', 'type' => 'boolean'],
     ]],
-    'contact' => ['title' => 'تماس و موقعیت', 'fields' => [
-        'phone_number' => ['label' => 'تلفن', 'type' => 'text'],
-        'email' => ['label' => 'ایمیل', 'type' => 'email'],
-        'address_fa' => ['label' => 'آدرس فارسی', 'type' => 'textarea'],
-        'address_en' => ['label' => 'آدرس انگلیسی', 'type' => 'textarea'],
-        'balad_map_url' => ['label' => 'لینک نقشه بلد', 'type' => 'url'],
-        'opening_hours' => ['label' => 'ساعت کاری JSON', 'type' => 'textarea'],
-    ]],
-    'social' => ['title' => 'شبکه‌های اجتماعی', 'fields' => [
-        'instagram_url' => ['label' => 'اینستاگرام', 'type' => 'url'],
-        'telegram_url' => ['label' => 'تلگرام', 'type' => 'url'],
-        'whatsapp_number' => ['label' => 'واتساپ', 'type' => 'text'],
-    ]],
-    'lotus' => ['title' => 'تنظیمات lotus-logo', 'fields' => [
+    'branding' => ['title' => 'Branding', 'fields' => [
+        'logo_image' => ['label' => 'لوگو', 'type' => 'image'],
+        'primary_color' => ['label' => 'رنگ اصلی', 'type' => 'text'],
+        'accent_color' => ['label' => 'رنگ مکمل', 'type' => 'text'],
         'lotus_logo_image' => ['label' => 'تصویر لوگو', 'type' => 'image'],
         'lotus_title_fa' => ['label' => 'عنوان', 'type' => 'text'],
-        'lotus_subtitle_fa' => ['label' => 'زیرعنوان', 'type' => 'text'],
-        'lotus_description_fa' => ['label' => 'توضیح', 'type' => 'textarea'],
+    ]],
+    'hero' => ['title' => 'Hero', 'fields' => [
+        'hero_title_fa' => ['label' => 'عنوان پیش‌فرض', 'type' => 'text'],
+        'hero_subtitle_fa' => ['label' => 'زیرعنوان پیش‌فرض', 'type' => 'text'],
+        'hero_cta_text_fa' => ['label' => 'متن CTA پیش‌فرض', 'type' => 'text'],
+        'lotus_subtitle_fa' => ['label' => 'زیرعنوان lotus', 'type' => 'text'],
+        'lotus_description_fa' => ['label' => 'توضیح lotus', 'type' => 'textarea'],
         'lotus_cta_text_fa' => ['label' => 'متن دکمه اختیاری', 'type' => 'text'],
         'lotus_cta_link' => ['label' => 'لینک دکمه اختیاری', 'type' => 'url'],
         'lotus_active' => ['label' => 'فعال', 'type' => 'boolean'],
     ]],
-    'hero' => ['title' => 'تنظیمات Hero', 'fields' => [
-        'hero_title_fa' => ['label' => 'عنوان پیش‌فرض', 'type' => 'text'],
-        'hero_subtitle_fa' => ['label' => 'زیرعنوان پیش‌فرض', 'type' => 'text'],
-        'hero_cta_text_fa' => ['label' => 'متن CTA پیش‌فرض', 'type' => 'text'],
+    'social_networks' => ['title' => 'Social Networks', 'fields' => [
+        'instagram_url' => ['label' => 'اینستاگرام', 'type' => 'url'],
+        'telegram_url' => ['label' => 'تلگرام', 'type' => 'url'],
+        'whatsapp_number' => ['label' => 'واتساپ', 'type' => 'text'],
     ]],
     'seo' => ['title' => 'SEO', 'fields' => [
         'seo_title_fa' => ['label' => 'عنوان SEO', 'type' => 'text'],
         'seo_description_fa' => ['label' => 'توضیح SEO', 'type' => 'textarea'],
+    ]],
+    'contact' => ['title' => 'Contact', 'fields' => [
+        'phone_number' => ['label' => 'تلفن', 'type' => 'text'],
+        'email' => ['label' => 'ایمیل', 'type' => 'email'],
+        'address_fa' => ['label' => 'آدرس فارسی', 'type' => 'textarea'],
+        'address_en' => ['label' => 'آدرس انگلیسی', 'type' => 'textarea'],
+        'opening_hours' => ['label' => 'ساعت کاری JSON', 'type' => 'textarea'],
+    ]],
+    'map' => ['title' => 'Map', 'fields' => [
+        'balad_map_url' => ['label' => 'لینک نقشه بلد', 'type' => 'url'],
+        'location_lat' => ['label' => 'Latitude', 'type' => 'text'],
+        'location_lng' => ['label' => 'Longitude', 'type' => 'text'],
+    ]],
+    'advanced' => ['title' => 'Advanced', 'fields' => [
+        'footer_quick_links_title_fa' => ['label' => 'عنوان لینک سریع فوتر', 'type' => 'text'],
+        'footer_contact_title_fa' => ['label' => 'عنوان تماس فوتر', 'type' => 'text'],
+        'footer_copyright_fa' => ['label' => 'متن کپی‌رایت', 'type' => 'text'],
     ]],
 ];
 

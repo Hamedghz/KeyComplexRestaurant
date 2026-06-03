@@ -36,6 +36,22 @@ function indexExists(string $table, string $index): bool {
     }
 }
 
+function ensureTableColumns(string $table, array $columns): void {
+    if (!tableExists($table)) {
+        return;
+    }
+    $db = adminDb();
+    foreach ($columns as $column => $definition) {
+        if (!columnExists($table, $column)) {
+            try {
+                $db->exec("ALTER TABLE `" . str_replace('`', '``', $table) . "` ADD COLUMN `" . str_replace('`', '``', $column) . "` {$definition}");
+            } catch (Throwable $e) {
+                error_log("Schema column ensure failed for {$table}.{$column}: " . $e->getMessage());
+            }
+        }
+    }
+}
+
 function ensureAdminSchema(): array {
     $db = adminDb();
     $changes = [];
@@ -64,6 +80,12 @@ function ensureAdminSchema(): array {
         }
         if (!indexExists('crm_customers', 'idx_crm_acquisition_source')) {
             $run("ALTER TABLE `crm_customers` ADD INDEX `idx_crm_acquisition_source` (`acquisition_source`)", 'ایندکس منبع جذب CRM');
+        }
+        if (!columnExists('crm_customers', 'attended_match_event')) {
+            $run("ALTER TABLE `crm_customers` ADD COLUMN `attended_match_event` tinyint(1) NOT NULL DEFAULT 0 AFTER `tags`", 'افزودن attended_match_event به CRM');
+        }
+        if (!indexExists('crm_customers', 'idx_crm_attended')) {
+            $run("ALTER TABLE `crm_customers` ADD INDEX `idx_crm_attended` (`attended_match_event`)", 'ایندکس حضور مسابقه CRM');
         }
     }
 
@@ -221,6 +243,116 @@ function ensureAdminSchema(): array {
         CONSTRAINT `fk_employee_performance_admin` FOREIGN KEY (`admin_id`) REFERENCES `admins` (`id`) ON DELETE CASCADE,
         CONSTRAINT `fk_employee_performance_evaluator` FOREIGN KEY (`evaluated_by`) REFERENCES `admins` (`id`) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول employee_performance');
+
+    if (tableExists('matches')) {
+        ensureTableColumns('matches', [
+            'final_score_team_a' => 'int(11) DEFAULT NULL',
+            'final_score_team_b' => 'int(11) DEFAULT NULL',
+            'match_finished' => 'tinyint(1) NOT NULL DEFAULT 0',
+        ]);
+        if (!indexExists('matches', 'idx_matches_finished')) {
+            $run("ALTER TABLE `matches` ADD INDEX `idx_matches_finished` (`match_finished`)", 'ایندکس پایان مسابقه');
+        }
+    }
+
+    if (tableExists('predictions')) {
+        ensureTableColumns('predictions', [
+            'is_correct_prediction' => 'tinyint(1) NOT NULL DEFAULT 0',
+            'crm_match' => 'tinyint(1) NOT NULL DEFAULT 0',
+            'attended_match' => 'tinyint(1) NOT NULL DEFAULT 0',
+        ]);
+        $run("UPDATE `predictions` SET `crm_match` = `crm_matched` WHERE (`crm_match` IS NULL OR `crm_match` = 0) AND `crm_matched` = 1", 'همگام‌سازی crm_match');
+        $run("UPDATE `predictions` SET `attended_match` = `attended_match_time` WHERE (`attended_match` IS NULL OR `attended_match` = 0) AND `attended_match_time` = 1", 'همگام‌سازی attended_match');
+    }
+
+    $run("CREATE TABLE IF NOT EXISTS `pool_leads` (
+        `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        `full_name` varchar(255) DEFAULT NULL,
+        `mobile` varchar(20) NOT NULL,
+        `acquisition_source` varchar(100) DEFAULT NULL,
+        `notes` text DEFAULT NULL,
+        `status` enum('new','contacted','converted','rejected') NOT NULL DEFAULT 'new',
+        `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`),
+        KEY `idx_pool_mobile` (`mobile`),
+        KEY `idx_pool_source` (`acquisition_source`),
+        KEY `idx_pool_status` (`status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول pool_leads');
+
+    $run("CREATE TABLE IF NOT EXISTS `traffic_logs` (
+        `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+        `session_id` varchar(64) NOT NULL,
+        `ip_address` varchar(45) DEFAULT NULL,
+        `country` varchar(100) DEFAULT NULL,
+        `city` varchar(100) DEFAULT NULL,
+        `isp` varchar(255) DEFAULT NULL,
+        `referrer` varchar(500) DEFAULT NULL,
+        `landing_page` varchar(500) DEFAULT NULL,
+        `user_agent` text DEFAULT NULL,
+        `browser` varchar(100) DEFAULT NULL,
+        `os` varchar(100) DEFAULT NULL,
+        `device` varchar(50) DEFAULT NULL,
+        `language` varchar(20) DEFAULT NULL,
+        `visit_duration` int(11) DEFAULT NULL,
+        `pages_viewed` int(11) NOT NULL DEFAULT 1,
+        `is_bot` tinyint(1) NOT NULL DEFAULT 0,
+        `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`),
+        KEY `idx_traffic_session` (`session_id`),
+        KEY `idx_traffic_date` (`created_at`),
+        KEY `idx_traffic_country` (`country`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول traffic_logs');
+
+    $run("CREATE TABLE IF NOT EXISTS `traffic_sources` (
+        `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        `source_name` varchar(100) NOT NULL,
+        `source_type` enum('direct','organic','social','referral','campaign') NOT NULL DEFAULT 'direct',
+        `visits_count` int(11) NOT NULL DEFAULT 0,
+        `date` date NOT NULL,
+        `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`),
+        UNIQUE KEY `uniq_source_date` (`source_name`, `date`),
+        KEY `idx_source_type` (`source_type`),
+        KEY `idx_source_date` (`date`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول traffic_sources');
+
+    $run("CREATE TABLE IF NOT EXISTS `visitor_sessions` (
+        `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+        `session_id` varchar(64) NOT NULL,
+        `ip_address` varchar(45) DEFAULT NULL,
+        `started_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        `last_activity` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        `is_active` tinyint(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`id`),
+        UNIQUE KEY `uniq_session` (`session_id`),
+        KEY `idx_session_active` (`is_active`, `last_activity`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول visitor_sessions');
+
+    $run("CREATE TABLE IF NOT EXISTS `visitor_locations` (
+        `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        `country` varchar(100) NOT NULL,
+        `city` varchar(100) DEFAULT NULL,
+        `visits_count` int(11) NOT NULL DEFAULT 0,
+        `date` date NOT NULL,
+        `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`),
+        UNIQUE KEY `uniq_location_date` (`country`, `city`, `date`),
+        KEY `idx_location_date` (`date`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول visitor_locations');
+
+    $run("CREATE TABLE IF NOT EXISTS `traffic_statistics` (
+        `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        `stat_date` date NOT NULL,
+        `total_visits` int(11) NOT NULL DEFAULT 0,
+        `unique_visitors` int(11) NOT NULL DEFAULT 0,
+        `total_page_views` int(11) NOT NULL DEFAULT 0,
+        `bounce_rate` decimal(5,2) DEFAULT NULL,
+        `avg_duration` int(11) DEFAULT NULL,
+        `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`),
+        UNIQUE KEY `uniq_stat_date` (`stat_date`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول traffic_statistics');
 
     $settings = [
         ['site_description_fa', 'تجربه‌ای لوکس از غذا و نوشیدنی', 'text', 'general', 1],

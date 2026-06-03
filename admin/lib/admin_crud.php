@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../../core/models/GenericModel.php';
 require_once __DIR__ . '/../../core/Auth.php';
+require_once __DIR__ . '/admin_schema.php';
 
 function adminGuard($requiredRole = 'employee') {
     if (session_status() !== PHP_SESSION_ACTIVE) session_start();
@@ -38,11 +39,15 @@ function fetchAcquisitionSourceOptions(): array {
     return ['Instagram'=>'Instagram','Telegram'=>'Telegram','Google'=>'Google','Balad'=>'Balad','Friend Referral'=>'Friend Referral','Walk-in'=>'Walk-in','Website'=>'Website','Advertisement'=>'Advertisement','Other'=>'Other'];
 }
 
+function safeAdminLog(string $message): void {
+    error_log('[admin] ' . $message);
+}
+
 function adminModuleConfigs() {
     return [
         'crm' => [
             'title' => 'CRM مشتریان', 'min_role' => 'manager', 'table' => 'crm_customers', 'unique' => 'mobile', 'date_fields' => ['birth_date','first_purchase_date','reminder_date','last_visit_date'],
-            'search' => ['full_name','mobile','tags','acquisition_source'], 'filters' => ['acquisition_source','tags'],
+            'search' => ['full_name','mobile','tags','acquisition_source'], 'filters' => ['acquisition_source','tags','attended_match_event'],
             'fields' => [
                 'full_name'=>['label'=>'نام کامل','type'=>'text','required'=>true], 'mobile'=>['label'=>'موبایل','type'=>'mobile','required'=>true],
                 'birth_date'=>['label'=>'تولد','type'=>'date'], 'first_purchase_date'=>['label'=>'اولین خرید','type'=>'date'],
@@ -50,29 +55,36 @@ function adminModuleConfigs() {
                 'reminder_date'=>['label'=>'یادآوری','type'=>'date'], 'acquisition_source'=>['label'=>'منبع جذب','type'=>'select','options'=>fetchAcquisitionSourceOptions()],
                 'notes'=>['label'=>'یادداشت','type'=>'textarea'], 'surveys_completed_count'=>['label'=>'تعداد نظرسنجی','type'=>'number'],
                 'last_visit_date'=>['label'=>'آخرین مراجعه','type'=>'date'], 'tags'=>['label'=>'برچسب‌ها','type'=>'text'],
+                'attended_match_event'=>['label'=>'حضور در رویداد مسابقه','type'=>'checkbox'],
             ],
-            'columns' => ['id','full_name','mobile','birth_date','first_purchase_date','total_orders','total_purchase_volume','acquisition_source','tags','created_at'],
+            'columns' => ['id','full_name','mobile','birth_date','first_purchase_date','total_orders','total_purchase_volume','acquisition_source','attended_match_event','tags','created_at'],
         ],
         'matches' => [
             'title'=>'مدیریت مسابقات','min_role'=>'manager','table'=>'matches','unique'=>null,'date_fields'=>['match_date','prediction_open_at','prediction_close_at'],
-            'search'=>['team_a','team_b','status'],'filters'=>['status','is_active','active_for_prediction'],
+            'search'=>['team_a','team_b','status'],'filters'=>['status','is_active','active_for_prediction','match_finished'],
             'fields'=>[
                 'team_a'=>['label'=>'تیم اول','type'=>'text','required'=>true], 'team_b'=>['label'=>'تیم دوم','type'=>'text','required'=>true],
                 'match_date'=>['label'=>'تاریخ مسابقه','type'=>'date','required'=>true], 'kickoff_time'=>['label'=>'ساعت شروع','type'=>'time','required'=>true],
                 'broadcast_time'=>['label'=>'ساعت پخش','type'=>'time'], 'prediction_open_at'=>['label'=>'شروع پیش‌بینی','type'=>'datetime','required'=>true],
                 'prediction_close_at'=>['label'=>'پایان پیش‌بینی','type'=>'datetime','required'=>true], 'status'=>['label'=>'وضعیت','type'=>'select','options'=>['scheduled'=>'برنامه‌ریزی شده','live'=>'زنده','finished'=>'تمام شده','cancelled'=>'لغو شده']],
                 'is_active'=>['label'=>'فعال','type'=>'checkbox'], 'active_for_prediction'=>['label'=>'فعال برای پیش‌بینی','type'=>'checkbox'],
+                'final_score_team_a'=>['label'=>'نتیجه نهایی تیم اول','type'=>'number'],
+                'final_score_team_b'=>['label'=>'نتیجه نهایی تیم دوم','type'=>'number'],
+                'match_finished'=>['label'=>'مسابقه تمام شده','type'=>'checkbox'],
             ], 'columns'=>['id','team_a','team_b','match_date','kickoff_time','broadcast_time','status','is_active','active_for_prediction']
         ],
         'predictions' => [
             'title'=>'پیش‌بینی‌ها','min_role'=>'manager','table'=>'predictions','unique'=>'mobile','date_fields'=>[], 'readonly_create'=>true,
-            'search'=>['customer_name','mobile'],'filters'=>['crm_matched','customer_exists','attended_match_time','match_id'],
+            'search'=>['customer_name','mobile'],'filters'=>['crm_matched','customer_exists','attended_match_time','match_id','is_correct_prediction','crm_match','attended_match'],
             'join'=>'SELECT p.*, CONCAT(m.team_a, " - ", m.team_b) AS match_title FROM predictions p LEFT JOIN matches m ON p.match_id = m.id',
             'fields'=>[
                 'customer_name'=>['label'=>'نام','type'=>'text','required'=>true], 'mobile'=>['label'=>'موبایل','type'=>'mobile','required'=>true],
                 'match_id'=>['label'=>'مسابقه','type'=>'match','required'=>true], 'predicted_score_team_a'=>['label'=>'گل تیم اول','type'=>'number','required'=>true],
                 'predicted_score_team_b'=>['label'=>'گل تیم دوم','type'=>'number','required'=>true], 'crm_matched'=>['label'=>'CRM Match','type'=>'checkbox'],
                 'customer_exists'=>['label'=>'مشتری موجود','type'=>'checkbox'], 'attended_match_time'=>['label'=>'حضور زمان مسابقه','type'=>'checkbox'],
+                'is_correct_prediction'=>['label'=>'پیش‌بینی صحیح','type'=>'checkbox'],
+                'crm_match'=>['label'=>'CRM Match (جدید)','type'=>'checkbox'],
+                'attended_match'=>['label'=>'حضور در مسابقه (جدید)','type'=>'checkbox'],
             ], 'columns'=>['id','customer_name','mobile','match_title','predicted_score_team_a','predicted_score_team_b','crm_matched','customer_exists','attended_match_time','created_at']
         ],
         'banners' => [
@@ -166,6 +178,35 @@ function collectData($config, $current = []) {
         $data[$name] = $value === '' ? null : $value;
     }
     return $data;
+}
+
+function recalculatePredictionsForMatch(int $matchId): void {
+    if ($matchId <= 0 || !tableExists('matches') || !tableExists('predictions')) {
+        return;
+    }
+    if (!columnExists('matches', 'match_finished') || !columnExists('matches', 'final_score_team_a') || !columnExists('matches', 'final_score_team_b') || !columnExists('predictions', 'is_correct_prediction')) {
+        return;
+    }
+    $db = Database::getInstance()->getConnection();
+    try {
+        $stmt = $db->prepare('UPDATE predictions p JOIN matches m ON m.id = p.match_id SET p.is_correct_prediction = CASE WHEN m.match_finished = 1 AND m.final_score_team_a IS NOT NULL AND m.final_score_team_b IS NOT NULL AND p.predicted_score_team_a = m.final_score_team_a AND p.predicted_score_team_b = m.final_score_team_b THEN 1 ELSE 0 END WHERE p.match_id = :match_id');
+        $stmt->execute(['match_id' => $matchId]);
+    } catch (Throwable $e) {
+        safeAdminLog('Prediction recalculation failed for match ' . $matchId . ': ' . $e->getMessage());
+    }
+}
+
+function existingColumns(string $table): array {
+    if (!tableExists($table)) {
+        return [];
+    }
+    try {
+        $columns = schemaColumns($table);
+        return array_map(static fn($row) => $row['Field'], $columns);
+    } catch (Throwable $e) {
+        safeAdminLog("Cannot read columns for {$table}: " . $e->getMessage());
+        return [];
+    }
 }
 
 function renderField($name, $meta, $value = null) {
@@ -346,7 +387,33 @@ function getRows($config, $forExport = false) {
 function renderAdminModule($module) {
     $config = moduleConfig($module);
     if (!$config) { http_response_code(404); echo 'Module not found'; return; }
+    ensureAdminSchema();
+    if (!tableExists($config['table'])) {
+        http_response_code(500);
+        include __DIR__ . '/../includes/header.php';
+        echo '<div class="card"><div class="card-body"><div class="alert" style="background:#f8d7da;color:#721c24">جدول مورد نیاز ماژول پیدا نشد: ' . h($config['table']) . '</div></div></div>';
+        include __DIR__ . '/../includes/footer.php';
+        safeAdminLog("Missing table for module {$module}: {$config['table']}");
+        return;
+    }
     $currentAdmin = adminGuard($config['min_role'] ?? 'employee');
+    $allowedColumns = existingColumns($config['table']);
+    $config['fields'] = array_filter(
+        $config['fields'],
+        static fn($fieldName) => in_array($fieldName, $allowedColumns, true),
+        ARRAY_FILTER_USE_KEY
+    );
+    $config['columns'] = array_values(array_filter(
+        $config['columns'],
+        static fn($col) => $col === 'match_title' || $col === 'category_title' || $col === 'submitted_at' || in_array($col, $allowedColumns, true)
+    ));
+    $safeFilters = [];
+    foreach (($config['filters'] ?? []) as $filter) {
+        if (in_array($filter, $allowedColumns, true)) {
+            $safeFilters[] = $filter;
+        }
+    }
+    $config['filters'] = $safeFilters;
     $model = new GenericModel($config['table']);
     $action = $_GET['action'] ?? 'list';
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['crud_action'] ?? '') === 'delete') { requireValidCsrf(); $model->delete((int)($_POST['id'] ?? 0)); redirectTo(basename($_SERVER['PHP_SELF']) . '?deleted=1'); }
@@ -357,7 +424,14 @@ function renderAdminModule($module) {
             requireValidCsrf();
             $id = (int)($_POST['id'] ?? 0); $current = $id ? $model->find($id) : [];
             $data = collectData($config, $current ?: []);
-            $id ? $model->update($id, $data) : $model->create($data);
+            if ($id) {
+                $model->update($id, $data);
+            } else {
+                $id = (int)$model->create($data);
+            }
+            if ($module === 'matches') {
+                recalculatePredictionsForMatch($id);
+            }
             redirectTo(basename($_SERVER['PHP_SELF']) . '?saved=1');
         } catch (Throwable $e) {
             $message = $e->getMessage();
@@ -383,7 +457,29 @@ function renderAdminModule($module) {
         foreach ($config['fields'] as $name => $meta) renderField($name, $meta, $row[$name] ?? null);
         echo '<button class="btn btn-success" type="submit">ذخیره</button> <a class="btn" href="' . basename($_SERVER['PHP_SELF']) . '">بازگشت</a></form>';
     } else {
-        echo '<form class="admin-filter" method="get"><input class="form-control" name="q" placeholder="جستجو" value="' . h($_GET['q'] ?? '') . '"><input class="form-control" name="date_from" placeholder="از تاریخ شمسی"><input class="form-control" name="date_to" placeholder="تا تاریخ شمسی"><button class="btn btn-primary">فیلتر</button></form>';
+        echo '<form class="admin-filter" method="get"><input class="form-control" name="q" placeholder="جستجو" value="' . h($_GET['q'] ?? '') . '"><input class="form-control" name="date_from" placeholder="از تاریخ شمسی" value="' . h($_GET['date_from'] ?? '') . '"><input class="form-control" name="date_to" placeholder="تا تاریخ شمسی" value="' . h($_GET['date_to'] ?? '') . '">';
+        foreach (($config['filters'] ?? []) as $filter) {
+            $filterLabel = labelFor($config, $filter);
+            $filterValue = $_GET[$filter] ?? '';
+            if (isset($config['fields'][$filter]) && ($config['fields'][$filter]['type'] ?? '') === 'match') {
+                echo '<select class="form-control" name="' . h($filter) . '"><option value="">' . h($filterLabel) . '</option>';
+                foreach (fetchOptions('match') as $opt) {
+                    echo '<option value="' . h($opt['id']) . '" ' . ((string)$filterValue === (string)$opt['id'] ? 'selected' : '') . '>' . h($opt['title']) . '</option>';
+                }
+                echo '</select>';
+                continue;
+            }
+            if (isset($config['fields'][$filter]) && ($config['fields'][$filter]['type'] ?? '') === 'select' && !empty($config['fields'][$filter]['options'])) {
+                echo '<select class="form-control" name="' . h($filter) . '"><option value="">' . h($filterLabel) . '</option>';
+                foreach ($config['fields'][$filter]['options'] as $optionKey => $optionTitle) {
+                    echo '<option value="' . h($optionKey) . '" ' . ((string)$filterValue === (string)$optionKey ? 'selected' : '') . '>' . h($optionTitle) . '</option>';
+                }
+                echo '</select>';
+                continue;
+            }
+            echo '<select class="form-control" name="' . h($filter) . '"><option value="">' . h($filterLabel) . '</option><option value="1" ' . ((string)$filterValue === '1' ? 'selected' : '') . '>بله</option><option value="0" ' . ((string)$filterValue === '0' ? 'selected' : '') . '>خیر</option></select>';
+        }
+        echo '<button class="btn btn-primary">فیلتر</button></form>';
         echo '<details class="import-box"><summary>Import CSV/XLSX با mapping خودکار/دستی</summary><form method="post" enctype="multipart/form-data"><input type="hidden" name="crud_action" value="import"><input type="hidden" name="' . CSRF_TOKEN_NAME . '" value="' . h(generateCSRFToken()) . '"><input class="form-control" type="file" name="import_file" accept=".csv,.xlsx" required><textarea class="form-control" name="mapping" placeholder="اختیاری: {&quot;mobile&quot;:&quot;phone&quot;}"></textarea><button class="btn btn-warning">Preview/Import</button><p class="text-muted">ردیف اول فایل به عنوان header استفاده می‌شود؛ ستون‌های هم‌نام خودکار map می‌شوند، JSON بالا override دستی است، duplicate با unique key مثل mobile بروزرسانی می‌شود.</p></form></details>';
         $data = getRows($config); $rows = $data['rows'];
         echo '<form method="get"><input type="hidden" name="action" value="export"><div class="mb-3"><button class="btn" name="format" value="csv">خروجی CSV ردیف‌های انتخابی</button> <button class="btn" name="format" value="xlsx">خروجی Excel ردیف‌های انتخابی</button></div><div class="table-responsive"><table class="table"><thead><tr><th><input type="checkbox"></th>';

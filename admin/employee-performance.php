@@ -33,6 +33,13 @@ try {
 $period = preg_match('/^\d{4}-\d{2}$/', (string)($_GET['period_month'] ?? '')) ? $_GET['period_month'] : date('Y-m');
 $employees = $db->query("SELECT id, full_name, username, role, department FROM admins WHERE is_active=1 AND role IN ('employee','manager','admin') ORDER BY full_name, username")->fetchAll();
 $stmt=$db->prepare("SELECT ep.*, a.full_name, a.username, a.department, a.role FROM employee_performance ep JOIN admins a ON a.id=ep.admin_id WHERE ep.period_month=? ORDER BY ep.score DESC, a.full_name ASC"); $stmt->execute([$period]); $scores=$stmt->fetchAll();
+if (tableExists('matches') && tableExists('predictions') && columnExists('matches', 'match_finished') && columnExists('matches', 'final_score_team_a') && columnExists('matches', 'final_score_team_b') && columnExists('predictions', 'is_correct_prediction')) {
+    try {
+        $db->exec("UPDATE predictions p JOIN matches m ON m.id = p.match_id SET p.is_correct_prediction = CASE WHEN m.match_finished = 1 AND m.final_score_team_a IS NOT NULL AND m.final_score_team_b IS NOT NULL AND p.predicted_score_team_a = m.final_score_team_a AND p.predicted_score_team_b = m.final_score_team_b THEN 1 ELSE 0 END");
+    } catch (Throwable $e) {
+        error_log('Prediction recalculation failed in employee-performance.php: ' . $e->getMessage());
+    }
+}
 $trendStmt=$db->query("SELECT a.full_name, a.username, ep.period_month, ep.score FROM employee_performance ep JOIN admins a ON a.id=ep.admin_id ORDER BY ep.period_month DESC, ep.score DESC LIMIT 80"); $trends=$trendStmt->fetchAll();
 include __DIR__ . '/includes/header.php';
 ?>

@@ -327,6 +327,61 @@ $featuredItems = $menuModel->getFeatured(6);
             direction: rtl;
             overflow-x: hidden;
         }
+
+        .top-header {
+            position: fixed;
+            top: 0;
+            right: 0;
+            left: 0;
+            z-index: 2000;
+            height: 68px;
+            display: flex;
+            align-items: center;
+            background: linear-gradient(180deg, rgba(0,0,0,.45), rgba(0,0,0,.08));
+            backdrop-filter: blur(6px);
+            border-bottom: 1px solid rgba(255,255,255,.12);
+        }
+
+        .top-header-inner {
+            width: min(1200px, calc(100% - 32px));
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .brand-mark {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+            color: #fff;
+            font-weight: 700;
+        }
+
+        .brand-mark img {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .header-nav {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .header-nav a {
+            color: rgba(255,255,255,.9);
+            text-decoration: none;
+            font-size: 14px;
+            transition: color .2s ease;
+        }
+
+        .header-nav a:hover { color: var(--accent); }
         
         /* WebGL Hero Section */
         #hero-section {
@@ -335,6 +390,7 @@ $featuredItems = $menuModel->getFeatured(6);
             min-height: 100vh;
             overflow: hidden;
             padding: 0;
+            isolation: isolate;
         }
         
         #webgl-canvas,
@@ -369,18 +425,20 @@ $featuredItems = $menuModel->getFeatured(6);
             height: 100%;
             background: linear-gradient(180deg, rgba(0,70,71,0.3) 0%, rgba(0,0,0,0.7) 100%);
             z-index: 1;
+            pointer-events: none;
         }
         
         .hero-content {
             position: relative;
-            z-index: 2;
+            z-index: 15;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             text-align: center;
-            padding: 20px;
+            padding: 86px 20px 20px;
+            pointer-events: auto;
         }
         
         .logo-container {
@@ -441,7 +499,7 @@ $featuredItems = $menuModel->getFeatured(6);
         }
         
         .hero-title {
-            font-size: clamp(32px, 8vw, 72px);
+            font-size: clamp(48px, 7vw, 72px);
             font-weight: 700;
             color: var(--white);
             margin-bottom: 20px;
@@ -450,7 +508,7 @@ $featuredItems = $menuModel->getFeatured(6);
         }
         
         .hero-subtitle {
-            font-size: clamp(16px, 3vw, 24px);
+            font-size: clamp(36px, 5vw, 56px);
             color: var(--accent);
             margin-bottom: 40px;
             animation: fadeInUp 1s ease-out 0.7s both;
@@ -1005,7 +1063,7 @@ $featuredItems = $menuModel->getFeatured(6);
         .hero-banner-slide.active { display: block; }
         .hero-banner-slide picture { position:absolute; inset:0; width:100%; height:100%; }
         .hero-banner-art { width:100%; min-height:100vh; height:100%; object-fit: cover; object-position:center; background-position:center; background-size:cover; display:block; border-radius:0; margin:0; box-shadow:none; }
-        .hero-banner-copy { position:relative; z-index:2; min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:20px; }
+        .hero-banner-copy { position:relative; z-index:14; min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:86px 20px 20px; pointer-events:auto; }
         .hero-banner-copy::before { content:''; position:absolute; inset:0; z-index:-1; background:linear-gradient(180deg, rgba(0,70,71,.25), rgba(0,0,0,.68)); }
         .hero-banner-description { max-width: 680px; margin: 1rem auto; color: rgba(255,255,255,0.88); line-height: 1.9; }
         .hero-banner-dots { display:flex; gap:8px; justify-content:center; margin-top:18px; }
@@ -1023,6 +1081,11 @@ $featuredItems = $menuModel->getFeatured(6);
         @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
         @media (max-width: 768px) {
+            .top-header { height: 60px; }
+            .top-header-inner { width: calc(100% - 22px); }
+            .header-nav { gap: 10px; }
+            .header-nav a { font-size: 13px; }
+            .hero-content, .hero-banner-copy { padding-top: 76px; }
             .social-links {
                 left: 15px;
             }
@@ -1059,6 +1122,26 @@ $featuredItems = $menuModel->getFeatured(6);
     </style>
 </head>
 <body>
+    <header class="top-header">
+        <div class="top-header-inner">
+            <a class="brand-mark" href="#hero-section">
+                <?php if ($lotusLogoImage !== ''): ?>
+                    <img src="<?php echo homeEscape($lotusLogoImage); ?>" alt="<?php echo homeEscape($siteName); ?>">
+                <?php else: ?>
+                    <img src="<?php echo homeEscape(assetUrl('assets/images/home-preview.svg')); ?>" alt="<?php echo homeEscape($siteName); ?>">
+                <?php endif; ?>
+                <span><?php echo homeEscape($siteName); ?></span>
+            </a>
+            <nav class="header-nav">
+                <a href="#hero-section">خانه</a>
+                <a href="#menu">منو</a>
+                <a href="#about">داستان KEY</a>
+                <a href="#location">نقشه</a>
+                <a href="#hours">ساعات کاری</a>
+                <a href="#newsletter">باشگاه مشتریان</a>
+            </nav>
+        </div>
+    </header>
     <!-- Hero Section with WebGL -->
     <section id="hero-section">
         <canvas id="webgl-canvas" aria-hidden="true"></canvas>
@@ -1243,11 +1326,13 @@ $featuredItems = $menuModel->getFeatured(6);
                     </div>
                 </div>
                 <div class="map-frame glass-panel map-fallback-card">
-                    <img src="<?php echo homeEscape(assetUrl('assets/images/map-placeholder.svg')); ?>" alt="KEY location map preview" loading="lazy">
+                    <a href="<?php echo homeEscape($baladMapUrl); ?>" target="_blank" rel="noopener noreferrer" style="display:block;position:relative">
+                        <img src="<?php echo homeEscape(assetUrl('assets/images/map-placeholder.svg')); ?>" alt="KEY location map preview" loading="lazy" onerror="this.style.display='none';this.closest('.map-frame').style.minHeight='280px';">
+                    </a>
                     <div class="map-fallback-overlay">
                         <strong>KEY Restaurant Location</strong>
                         <span><?php echo homeEscape($locationLat); ?>, <?php echo homeEscape($locationLng); ?></span>
-                        <a class="secondary-button" href="<?php echo homeEscape($baladMapUrl); ?>" target="_blank" rel="noopener">باز کردن در بلد</a>
+                        <a class="secondary-button" href="<?php echo homeEscape($baladMapUrl); ?>" target="_blank" rel="noopener noreferrer">باز کردن در بلد</a>
                     </div>
                 </div>
             </div>

@@ -80,6 +80,10 @@ date_default_timezone_set($app['timezone'] ?? 'Asia/Tehran');
 error_reporting(E_ALL);
 ini_set('display_errors', APP_DEBUG ? '1' : '0');
 ini_set('log_errors', '1');
+if (!is_dir(STORAGE_PATH . '/logs')) {
+    @mkdir(STORAGE_PATH . '/logs', 0755, true);
+}
+ini_set('error_log', STORAGE_PATH . '/logs/php-error.log');
 
 ini_set('session.cookie_httponly', '1');
 ini_set('session.use_only_cookies', '1');
