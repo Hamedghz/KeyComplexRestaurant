@@ -829,19 +829,26 @@ $featuredItems = $menuModel->getFeatured(6);
             overflow: hidden;
         }
 
-        .map-frame img {
-            width: 100%;
-            height: 100%;
-            min-height: 390px;
-            object-fit: cover;
-            display: block;
-            opacity: 0.72;
-        }
-
         .map-fallback-card {
             position: relative;
-            background: linear-gradient(135deg, rgba(0,70,71,0.9), rgba(212,175,55,0.24));
+            display: block;
+            color: #fff;
+            text-decoration: none;
+            background:
+                radial-gradient(circle at 25% 28%, rgba(212,175,55,0.36), transparent 24%),
+                radial-gradient(circle at 72% 58%, rgba(255,255,255,0.12), transparent 26%),
+                linear-gradient(135deg, rgba(0,70,71,0.92), rgba(0,0,0,0.72));
         }
+        .map-fallback-card::before {
+            content: '📍';
+            position: absolute;
+            top: 44%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: clamp(58px, 9vw, 108px);
+            filter: drop-shadow(0 16px 28px rgba(0,0,0,.35));
+        }
+
 
         .map-fallback-overlay {
             position: absolute;
@@ -1174,25 +1181,6 @@ $featuredItems = $menuModel->getFeatured(6);
         <div class="hero-content">
             <?php if ($lotusActive): ?>
                 <div class="logo-container">
-                    <?php if ($lotusLogoImage !== ''): ?>
-                        <img class="lotus-logo" src="<?php echo homeEscape($lotusLogoImage); ?>" alt="<?php echo homeEscape($lotusTitle); ?>">
-                    <?php else: ?>
-                        <!-- 9-Petal Lotus Logo -->
-                        <svg class="lotus-logo" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-                            <g transform="translate(100, 100)">
-                                <circle cx="0" cy="0" r="15" fill="var(--accent)" opacity="0.8"/>
-                                <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(0)"/>
-                                <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(40)"/>
-                                <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(80)"/>
-                                <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(120)"/>
-                                <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(160)"/>
-                                <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(200)"/>
-                                <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(240)"/>
-                                <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(280)"/>
-                                <path class="lotus-petal" d="M 0,-50 Q 15,-35 0,-20 Q -15,-35 0,-50 Z" transform="rotate(320)"/>
-                            </g>
-                        </svg>
-                    <?php endif; ?>
                     <h1 class="hero-title"><?php echo homeEscape($lotusTitle); ?></h1>
                     <?php if ($lotusSubtitle !== ''): ?><p class="hero-subtitle"><?php echo homeEscape($lotusSubtitle); ?></p><?php endif; ?>
                     <?php if ($lotusDescription !== ''): ?><div class="lotus-admin-copy"><?php echo homeSafeHtml($lotusDescription); ?></div><?php endif; ?>
@@ -1325,16 +1313,13 @@ $featuredItems = $menuModel->getFeatured(6);
                         <a class="secondary-button" href="<?php echo homeEscape($baladMapUrl); ?>" target="_blank" rel="noopener">باز کردن در بلد</a>
                     </div>
                 </div>
-                <div class="map-frame glass-panel map-fallback-card">
-                    <a href="<?php echo homeEscape($baladMapUrl); ?>" target="_blank" rel="noopener noreferrer" style="display:block;position:relative">
-                        <img src="<?php echo homeEscape(assetUrl('assets/images/map-placeholder.svg')); ?>" alt="KEY location map preview" loading="lazy" onerror="this.style.display='none';this.closest('.map-frame').style.minHeight='280px';">
-                    </a>
+                <a class="map-frame glass-panel map-fallback-card" href="<?php echo homeEscape($baladMapUrl); ?>" target="_blank" rel="noopener noreferrer" aria-label="Open KEY Restaurant location in Balad">
                     <div class="map-fallback-overlay">
                         <strong>KEY Restaurant Location</strong>
                         <span><?php echo homeEscape($locationLat); ?>, <?php echo homeEscape($locationLng); ?></span>
-                        <a class="secondary-button" href="<?php echo homeEscape($baladMapUrl); ?>" target="_blank" rel="noopener noreferrer">باز کردن در بلد</a>
+                        <span class="secondary-button">باز کردن در بلد</span>
                     </div>
-                </div>
+                </a>
             </div>
         </div>
     </section>

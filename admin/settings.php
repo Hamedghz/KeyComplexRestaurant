@@ -33,11 +33,7 @@ $catalog = [
         'lotus_cta_link' => ['label' => 'لینک دکمه اختیاری', 'type' => 'url'],
         'lotus_active' => ['label' => 'فعال', 'type' => 'boolean'],
     ]],
-    'social_networks' => ['title' => 'Social Networks', 'fields' => [
-        'instagram_url' => ['label' => 'اینستاگرام', 'type' => 'url'],
-        'telegram_url' => ['label' => 'تلگرام', 'type' => 'url'],
-        'whatsapp_number' => ['label' => 'واتساپ', 'type' => 'text'],
-    ]],
+    'social_networks' => ['title' => 'Social Networks', 'fields' => []],
     'seo' => ['title' => 'SEO', 'fields' => [
         'seo_title_fa' => ['label' => 'عنوان SEO', 'type' => 'text'],
         'seo_description_fa' => ['label' => 'توضیح SEO', 'type' => 'textarea'],
@@ -90,10 +86,14 @@ include __DIR__ . '/includes/header.php';
 <?php if ($error): ?><div class="alert" style="background:#f8d7da;color:#721c24"><?php echo h($error); ?></div><?php endif; ?>
 <form method="post" enctype="multipart/form-data">
     <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>">
-    <?php foreach ($catalog as $group): ?>
+    <?php foreach ($catalog as $category => $group): ?>
         <div class="card">
             <div class="card-header"><h2><?php echo h($group['title']); ?></h2></div>
             <div class="card-body">
+                <?php if ($category === 'social_networks' && empty($group['fields'])): ?>
+                    <p class="text-muted">شبکه‌های اجتماعی از دیتابیس و صفحه مدیریت اختصاصی خوانده می‌شوند؛ هیچ لینک اجتماعی در قالب hardcode نمی‌شود.</p>
+                    <a class="btn btn-primary" href="social-links.php">مدیریت شبکه‌های اجتماعی</a>
+                <?php endif; ?>
                 <?php foreach ($group['fields'] as $key => $meta): $value = $settingModel->get($key, ''); ?>
                     <div class="form-group">
                         <label><?php echo h($meta['label']); ?> <small class="text-muted">(<?php echo h($key); ?>)</small></label>

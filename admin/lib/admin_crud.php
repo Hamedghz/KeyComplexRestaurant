@@ -20,6 +20,29 @@ function adminGuard($requiredRole = 'employee') {
 function h($value) { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'); }
 function redirectTo($url) { header('Location: ' . $url); exit; }
 
+function adminPermissionAllows(?array $admin, string $permission, array $fallbackRoles = ['manager','admin','super_admin']): bool {
+    if (!$admin) {
+        return false;
+    }
+    $role = (string)($admin['role'] ?? 'employee');
+    if ($role === 'super_admin') {
+        return true;
+    }
+    $raw = $admin['permissions'] ?? null;
+    $permissions = [];
+    if (is_string($raw) && trim($raw) !== '') {
+        $decoded = json_decode($raw, true);
+        if (is_array($decoded)) {
+            $permissions = $decoded;
+        }
+    } elseif (is_array($raw)) {
+        $permissions = $raw;
+    }
+    if (array_key_exists($permission, $permissions)) {
+        return (bool)$permissions[$permission];
+    }
+    return in_array($role, $fallbackRoles, true);
+}
 
 function fetchAcquisitionSourceOptions(): array {
     try {

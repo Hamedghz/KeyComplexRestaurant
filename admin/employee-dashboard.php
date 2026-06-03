@@ -4,8 +4,34 @@ $currentAdmin = adminGuard('employee');
 ensureAdminSchema();
 $db = adminDb();
 $pageTitle = 'داشبورد کارمند';
+$message = '';
+$error = '';
 $employeeId = (int)$currentAdmin['id'];
 $period = preg_match('/^\d{4}-\d{2}$/', (string)($_GET['period_month'] ?? '')) ? (string)$_GET['period_month'] : date('Y-m');
+try {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['profile_action'] ?? '') === 'change_password') {
+        requireValidCsrf();
+        $currentPassword = (string)($_POST['current_password'] ?? '');
+        $newPassword = (string)($_POST['new_password'] ?? '');
+        $confirmPassword = (string)($_POST['confirm_password'] ?? '');
+        if (strlen($newPassword) < 8) {
+            throw new RuntimeException('رمز جدید باید حداقل ۸ کاراکتر باشد.');
+        }
+        if ($newPassword !== $confirmPassword) {
+            throw new RuntimeException('تکرار رمز عبور با رمز جدید برابر نیست.');
+        }
+        $stmt = $db->prepare('SELECT password FROM admins WHERE id = ? AND is_active = 1');
+        $stmt->execute([$employeeId]);
+        $hash = (string)$stmt->fetchColumn();
+        if ($hash === '' || !password_verify($currentPassword, $hash)) {
+            throw new RuntimeException('رمز فعلی صحیح نیست.');
+        }
+        $db->prepare('UPDATE admins SET password = ? WHERE id = ?')->execute([password_hash($newPassword, PASSWORD_DEFAULT), $employeeId]);
+        $message = 'رمز عبور با موفقیت تغییر کرد.';
+    }
+} catch (Throwable $e) {
+    $error = $e->getMessage();
+}
 function employeeCalculateScore(PDO $db, int $employeeId, string $period): array {
     $stmt = $db->prepare('SELECT COALESCE(AVG(NULLIF(manager_score,0)),0) AS manager_score, COALESCE(AVG(peer_score),0) AS peer_score FROM employee_evaluations WHERE employee_id = ? AND period_month = ?');
     $stmt->execute([$employeeId, $period]);
@@ -53,8 +79,11 @@ foreach ($ranking as $idx => &$row) {
 unset($row);
 include __DIR__ . '/includes/header.php';
 ?>
+<?php if ($message): ?><div class="alert alert-info"><?php echo h($message); ?></div><?php endif; ?>
+<?php if ($error): ?><div class="alert" style="background:#f8d7da;color:#721c24"><?php echo h($error); ?></div><?php endif; ?>
 <div class="stats-row"><div class="stat-card stat-primary"><div class="stat-icon">⭐</div><div class="stat-content"><h3><?php echo h($score['final']); ?></h3><p>امتیاز نهایی ماه <?php echo h($period); ?></p></div></div><div class="stat-card stat-success"><div class="stat-icon">🏆</div><div class="stat-content"><h3><?php echo h($myRank ?? '-'); ?></h3><p>رتبه شما</p></div></div><div class="stat-card stat-info"><div class="stat-icon">👤</div><div class="stat-content"><h3><?php echo h($currentAdmin['role']); ?></h3><p><?php echo h($currentAdmin['department'] ?? ''); ?></p></div></div></div>
 <div class="card"><div class="card-header"><h2>پروفایل من</h2><a class="btn btn-primary" href="employee-evaluations.php">ارزیابی همکاران</a></div><div class="card-body"><p><strong>نام:</strong> <?php echo h($currentAdmin['full_name'] ?: $currentAdmin['username']); ?></p><p><strong>نام کاربری:</strong> <?php echo h($currentAdmin['username']); ?></p><p><strong>ایمیل:</strong> <?php echo h($currentAdmin['email']); ?></p><p><strong>نقش:</strong> <?php echo h($currentAdmin['role']); ?></p><p><strong>دپارتمان:</strong> <?php echo h($currentAdmin['department'] ?? ''); ?></p></div></div>
+<div class="card"><div class="card-header"><h2>تغییر رمز عبور</h2></div><div class="card-body"><form method="post" class="admin-filter"><input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>"><input type="hidden" name="profile_action" value="change_password"><input class="form-control" type="password" name="current_password" placeholder="رمز فعلی" required><input class="form-control" type="password" name="new_password" minlength="8" placeholder="رمز جدید" required><input class="form-control" type="password" name="confirm_password" minlength="8" placeholder="تکرار رمز جدید" required><button class="btn btn-success">ذخیره رمز</button></form></div></div>
 <div class="card"><div class="card-header"><h2>ترکیب امتیاز ماهانه</h2></div><div class="card-body"><table class="table"><tr><th>Manager</th><th>Peer</th><th>Attendance</th><th>Department KPI</th><th>Final</th></tr><tr><td><?php echo h($score['manager']); ?></td><td><?php echo h($score['peer']); ?></td><td><?php echo h($score['attendance']); ?></td><td><?php echo h($score['kpi']); ?></td><td><?php echo h($score['final']); ?></td></tr></table></div></div>
 <div class="card"><div class="card-header"><h2>تاریخچه امتیاز</h2></div><div class="card-body"><table class="table"><thead><tr><th>ماه</th><th>Manager</th><th>Peer</th><th>Attendance</th><th>KPI</th><th>Final</th></tr></thead><tbody><?php foreach($history as $row): ?><tr><td><?php echo h($row['period_month']); ?></td><td><?php echo h($row['manager_score']); ?></td><td><?php echo h($row['peer_score']); ?></td><td><?php echo h($row['attendance_score']); ?></td><td><?php echo h($row['department_kpi_score']); ?></td><td><?php echo h($row['final_score']); ?></td></tr><?php endforeach; ?></tbody></table></div></div>
 <div class="card"><div class="card-header"><h2>پاداش‌ها</h2></div><div class="card-body"><table class="table"><thead><tr><th>تاریخ</th><th>عنوان</th><th>توضیح</th></tr></thead><tbody><?php foreach($rewards as $row): ?><tr><td><?php echo h($row['reward_date']); ?></td><td><?php echo h($row['title']); ?></td><td><?php echo h($row['description']); ?></td></tr><?php endforeach; ?></tbody></table></div></div>
