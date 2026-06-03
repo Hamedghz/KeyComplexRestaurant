@@ -19,6 +19,25 @@ function adminGuard($requiredRole = 'employee') {
 function h($value) { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'); }
 function redirectTo($url) { header('Location: ' . $url); exit; }
 
+
+function fetchAcquisitionSourceOptions(): array {
+    try {
+        $db = Database::getInstance()->getConnection();
+        $stmt = $db->query('SELECT title FROM acquisition_sources WHERE active = 1 ORDER BY sort_order ASC, title ASC');
+        $rows = $stmt->fetchAll();
+        if ($rows) {
+            $options = [];
+            foreach ($rows as $row) {
+                $options[$row['title']] = $row['title'];
+            }
+            return $options;
+        }
+    } catch (Throwable $e) {
+        // Schema may not be installed yet; fall back to accepted defaults.
+    }
+    return ['Instagram'=>'Instagram','Telegram'=>'Telegram','Google'=>'Google','Balad'=>'Balad','Friend Referral'=>'Friend Referral','Walk-in'=>'Walk-in','Website'=>'Website','Advertisement'=>'Advertisement','Other'=>'Other'];
+}
+
 function adminModuleConfigs() {
     return [
         'crm' => [
@@ -28,11 +47,11 @@ function adminModuleConfigs() {
                 'full_name'=>['label'=>'نام کامل','type'=>'text','required'=>true], 'mobile'=>['label'=>'موبایل','type'=>'mobile','required'=>true],
                 'birth_date'=>['label'=>'تولد','type'=>'date'], 'first_purchase_date'=>['label'=>'اولین خرید','type'=>'date'],
                 'total_orders'=>['label'=>'تعداد سفارش','type'=>'number'], 'total_purchase_volume'=>['label'=>'حجم خرید','type'=>'number'],
-                'reminder_date'=>['label'=>'یادآوری','type'=>'date'], 'acquisition_source'=>['label'=>'منبع جذب','type'=>'text'],
+                'reminder_date'=>['label'=>'یادآوری','type'=>'date'], 'acquisition_source'=>['label'=>'منبع جذب','type'=>'select','options'=>fetchAcquisitionSourceOptions()],
                 'notes'=>['label'=>'یادداشت','type'=>'textarea'], 'surveys_completed_count'=>['label'=>'تعداد نظرسنجی','type'=>'number'],
                 'last_visit_date'=>['label'=>'آخرین مراجعه','type'=>'date'], 'tags'=>['label'=>'برچسب‌ها','type'=>'text'],
             ],
-            'columns' => ['id','full_name','mobile','birth_date','total_orders','total_purchase_volume','reminder_date','tags','created_at'],
+            'columns' => ['id','full_name','mobile','birth_date','first_purchase_date','total_orders','total_purchase_volume','acquisition_source','tags','created_at'],
         ],
         'matches' => [
             'title'=>'مدیریت مسابقات','min_role'=>'manager','table'=>'matches','unique'=>null,'date_fields'=>['match_date','prediction_open_at','prediction_close_at'],

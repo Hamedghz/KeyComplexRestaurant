@@ -12,7 +12,7 @@ $auth = new Auth();
 
 // Redirect if already logged in
 if ($auth->isLoggedIn()) {
-    header('Location: dashboard.php');
+    header('Location: ' . (($_SESSION['admin_role'] ?? '') === 'employee' ? 'employee-dashboard.php' : 'dashboard.php'));
     exit;
 }
 
@@ -32,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $result = $auth->login($username, $password);
         
         if ($result['success']) {
-            header('Location: dashboard.php');
+            header('Location: ' . ($result['redirect'] ?? 'dashboard.php'));
             exit;
         } else {
             $error = $result['message'];

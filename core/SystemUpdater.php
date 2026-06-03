@@ -3,6 +3,7 @@ require_once __DIR__ . '/bootstrap.php';
 
 class SystemUpdater {
     private string $root;
+    private string $githubRepo = 'https://github.com/Hamedghz/KeyComplexRestaurant.git';
 
     public function __construct($root = ROOT_PATH) {
         $this->root = $root;
@@ -18,12 +19,18 @@ class SystemUpdater {
 
     public function currentVersion() {
         $code = 0;
-        $hash = trim($this->run(['git', 'rev-parse', '--short', 'HEAD'], $code));
+        $hash = trim($this->run(['git', 'rev-parse', '--short=12', 'HEAD'], $code));
         return $code === 0 ? $hash : 'unknown';
     }
 
+    public function githubUrl(): string {
+        $code = 0;
+        $remote = trim($this->run(['git', 'config', '--get', 'remote.origin.url'], $code));
+        return $remote !== '' ? $remote : $this->githubRepo;
+    }
+
     public function updateLogs() {
-        $logFiles = [STORAGE_PATH . '/pending-migrations.txt', STORAGE_PATH . '/last-backup.txt'];
+        $logFiles = [STORAGE_PATH . '/update.log', STORAGE_PATH . '/pending-migrations.txt', STORAGE_PATH . '/last-backup.txt'];
         $logs = [];
         foreach ($logFiles as $file) {
             if (is_file($file)) {
@@ -31,6 +38,11 @@ class SystemUpdater {
             }
         }
         return $logs;
+    }
+
+    private function log(string $message): void {
+        if (!is_dir(STORAGE_PATH)) mkdir(STORAGE_PATH, 0755, true);
+        file_put_contents(STORAGE_PATH . '/update.log', '[' . date('Y-m-d H:i:s') . '] ' . $message . "\n", FILE_APPEND | LOCK_EX);
     }
 
     public function migrationStatus() {
@@ -44,13 +56,15 @@ class SystemUpdater {
 
     public function check() {
         $code = 0;
-        $this->run(['git', 'fetch', '--dry-run', '--quiet'], $code);
+        $this->run(['git', 'remote', 'set-url', 'origin', $this->githubRepo], $code);
+        $fetchOutput = $this->run(['git', 'fetch', 'origin', 'main', '--quiet'], $code);
         $local = trim($this->run(['git', 'rev-parse', 'HEAD'], $code));
-        $remote = trim($this->run(['git', 'rev-parse', '@{u}'], $code));
-
+        $remote = trim($this->run(['git', 'rev-parse', 'origin/main'], $code));
+        $this->log('check: current=' . substr($local, 0, 12) . ' latest=' . substr($remote, 0, 12) . ($fetchOutput ? ' output=' . $fetchOutput : ''));
         return [
-            'current' => substr($local, 0, 12),
-            'latest' => substr($remote, 0, 12),
+            'current' => $local !== '' ? substr($local, 0, 12) : 'unknown',
+            'latest' => $remote !== '' ? substr($remote, 0, 12) : 'unknown',
+            'github_url' => $this->githubRepo,
             'update_available' => $local !== '' && $remote !== '' && $local !== $remote,
         ];
     }
@@ -64,21 +78,26 @@ class SystemUpdater {
         $code = 0;
         $output = $this->run(['tar', '--exclude=.git', '--exclude=node_modules', '--exclude=storage/backups', '-czf', $file, '.'], $code);
         if ($code !== 0) {
+            $this->log('backup failed: ' . $output);
             throw new RuntimeException('Backup failed: ' . $output);
         }
         file_put_contents(STORAGE_PATH . '/last-backup.txt', $file, LOCK_EX);
+        $this->log('backup created: ' . $file);
         return $file;
     }
 
     public function apply() {
         $backup = $this->backup();
         $code = 0;
-        $output = $this->run(['git', 'pull', '--ff-only'], $code);
+        $this->run(['git', 'remote', 'set-url', 'origin', $this->githubRepo], $code);
+        $output = $this->run(['git', 'pull', '--ff-only', 'origin', 'main'], $code);
         if ($code !== 0) {
+            $this->log('apply failed: ' . $output);
             throw new RuntimeException('Update failed; backup is available at ' . $backup . ': ' . $output);
         }
         $this->runPendingMigrations();
         $this->clearCache();
+        $this->log('apply completed: ' . $output);
         return ['backup' => $backup, 'output' => $output];
     }
 
@@ -90,8 +109,10 @@ class SystemUpdater {
         $code = 0;
         $output = $this->run(['tar', '-xzf', $file, '-C', $this->root], $code);
         if ($code !== 0) {
+            $this->log('rollback failed: ' . $output);
             throw new RuntimeException('Rollback failed: ' . $output);
         }
+        $this->log('rollback completed from: ' . $file);
         return $file;
     }
 
@@ -100,8 +121,6 @@ class SystemUpdater {
         if (!is_dir($migrationDir)) {
             return;
         }
-        // Migrations are intentionally not auto-applied without a configured CLI DB client.
-        // The update screen records the need to review/import new SQL files in phpMyAdmin.
         file_put_contents(STORAGE_PATH . '/pending-migrations.txt', implode("\n", glob($migrationDir . '/*.sql') ?: []), LOCK_EX);
     }
 

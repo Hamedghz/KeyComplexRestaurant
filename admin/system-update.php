@@ -43,6 +43,7 @@ include __DIR__ . '/includes/header.php';
     <div class="card-body">
         <?php if ($message): ?><div class="alert alert-info"><?php echo h($message); ?></div><?php endif; ?>
         <?php if ($error): ?><div class="alert" style="background:#f8d7da;color:#721c24"><?php echo h($error); ?></div><?php endif; ?>
+        <p>GitHub repository: <strong><?php echo h($status['github_url'] ?? $updater->githubUrl()); ?></strong></p>
         <p>نسخه فعلی: <strong><?php echo h($status['current'] ?? 'unknown'); ?></strong></p>
         <p>آخرین نسخه remote: <strong><?php echo h($status['latest'] ?? 'unknown'); ?></strong></p>
         <p>وضعیت: <?php echo !empty($status['update_available']) ? 'بروزرسانی موجود است' : 'سیستم بروز است یا upstream تنظیم نشده است'; ?></p>

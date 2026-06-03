@@ -409,6 +409,12 @@
             <a href="crm.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'crm.php' ? 'active' : ''; ?>">
                 <span>👤</span> CRM
             </a>
+            <a href="crm-reports.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'crm-reports.php' ? 'active' : ''; ?>">
+                <span>📣</span> گزارش منابع جذب
+            </a>
+            <a href="acquisition-sources.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'acquisition-sources.php' ? 'active' : ''; ?>">
+                <span>🧲</span> منابع جذب
+            </a>
             <a href="matches.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'matches.php' ? 'active' : ''; ?>">
                 <span>⚽</span> مسابقات
             </a>
@@ -442,11 +448,20 @@
             <a href="media.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'media.php' ? 'active' : ''; ?>">
                 <span>🗂️</span> رسانه‌ها
             </a>
+            <a href="employee-dashboard.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'employee-dashboard.php' ? 'active' : ''; ?>">
+                <span>🧑‍💼</span> داشبورد کارمند
+            </a>
+            <a href="employee-evaluations.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'employee-evaluations.php' ? 'active' : ''; ?>">
+                <span>📝</span> ارزیابی همکاران
+            </a>
             <a href="employee-performance.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'employee-performance.php' ? 'active' : ''; ?>">
                 <span>📈</span> عملکرد کارکنان
             </a>
             <a href="settings.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'settings.php' ? 'active' : ''; ?>">
                 <span>⚙️</span> تنظیمات
+            </a>
+            <a href="social-links.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'social-links.php' ? 'active' : ''; ?>">
+                <span>🔗</span> شبکه‌های اجتماعی
             </a>
             <a href="system-update.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'system-update.php' ? 'active' : ''; ?>">
                 <span>⬆️</span> بروزرسانی سیستم
