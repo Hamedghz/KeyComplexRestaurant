@@ -46,15 +46,22 @@ include __DIR__ . '/includes/header.php';
         <p>GitHub repository: <strong><?php echo h($status['github_url'] ?? $updater->githubUrl()); ?></strong></p>
         <p>نسخه فعلی: <strong><?php echo h($status['current'] ?? 'unknown'); ?></strong></p>
         <p>آخرین نسخه remote: <strong><?php echo h($status['latest'] ?? 'unknown'); ?></strong></p>
+        <p>آخرین Release/Tag: <strong><?php echo h($status['latest_release'] ?? 'none'); ?></strong></p>
+        <p>تعداد commitهای عقب‌تر از GitHub: <strong><?php echo h($status['commits_behind'] ?? 0); ?></strong></p>
         <p>وضعیت: <?php echo !empty($status['update_available']) ? 'بروزرسانی موجود است' : 'سیستم بروز است یا upstream تنظیم نشده است'; ?></p>
+        <?php if (!empty($status['changelog']) || !empty($status['release_notes'])): ?>
+            <h3>Changelog</h3>
+            <pre style="white-space:pre-wrap;background:#f8f9fa;padding:12px;border-radius:8px;direction:ltr;text-align:left"><?php echo h(trim(($status['changelog'] ?? '') . "\n\n" . ($status['release_notes'] ?? ''))); ?></pre>
+        <?php endif; ?>
         <form method="post" class="quick-actions">
             <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>">
             <button class="quick-action-btn" name="update_action" value="check" type="submit"><span class="icon">🔎</span><span>Check for Updates</span></button>
             <button class="quick-action-btn" name="update_action" value="backup" type="submit"><span class="icon">💾</span><span>Backup current system</span></button>
-            <button class="quick-action-btn" name="update_action" value="apply" type="submit" onclick="return confirm('قبل از بروزرسانی بکاپ ساخته می‌شود. ادامه می‌دهید؟')"><span class="icon">⬇️</span><span>Download / Apply update</span></button>
+            <button class="quick-action-btn" name="update_action" value="check" type="submit"><span class="icon">📦</span><span>Download Update Metadata</span></button>
+            <button class="quick-action-btn" name="update_action" value="apply" type="submit" onclick="return confirm('قبل از بروزرسانی بکاپ فایل و دیتابیس ساخته می‌شود. ادامه می‌دهید؟')"><span class="icon">⬇️</span><span>Apply Update</span></button>
             <button class="quick-action-btn" name="update_action" value="rollback" type="submit" onclick="return confirm('Rollback آخرین بکاپ انجام شود؟')"><span class="icon">↩️</span><span>Rollback</span></button>
         </form>
-        <p class="text-muted mt-3">قواعد ایمنی: دیتابیس blind overwrite نمی‌شود؛ قبل از apply بکاپ tar.gz ساخته می‌شود؛ migrationهای SQL جدید در `storage/pending-migrations.txt` ثبت می‌شوند تا در phpMyAdmin بررسی/اعمال شوند.</p>
+        <p class="text-muted mt-3">قواعد ایمنی: قبل از apply بکاپ فایل و دیتابیس ساخته می‌شود؛ migrationهای SQL جدید به‌صورت کنترل‌شده اجرا و در schema_migrations ثبت می‌شوند؛ cache پاک می‌شود؛ در صورت شکست update یا migration، rollback خودکار اجرا می‌شود.</p>
     </div>
 </div>
 <div class="card"><div class="card-header"><h2>Migration Status</h2></div><div class="card-body"><p>مسیر migration: <?php echo h($migrationStatus['directory'] ?? ''); ?></p><ul><?php foreach (($migrationStatus['files'] ?? []) as $file): ?><li><?php echo h($file); ?></li><?php endforeach; ?></ul></div></div>

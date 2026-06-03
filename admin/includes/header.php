@@ -129,6 +129,59 @@
             background: rgba(220, 53, 69, 0.4);
         }
         
+        /* Sticky Admin Header */
+        .admin-topbar {
+            position: sticky;
+            top: 0;
+            z-index: 900;
+            margin: -30px -30px 30px;
+            padding: 14px 30px;
+            min-height: 68px;
+            background: rgba(255,255,255,0.96);
+            border-bottom: 1px solid #e8ecef;
+            box-shadow: 0 2px 14px rgba(0,0,0,0.06);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+        .admin-topbar-brand, .admin-topbar-user {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .admin-topbar-logo {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            background: var(--primary);
+            color: var(--accent);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 24px;
+        }
+        .admin-topbar-title strong, .admin-topbar-user strong { display:block; color: var(--primary); }
+        .admin-topbar-title small, .admin-topbar-user small { color:#666; }
+        .admin-profile-menu {
+            border: 1px solid #e5e7eb;
+            border-radius: 999px;
+            padding: 7px 12px;
+            color: var(--primary);
+            text-decoration: none;
+            background:#fff;
+        }
+        .admin-logout-inline {
+            border-radius: 999px;
+            padding: 8px 14px;
+            background: rgba(220,53,69,.1);
+            color: var(--danger);
+            text-decoration: none;
+            border: 1px solid rgba(220,53,69,.25);
+        }
+
         /* Main Content */
         .main-content {
             margin-right: var(--sidebar-width);
@@ -388,6 +441,8 @@
             .main-content {
                 margin-right: 0;
             }
+            .admin-topbar { margin: -30px -30px 20px; padding: 12px 16px; flex-direction: column; align-items: stretch; }
+            .admin-topbar-user { flex-wrap: wrap; }
             
             .stats-row {
                 grid-template-columns: 1fr;
@@ -504,6 +559,23 @@
     </div>
     
     <div class="main-content">
+        <header class="admin-topbar" role="banner">
+            <div class="admin-topbar-brand">
+                <div class="admin-topbar-logo" aria-label="KEY logo">K</div>
+                <div class="admin-topbar-title">
+                    <strong>KEY Administrator</strong>
+                    <small><?php echo htmlspecialchars($pageTitle ?? 'Admin Panel', ENT_QUOTES, 'UTF-8'); ?></small>
+                </div>
+            </div>
+            <div class="admin-topbar-user">
+                <div>
+                    <strong><?php echo htmlspecialchars($currentAdmin['username'] ?? $currentAdmin['full_name'] ?? 'admin', ENT_QUOTES, 'UTF-8'); ?></strong>
+                    <small><?php echo htmlspecialchars($currentAdmin['role'] ?? 'super_admin', ENT_QUOTES, 'UTF-8'); ?></small>
+                </div>
+                <a class="admin-profile-menu" href="users.php?action=edit&id=<?php echo urlencode((string)($currentAdmin['id'] ?? '')); ?>">Profile menu</a>
+                <a class="admin-logout-inline" href="logout.php">Logout</a>
+            </div>
+        </header>
         <div class="page-header">
             <h1><?php echo $pageTitle ?? 'پنل مدیریت'; ?></h1>
             <div class="breadcrumb">
