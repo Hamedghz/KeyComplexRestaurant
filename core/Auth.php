@@ -12,6 +12,24 @@ class Auth {
     public function __construct() {
         $this->db = Database::getInstance()->getConnection();
     }
+
+    private function adminSelectFields(bool $includePassword = false): string {
+        $fields = ['id', 'username', 'email', 'full_name', 'role'];
+        if ($includePassword) {
+            $fields[] = 'password';
+            $fields[] = 'is_active';
+        }
+        foreach (['department', 'permissions'] as $column) {
+            try {
+                $stmt = $this->db->prepare('SHOW COLUMNS FROM admins LIKE ?');
+                $stmt->execute([$column]);
+                $fields[] = $stmt->fetchColumn() ? $column : "NULL AS {$column}";
+            } catch (Throwable $e) {
+                $fields[] = "NULL AS {$column}";
+            }
+        }
+        return implode(', ', $fields);
+    }
     
     /**
      * Login admin user
@@ -21,7 +39,7 @@ class Auth {
             $loginIdentifier = trim((string)$username);
 
             $stmt = $this->db->prepare("
-                SELECT id, username, email, password, full_name, role, is_active 
+                SELECT " . $this->adminSelectFields(true) . "
                 FROM admins 
                 WHERE (username = :username OR email = :email) AND is_active = 1
             ");
@@ -53,7 +71,7 @@ class Auth {
                 return [
                     'success' => true,
                     'message' => 'ورود موفقیت‌آمیز بود',
-                    'redirect' => ADMIN_URL . '/dashboard.php'
+                    'redirect' => ADMIN_URL . ($admin['role'] === 'employee' ? '/employee-dashboard.php' : '/dashboard.php')
                 ];
             }
             
@@ -163,7 +181,7 @@ class Auth {
         }
         
         $stmt = $this->db->prepare("
-            SELECT id, username, email, full_name, role 
+            SELECT " . $this->adminSelectFields(false) . "
             FROM admins 
             WHERE id = :id
         ");

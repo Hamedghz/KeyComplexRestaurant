@@ -210,9 +210,6 @@ $phoneNumber = $settingModel->get('phone_number', '+98 21 1234 5678');
 $email = $settingModel->get('email', 'info@keyrestaurant.com');
 $locationLat = $settingModel->get('location_lat', '35.6892');
 $locationLng = $settingModel->get('location_lng', '51.3890');
-$instagramUrl = $settingModel->get('instagram_url', 'https://instagram.com/keyrestaurant');
-$telegramUrl = $settingModel->get('telegram_url', 'https://t.me/keyrestaurant');
-$whatsappNumber = $settingModel->get('whatsapp_number', '+989121234567');
 $locationTitle = $settingModel->get('location_title_fa', 'موقعیت و تماس');
 $hoursTitle = $settingModel->get('opening_hours_title_fa', 'ساعت کاری');
 $newsletterTitle = $settingModel->get('newsletter_title_fa', 'باشگاه مشتریان');
@@ -263,7 +260,7 @@ $currentDayKey = $dayMap[$now->format('D')] ?? 'saturday';
 $isCurrentlyOpen = isOpenNow($openingHours, $currentDayKey, $now);
 $baladMapUrl = $settingModel->get('balad_map_url', 'https://balad.ir/location?latitude=' . rawurlencode((string)$locationLat) . '&longitude=' . rawurlencode((string)$locationLng));
 $telLink = normalizeTelLink($phoneNumber);
-$whatsappLink = $whatsappNumber !== '' ? 'https://wa.me/' . ltrim(normalizeTelLink($whatsappNumber), '+') : '';
+$socialLinks = [];
 $newsletterToken = generateCSRFToken();
 
 // Get WebGL settings
@@ -271,6 +268,12 @@ $webglSettings = $settingModel->getWebGLSettings();
 
 // Get dynamic hero banners and filterable menu categories/items
 $db = Database::getInstance()->getConnection();
+try {
+    $socialStmt = $db->query("SELECT title, icon, url FROM social_links WHERE active = 1 AND url <> '' ORDER BY sort_order ASC, id ASC");
+    $socialLinks = $socialStmt->fetchAll();
+} catch (Throwable $e) {
+    $socialLinks = [];
+}
 try {
     $heroStmt = $db->prepare("SELECT * FROM hero_banners WHERE active_status = 1 AND (start_date IS NULL OR start_date <= NOW()) AND (end_date IS NULL OR end_date >= NOW()) ORDER BY display_order ASC, id DESC");
     $heroStmt->execute();
@@ -768,12 +771,30 @@ $featuredItems = $menuModel->getFeatured(6);
             overflow: hidden;
         }
 
-        .map-frame iframe {
+        .map-frame img {
             width: 100%;
             height: 100%;
             min-height: 390px;
-            border: 0;
-            filter: grayscale(0.15) contrast(1.04);
+            object-fit: cover;
+            display: block;
+            opacity: 0.72;
+        }
+
+        .map-fallback-card {
+            position: relative;
+            background: linear-gradient(135deg, rgba(0,70,71,0.9), rgba(212,175,55,0.24));
+        }
+
+        .map-fallback-overlay {
+            position: absolute;
+            inset: auto 24px 24px 24px;
+            display: grid;
+            gap: 10px;
+            padding: 20px;
+            border-radius: 18px;
+            background: rgba(0, 0, 0, 0.58);
+            color: #fff;
+            backdrop-filter: blur(12px);
         }
 
         .hours-section {
@@ -1119,12 +1140,9 @@ $featuredItems = $menuModel->getFeatured(6);
     
     <!-- Social Links -->
     <div class="social-links">
-        <?php if ($instagramUrl !== '#'): ?>
-            <a href="<?php echo homeEscape($instagramUrl); ?>" class="social-link" target="_blank" rel="noopener" aria-label="Instagram">📷</a>
-        <?php endif; ?>
-        <?php if ($telegramUrl !== '#'): ?>
-            <a href="<?php echo homeEscape($telegramUrl); ?>" class="social-link" target="_blank" rel="noopener" aria-label="Telegram">✈️</a>
-        <?php endif; ?>
+        <?php foreach ($socialLinks as $social): ?>
+            <a href="<?php echo homeEscape($social['url']); ?>" class="social-link" target="_blank" rel="noopener" aria-label="<?php echo homeEscape($social['title']); ?>"><?php echo homeEscape($social['icon']); ?></a>
+        <?php endforeach; ?>
         <?php if ($telLink !== ''): ?>
             <a href="tel:<?php echo homeEscape($telLink); ?>" class="social-link" aria-label="Call">📞</a>
         <?php endif; ?>
@@ -1224,8 +1242,13 @@ $featuredItems = $menuModel->getFeatured(6);
                         <a class="secondary-button" href="<?php echo homeEscape($baladMapUrl); ?>" target="_blank" rel="noopener">باز کردن در بلد</a>
                     </div>
                 </div>
-                <div class="map-frame glass-panel">
-                    <iframe title="Balad map" src="<?php echo homeEscape($baladMapUrl); ?>" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+                <div class="map-frame glass-panel map-fallback-card">
+                    <img src="<?php echo homeEscape(assetUrl('assets/images/map-placeholder.svg')); ?>" alt="KEY location map preview" loading="lazy">
+                    <div class="map-fallback-overlay">
+                        <strong>KEY Restaurant Location</strong>
+                        <span><?php echo homeEscape($locationLat); ?>, <?php echo homeEscape($locationLng); ?></span>
+                        <a class="secondary-button" href="<?php echo homeEscape($baladMapUrl); ?>" target="_blank" rel="noopener">باز کردن در بلد</a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1280,15 +1303,9 @@ $featuredItems = $menuModel->getFeatured(6);
                     <h3 class="footer-title"><?php echo homeEscape($siteName); ?></h3>
                     <p class="footer-text"><?php echo homeEscape($heroSubtitle); ?></p>
                     <div class="footer-social">
-                        <?php if ($instagramUrl !== '#'): ?>
-                            <a href="<?php echo homeEscape($instagramUrl); ?>" target="_blank" rel="noopener" aria-label="Instagram">📷</a>
-                        <?php endif; ?>
-                        <?php if ($telegramUrl !== '#'): ?>
-                            <a href="<?php echo homeEscape($telegramUrl); ?>" target="_blank" rel="noopener" aria-label="Telegram">✈️</a>
-                        <?php endif; ?>
-                        <?php if ($whatsappLink !== ''): ?>
-                            <a href="<?php echo homeEscape($whatsappLink); ?>" target="_blank" rel="noopener" aria-label="WhatsApp">💬</a>
-                        <?php endif; ?>
+                        <?php foreach ($socialLinks as $social): ?>
+                            <a href="<?php echo homeEscape($social['url']); ?>" target="_blank" rel="noopener" aria-label="<?php echo homeEscape($social['title']); ?>"><?php echo homeEscape($social['icon']); ?></a>
+                        <?php endforeach; ?>
                     </div>
                 </div>
                 <div>
