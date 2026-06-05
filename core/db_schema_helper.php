@@ -6,73 +6,73 @@ if (!function_exists('normalizeSchemaIdentifier')) {
     }
 }
 
+if (!function_exists('schemaConfigureBufferedConnection')) {
+    function schemaConfigureBufferedConnection(PDO $pdo): void {
+        if (defined('PDO::MYSQL_ATTR_USE_BUFFERED_QUERY')) {
+            $pdo->setAttribute(constant('PDO::MYSQL_ATTR_USE_BUFFERED_QUERY'), true);
+        }
+    }
+}
+
+if (!function_exists('schemaInformationExists')) {
+    function schemaInformationExists(PDO $pdo, string $sql, array $params): bool {
+        schemaConfigureBufferedConnection($pdo);
+
+        $stmt = $pdo->prepare($sql);
+
+        try {
+            $stmt->execute($params);
+            $rows = $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
+            return $rows !== [];
+        } finally {
+            $stmt->closeCursor();
+        }
+    }
+}
+
 if (!function_exists('schemaTableExists')) {
     function schemaTableExists(PDO $pdo, string $table): bool {
-
-        $stmt = $pdo->prepare("
+        return schemaInformationExists($pdo, "
             SELECT 1
             FROM INFORMATION_SCHEMA.TABLES
             WHERE TABLE_SCHEMA = DATABASE()
               AND TABLE_NAME = :table_name
             LIMIT 1
-        ");
-
-        $stmt->execute([
-            'table_name' => normalizeSchemaIdentifier($table)
+        ", [
+            'table_name' => normalizeSchemaIdentifier($table),
         ]);
-
-        $result = $stmt->fetchColumn();
-        $stmt->closeCursor();
-
-        return $result !== false;
     }
 }
 
 if (!function_exists('schemaColumnExists')) {
     function schemaColumnExists(PDO $pdo, string $table, string $column): bool {
-
-        $stmt = $pdo->prepare("
+        return schemaInformationExists($pdo, "
             SELECT 1
             FROM INFORMATION_SCHEMA.COLUMNS
             WHERE TABLE_SCHEMA = DATABASE()
               AND TABLE_NAME = :table_name
               AND COLUMN_NAME = :column_name
             LIMIT 1
-        ");
-
-        $stmt->execute([
+        ", [
             'table_name' => normalizeSchemaIdentifier($table),
             'column_name' => normalizeSchemaIdentifier($column),
         ]);
-
-        $result = $stmt->fetchColumn();
-        $stmt->closeCursor();
-
-        return $result !== false;
     }
 }
 
 if (!function_exists('schemaIndexExists')) {
     function schemaIndexExists(PDO $pdo, string $table, string $index): bool {
-
-        $stmt = $pdo->prepare("
+        return schemaInformationExists($pdo, "
             SELECT 1
             FROM INFORMATION_SCHEMA.STATISTICS
             WHERE TABLE_SCHEMA = DATABASE()
               AND TABLE_NAME = :table_name
               AND INDEX_NAME = :index_name
             LIMIT 1
-        ");
-
-        $stmt->execute([
+        ", [
             'table_name' => normalizeSchemaIdentifier($table),
             'index_name' => normalizeSchemaIdentifier($index),
         ]);
-
-        $result = $stmt->fetchColumn();
-        $stmt->closeCursor();
-
-        return $result !== false;
     }
 }
 
