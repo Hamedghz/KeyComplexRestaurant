@@ -7,7 +7,9 @@ $pageTitle = 'Device Analytics';
 $error = '';
 $from = trim((string)($_GET['date_from'] ?? date('Y-m-d', strtotime('-30 days'))));
 $to = trim((string)($_GET['date_to'] ?? date('Y-m-d')));
-$group = in_array(($_GET['group'] ?? 'device'), ['device','browser','os','language'], true) ? $_GET['group'] : 'device';
+$allowedGroups = ['device', 'browser', 'os', 'language'];
+$requestedGroup = trim((string)($_GET['group'] ?? 'device'));
+$group = in_array($requestedGroup, $allowedGroups, true) ? $requestedGroup : 'device';
 $rows = [];
 
 try {
