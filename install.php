@@ -84,22 +84,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
 
             $runner->executeSqlFile($schemaPath);
-            SchemaSynchronizer::sync($pdo, $schemaPath);
             $runner->markApplied('database/schema.sql');
             $runner->run();
+            SchemaSynchronizer::sync($pdo, $schemaPath);
 
             $adminStmt = $pdo->prepare(
                 'INSERT INTO `admins` (`username`, `email`, `password`, `full_name`, `role`, `is_active`)
                  VALUES (:username, :email, :password, :full_name, :role, 1)
                  ON DUPLICATE KEY UPDATE `email` = VALUES(`email`), `password` = VALUES(`password`), `full_name` = VALUES(`full_name`), `role` = VALUES(`role`), `is_active` = 1'
             );
-            $adminStmt->execute([
-                'username' => $adminUsername,
-                'email' => $adminEmail,
-                'password' => password_hash($adminPassword, PASSWORD_DEFAULT),
-                'full_name' => $adminName !== '' ? $adminName : $adminUsername,
-                'role' => 'super_admin',
-            ]);
+            try {
+                $adminStmt->execute([
+                    'username' => $adminUsername,
+                    'email' => $adminEmail,
+                    'password' => password_hash($adminPassword, PASSWORD_DEFAULT),
+                    'full_name' => $adminName !== '' ? $adminName : $adminUsername,
+                    'role' => 'super_admin',
+                ]);
+            } finally {
+                $adminStmt->closeCursor();
+            }
 
             foreach ($uploadDirs as $dir) {
                 if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
@@ -138,12 +142,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 function connectInstallerDatabase(string $host, string $name, string $user, string $pass): PDO {
     $dsn = 'mysql:host=' . $host . ';dbname=' . $name . ';charset=utf8mb4';
-    return new PDO($dsn, $user, $pass, [
+    $options = [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES => false,
-        PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci',
-    ]);
+        PDO::ATTR_PERSISTENT => false,
+    ];
+
+    if (defined('PDO::MYSQL_ATTR_INIT_COMMAND')) {
+        $options[constant('PDO::MYSQL_ATTR_INIT_COMMAND')] = 'SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci';
+    }
+
+    if (defined('PDO::MYSQL_ATTR_USE_BUFFERED_QUERY')) {
+        $options[constant('PDO::MYSQL_ATTR_USE_BUFFERED_QUERY')] = true;
+    }
+
+    $pdo = new PDO($dsn, $user, $pass, $options);
+
+    if (defined('PDO::MYSQL_ATTR_USE_BUFFERED_QUERY')) {
+        $pdo->setAttribute(constant('PDO::MYSQL_ATTR_USE_BUFFERED_QUERY'), true);
+    }
+
+    return $pdo;
 }
 
 function writeInstallerConfig(string $path, array $config): void {

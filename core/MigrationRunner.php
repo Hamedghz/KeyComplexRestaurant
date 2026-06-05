@@ -10,14 +10,11 @@ class MigrationRunner {
     public function __construct(PDO $pdo, array $directories) {
         $this->pdo = $pdo;
         $this->directories = $directories;
-
-        // 🔥 FIX: prevent PDO 2014 unbuffered query crash
-        $this->pdo->setAttribute(PDO::MYSQL_ATTR_USE_BUFFERED_QUERY, true);
+        self::configureBufferedConnection($this->pdo);
     }
 
     public function ensureVersionTable(): void {
-
-        $this->pdo->exec("
+        $this->executePreparedStatement("
             CREATE TABLE IF NOT EXISTS `system_versions` (
                 `id` int unsigned NOT NULL AUTO_INCREMENT,
                 `version_name` varchar(255) NOT NULL,
@@ -27,18 +24,15 @@ class MigrationRunner {
                 UNIQUE KEY `uniq_system_versions_name` (`version_name`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         ");
-
-        $this->pdo->query("SELECT 1")->closeCursor();
     }
 
     public function run(): array {
-
+        self::configureBufferedConnection($this->pdo);
         $this->ensureVersionTable();
 
         $results = [];
 
         foreach ($this->migrationFiles() as $file) {
-
             $versionName = basename(dirname($file)) . '/' . basename($file);
 
             if ($this->hasSuccessfulVersion($versionName)) {
@@ -50,10 +44,9 @@ class MigrationRunner {
                 $this->executeSqlFile($file);
                 $this->recordVersion($versionName, 'success');
                 $results[$versionName] = 'success';
-
             } catch (Throwable $e) {
                 $this->recordVersion($versionName, 'failed');
-                throw new RuntimeException('Migration failed: ' . $versionName);
+                throw new RuntimeException('Migration failed: ' . $versionName, 0, $e);
             }
         }
 
@@ -61,16 +54,38 @@ class MigrationRunner {
     }
 
     public function markApplied(string $versionName, string $status = 'success'): void {
+        self::configureBufferedConnection($this->pdo);
         $this->ensureVersionTable();
         $this->recordVersion($versionName, $status);
     }
 
-    private function migrationFiles(): array {
+    public function executeSqlFile(string $file): void {
+        self::configureBufferedConnection($this->pdo);
 
+        $sql = file_get_contents($file);
+
+        if ($sql === false) {
+            throw new RuntimeException('SQL file read failed: ' . basename($file));
+        }
+
+        foreach ($this->splitSqlStatements($sql) as $statement) {
+            $this->executeStatement($statement);
+        }
+    }
+
+    public static function configureBufferedConnection(PDO $pdo): void {
+        if (defined('PDO::MYSQL_ATTR_USE_BUFFERED_QUERY')) {
+            $pdo->setAttribute(constant('PDO::MYSQL_ATTR_USE_BUFFERED_QUERY'), true);
+        }
+    }
+
+    private function migrationFiles(): array {
         $files = [];
 
         foreach ($this->directories as $dir) {
-            if (!is_dir($dir)) continue;
+            if (!is_dir($dir)) {
+                continue;
+            }
 
             foreach (glob(rtrim($dir, DIRECTORY_SEPARATOR) . '/*.sql') ?: [] as $file) {
                 $files[] = $file;
@@ -82,7 +97,6 @@ class MigrationRunner {
     }
 
     private function hasSuccessfulVersion(string $versionName): bool {
-
         $stmt = $this->pdo->prepare("
             SELECT 1
             FROM system_versions
@@ -90,16 +104,16 @@ class MigrationRunner {
             LIMIT 1
         ");
 
-        $stmt->execute(['v' => $versionName]);
-
-        $res = $stmt->fetchColumn();
-        $stmt->closeCursor();
-
-        return $res !== false;
+        try {
+            $stmt->execute(['v' => $versionName]);
+            $rows = $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
+            return $rows !== [];
+        } finally {
+            $stmt->closeCursor();
+        }
     }
 
     private function recordVersion(string $versionName, string $status): void {
-
         $stmt = $this->pdo->prepare("
             INSERT INTO system_versions (version_name, status)
             VALUES (:v, :s)
@@ -108,72 +122,95 @@ class MigrationRunner {
                 executed_at = CURRENT_TIMESTAMP
         ");
 
-        $stmt->execute([
-            'v' => $versionName,
-            's' => $status
-        ]);
-
-        $stmt->closeCursor();
-    }
-
-    public function executeSqlFile(string $file): void {
-
-        $sql = file_get_contents($file);
-
-        if (!$sql) {
-            throw new RuntimeException('SQL file read failed');
-        }
-
-        foreach ($this->splitSqlStatements($sql) as $statement) {
-            $this->executeStatement($statement);
+        try {
+            $stmt->execute([
+                'v' => $versionName,
+                's' => $status,
+            ]);
+        } finally {
+            $stmt->closeCursor();
         }
     }
 
     private function executeStatement(string $statement): void {
-
         $statement = trim($statement);
-        if ($statement === '') return;
+
+        if ($statement === '') {
+            return;
+        }
 
         try {
-            $this->pdo->exec($statement);
-
+            $this->executePreparedStatement($statement);
         } catch (PDOException $e) {
-
             if (!$this->isRecoverableSqlError($e)) {
                 throw $e;
             }
         }
+    }
 
-        // 🔥 FIX: release implicit cursor state
-        $this->pdo->query("SELECT 1")->closeCursor();
+    private function executePreparedStatement(string $sql, array $params = []): void {
+        $stmt = $this->pdo->prepare($sql);
+
+        try {
+            $stmt->execute($params);
+            $this->drainStatement($stmt);
+        } finally {
+            $stmt->closeCursor();
+        }
+    }
+
+    private function drainStatement(PDOStatement $stmt): void {
+        do {
+            if ($stmt->columnCount() > 0) {
+                $stmt->fetchAll(PDO::FETCH_ASSOC);
+            }
+
+            try {
+                $hasMoreRows = $stmt->nextRowset();
+            } catch (PDOException $e) {
+                $hasMoreRows = false;
+            }
+        } while ($hasMoreRows);
     }
 
     private function splitSqlStatements(string $sql): array {
-
         $statements = [];
         $buffer = '';
         $quote = null;
         $len = strlen($sql);
 
         for ($i = 0; $i < $len; $i++) {
-
             $c = $sql[$i];
             $n = $sql[$i + 1] ?? '';
 
             if ($quote === null && $c === '-' && $n === '-') {
-                while ($i < $len && $sql[$i] !== "\n") $i++;
+                while ($i < $len && $sql[$i] !== "\n") {
+                    $i++;
+                }
+                continue;
+            }
+
+            if ($quote === null && $c === '#') {
+                while ($i < $len && $sql[$i] !== "\n") {
+                    $i++;
+                }
                 continue;
             }
 
             if ($quote === null && $c === '/' && $n === '*') {
                 $i += 2;
-                while ($i < $len && !($sql[$i] === '*' && ($sql[$i + 1] ?? '') === '/')) $i++;
+                while ($i < $len && !($sql[$i] === '*' && ($sql[$i + 1] ?? '') === '/')) {
+                    $i++;
+                }
+                $i++;
                 continue;
             }
 
             if ($quote !== null) {
                 $buffer .= $c;
-                if ($c === $quote && ($i === 0 || $sql[$i - 1] !== '\\')) $quote = null;
+                if ($c === $quote && ($i === 0 || $sql[$i - 1] !== '\\')) {
+                    $quote = null;
+                }
                 continue;
             }
 
@@ -184,8 +221,10 @@ class MigrationRunner {
             }
 
             if ($c === ';') {
-                $t = trim($buffer);
-                if ($t !== '') $statements[] = $t;
+                $statement = trim($buffer);
+                if ($statement !== '') {
+                    $statements[] = $statement;
+                }
                 $buffer = '';
                 continue;
             }
@@ -193,18 +232,25 @@ class MigrationRunner {
             $buffer .= $c;
         }
 
-        $t = trim($buffer);
-        if ($t !== '') $statements[] = $t;
+        $statement = trim($buffer);
+        if ($statement !== '') {
+            $statements[] = $statement;
+        }
 
         return $statements;
     }
 
     private function isRecoverableSqlError(PDOException $e): bool {
-
         $code = $e->errorInfo[1] ?? 0;
 
         return in_array((int)$code, [
-            1050,1060,1061,1062,1091,1215,1826
+            1050,
+            1060,
+            1061,
+            1062,
+            1091,
+            1215,
+            1826,
         ], true);
     }
 }
