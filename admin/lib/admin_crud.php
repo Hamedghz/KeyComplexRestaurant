@@ -4,44 +4,59 @@ require_once __DIR__ . '/../../core/Auth.php';
 require_once __DIR__ . '/admin_schema.php';
 
 if (!function_exists('adminGuard')) {
-function adminGuard($requiredRole = 'employee') {
-    if (session_status() !== PHP_SESSION_ACTIVE) session_start();
-    try {
-        $auth = new Auth();
-    } catch (Throwable $e) {
-        error_log('[admin] Authentication bootstrap failed: ' . $e->getMessage());
-        http_response_code(500);
-        exit('درخواست قابل پردازش نیست. جزئیات خطا در لاگ سیستم ثبت شد.');
+    function adminGuard($requiredRole = 'employee') {
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            session_start();
+        }
+        
+        try {
+            $auth = new Auth();
+        } catch (Throwable $e) {
+            error_log('[admin] Authentication bootstrap failed: ' . $e->getMessage());
+            http_response_code(500);
+            exit('درخواست قابل پردازش نیست. جزئیات خطا در لاگ سیستم ثبت شد.');
+        }
+        
+        if (!$auth->isLoggedIn()) {
+            header('Location: index.php');
+            exit;
+        }
+        
+        if (!$auth->hasPermission($requiredRole)) {
+            http_response_code(403);
+            exit('دسترسی کافی نیست.');
+        }
+        
+        return $auth->getCurrentAdmin();
     }
-    if (!$auth->isLoggedIn()) {
-        header('Location: index.php');
-        exit;
-    }
-    if (!$auth->hasPermission($requiredRole)) {
-        http_response_code(403);
-        exit('دسترسی کافی نیست.');
-    }
-    return $auth->getCurrentAdmin();
-}
 }
 
 if (!function_exists('h')) {
-function h($value) { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'); }
-}
-if (!function_exists('redirectTo')) {
-function redirectTo($url) { header('Location: ' . $url); exit; }
+    function h($value) {
+        return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+    }
 }
 
-function adminPermissionAllows(?array $admin, string $permission, array $fallbackRoles = ['manager','admin','super_admin']): bool {
+if (!function_exists('redirectTo')) {
+    function redirectTo($url) {
+        header('Location: ' . $url);
+        exit;
+    }
+}
+
+function adminPermissionAllows(?array $admin, string $permission, array $fallbackRoles = ['manager', 'admin', 'super_admin']): bool {
     if (!$admin) {
         return false;
     }
+    
     $role = (string)($admin['role'] ?? 'employee');
     if ($role === 'super_admin') {
         return true;
     }
+    
     $raw = $admin['permissions'] ?? null;
     $permissions = [];
+    
     if (is_string($raw) && trim($raw) !== '') {
         $decoded = json_decode($raw, true);
         if (is_array($decoded)) {
@@ -50,9 +65,11 @@ function adminPermissionAllows(?array $admin, string $permission, array $fallbac
     } elseif (is_array($raw)) {
         $permissions = $raw;
     }
+    
     if (array_key_exists($permission, $permissions)) {
         return (bool)$permissions[$permission];
     }
+    
     return in_array($role, $fallbackRoles, true);
 }
 
@@ -61,6 +78,7 @@ function fetchAcquisitionSourceOptions(): array {
         $db = Database::getInstance()->getConnection();
         $stmt = $db->query('SELECT title FROM acquisition_sources WHERE active = 1 ORDER BY sort_order ASC, title ASC');
         $rows = $stmt->fetchAll();
+        
         if ($rows) {
             $options = [];
             foreach ($rows as $row) {
@@ -71,92 +89,195 @@ function fetchAcquisitionSourceOptions(): array {
     } catch (Throwable $e) {
         // Schema may not be installed yet; fall back to accepted defaults.
     }
-    return ['Instagram'=>'Instagram','Telegram'=>'Telegram','Google'=>'Google','Balad'=>'Balad','Friend Referral'=>'Friend Referral','Walk-in'=>'Walk-in','Website'=>'Website','Advertisement'=>'Advertisement','Other'=>'Other'];
+    
+    return [
+        'Instagram' => 'Instagram',
+        'Telegram' => 'Telegram',
+        'Google' => 'Google',
+        'Balad' => 'Balad',
+        'Friend Referral' => 'Friend Referral',
+        'Walk-in' => 'Walk-in',
+        'Website' => 'Website',
+        'Advertisement' => 'Advertisement',
+        'Other' => 'Other'
+    ];
 }
 
 if (!function_exists('safeAdminLog')) {
-function safeAdminLog(string $message): void {
-    error_log('[admin] ' . $message);
-}
+    function safeAdminLog(string $message): void {
+        error_log('[admin] ' . $message);
+    }
 }
 
 function adminModuleConfigs() {
     return [
         'crm' => [
-            'title' => 'CRM مشتریان', 'min_role' => 'manager', 'table' => 'crm_customers', 'unique' => 'mobile', 'date_fields' => ['birth_date','first_purchase_date','reminder_date','last_visit_date'],
-            'search' => ['full_name','mobile','tags','acquisition_source'], 'filters' => ['acquisition_source','tags','attended_match_event'],
+            'title' => 'CRM مشتریان',
+            'min_role' => 'manager',
+            'table' => 'crm_customers',
+            'unique' => 'mobile',
+            'date_fields' => ['birth_date', 'first_purchase_date', 'reminder_date', 'last_visit_date'],
+            'search' => ['full_name', 'mobile', 'tags', 'acquisition_source'],
+            'filters' => ['acquisition_source', 'tags', 'attended_match_event'],
             'fields' => [
-                'full_name'=>['label'=>'نام کامل','type'=>'text','required'=>true], 'mobile'=>['label'=>'موبایل','type'=>'mobile','required'=>true],
-                'birth_date'=>['label'=>'تولد','type'=>'date'], 'first_purchase_date'=>['label'=>'اولین خرید','type'=>'date'],
-                'total_orders'=>['label'=>'تعداد سفارش','type'=>'number'], 'total_purchase_volume'=>['label'=>'حجم خرید','type'=>'number'],
-                'reminder_date'=>['label'=>'یادآوری','type'=>'date'], 'acquisition_source'=>['label'=>'منبع جذب','type'=>'select','options'=>fetchAcquisitionSourceOptions()],
-                'notes'=>['label'=>'یادداشت','type'=>'textarea'], 'surveys_completed_count'=>['label'=>'تعداد نظرسنجی','type'=>'number'],
-                'last_visit_date'=>['label'=>'آخرین مراجعه','type'=>'date'], 'tags'=>['label'=>'برچسب‌ها','type'=>'text'],
-                'attended_match_event'=>['label'=>'حضور در رویداد مسابقه','type'=>'checkbox'],
+                'full_name' => ['label' => 'نام کامل', 'type' => 'text', 'required' => true],
+                'mobile' => ['label' => 'موبایل', 'type' => 'mobile', 'required' => true],
+                'birth_date' => ['label' => 'تولد', 'type' => 'date'],
+                'first_purchase_date' => ['label' => 'اولین خرید', 'type' => 'date'],
+                'total_orders' => ['label' => 'تعداد سفارش', 'type' => 'number'],
+                'total_purchase_volume' => ['label' => 'حجم خرید', 'type' => 'number'],
+                'reminder_date' => ['label' => 'یادآوری', 'type' => 'date'],
+                'acquisition_source' => ['label' => 'منبع جذب', 'type' => 'select', 'options' => fetchAcquisitionSourceOptions()],
+                'notes' => ['label' => 'یادداشت', 'type' => 'textarea'],
+                'surveys_completed_count' => ['label' => 'تعداد نظرسنجی', 'type' => 'number'],
+                'last_visit_date' => ['label' => 'آخرین مراجعه', 'type' => 'date'],
+                'tags' => ['label' => 'برچسب‌ها', 'type' => 'text'],
+                'attended_match_event' => ['label' => 'حضور در رویداد مسابقه', 'type' => 'checkbox'],
             ],
-            'columns' => ['id','full_name','mobile','birth_date','first_purchase_date','total_orders','total_purchase_volume','acquisition_source','attended_match_event','tags','created_at'],
+            'columns' => ['id', 'full_name', 'mobile', 'birth_date', 'first_purchase_date', 'total_orders', 'total_purchase_volume', 'acquisition_source', 'attended_match_event', 'tags', 'created_at'],
         ],
         'matches' => [
-            'title'=>'مدیریت مسابقات','min_role'=>'manager','table'=>'matches','unique'=>null,'date_fields'=>['match_date','prediction_open_at','prediction_close_at'],
-            'search'=>['team_a','team_b','status'],'filters'=>['status','is_active','active_for_prediction','match_finished'],
-            'fields'=>[
-                'team_a'=>['label'=>'تیم اول','type'=>'text','required'=>true], 'team_b'=>['label'=>'تیم دوم','type'=>'text','required'=>true],
-                'match_date'=>['label'=>'تاریخ مسابقه','type'=>'date','required'=>true], 'kickoff_time'=>['label'=>'ساعت شروع','type'=>'time','required'=>true],
-                'broadcast_time'=>['label'=>'ساعت پخش','type'=>'time'], 'prediction_open_at'=>['label'=>'شروع پیش‌بینی','type'=>'datetime','required'=>true],
-                'prediction_close_at'=>['label'=>'پایان پیش‌بینی','type'=>'datetime','required'=>true], 'status'=>['label'=>'وضعیت','type'=>'select','options'=>['scheduled'=>'برنامه‌ریزی شده','live'=>'زنده','finished'=>'تمام شده','cancelled'=>'لغو شده']],
-                'is_active'=>['label'=>'فعال','type'=>'checkbox'], 'active_for_prediction'=>['label'=>'فعال برای پیش‌بینی','type'=>'checkbox'],
-                'final_score_team_a'=>['label'=>'نتیجه نهایی تیم اول','type'=>'number'],
-                'final_score_team_b'=>['label'=>'نتیجه نهایی تیم دوم','type'=>'number'],
-                'match_finished'=>['label'=>'مسابقه تمام شده','type'=>'checkbox'],
-            ], 'columns'=>['id','team_a','team_b','match_date','kickoff_time','broadcast_time','status','is_active','active_for_prediction']
+            'title' => 'مدیریت مسابقات',
+            'min_role' => 'manager',
+            'table' => 'matches',
+            'unique' => null,
+            'date_fields' => ['match_date', 'prediction_open_at', 'prediction_close_at'],
+            'search' => ['team_a', 'team_b', 'status'],
+            'filters' => ['status', 'is_active', 'active_for_prediction', 'match_finished'],
+            'fields' => [
+                'team_a' => ['label' => 'تیم اول', 'type' => 'text', 'required' => true],
+                'team_b' => ['label' => 'تیم دوم', 'type' => 'text', 'required' => true],
+                'match_date' => ['label' => 'تاریخ مسابقه', 'type' => 'date', 'required' => true],
+                'kickoff_time' => ['label' => 'ساعت شروع', 'type' => 'time', 'required' => true],
+                'broadcast_time' => ['label' => 'ساعت پخش', 'type' => 'time'],
+                'prediction_open_at' => ['label' => 'شروع پیش‌بینی', 'type' => 'datetime', 'required' => true],
+                'prediction_close_at' => ['label' => 'پایان پیش‌بینی', 'type' => 'datetime', 'required' => true],
+                'status' => ['label' => 'وضعیت', 'type' => 'select', 'options' => [
+                    'scheduled' => 'برنامه‌ریزی شده',
+                    'live' => 'زنده',
+                    'finished' => 'تمام شده',
+                    'cancelled' => 'لغو شده'
+                ]],
+                'is_active' => ['label' => 'فعال', 'type' => 'checkbox'],
+                'active_for_prediction' => ['label' => 'فعال برای پیش‌بینی', 'type' => 'checkbox'],
+                'final_score_team_a' => ['label' => 'نتیجه نهایی تیم اول', 'type' => 'number'],
+                'final_score_team_b' => ['label' => 'نتیجه نهایی تیم دوم', 'type' => 'number'],
+                'match_finished' => ['label' => 'مسابقه تمام شده', 'type' => 'checkbox'],
+            ],
+            'columns' => ['id', 'team_a', 'team_b', 'match_date', 'kickoff_time', 'broadcast_time', 'status', 'is_active', 'active_for_prediction']
         ],
         'predictions' => [
-            'title'=>'پیش‌بینی‌ها','min_role'=>'manager','table'=>'predictions','unique'=>'mobile','date_fields'=>[], 'readonly_create'=>true,
-            'search'=>['customer_name','mobile'],'filters'=>['crm_matched','customer_exists','attended_match_time','match_id','is_correct_prediction','crm_match','attended_match'],
-            'join'=>'SELECT p.*, CONCAT(m.team_a, " - ", m.team_b) AS match_title FROM predictions p LEFT JOIN matches m ON p.match_id = m.id', 'required_tables'=>['matches'],
-            'fields'=>[
-                'customer_name'=>['label'=>'نام','type'=>'text','required'=>true], 'mobile'=>['label'=>'موبایل','type'=>'mobile','required'=>true],
-                'match_id'=>['label'=>'مسابقه','type'=>'match','required'=>true], 'predicted_score_team_a'=>['label'=>'گل تیم اول','type'=>'number','required'=>true],
-                'predicted_score_team_b'=>['label'=>'گل تیم دوم','type'=>'number','required'=>true], 'crm_matched'=>['label'=>'CRM Match','type'=>'checkbox'],
-                'customer_exists'=>['label'=>'مشتری موجود','type'=>'checkbox'], 'attended_match_time'=>['label'=>'حضور زمان مسابقه','type'=>'checkbox'],
-                'is_correct_prediction'=>['label'=>'پیش‌بینی صحیح','type'=>'checkbox'],
-                'crm_match'=>['label'=>'CRM Match (جدید)','type'=>'checkbox'],
-                'attended_match'=>['label'=>'حضور در مسابقه (جدید)','type'=>'checkbox'],
-            ], 'columns'=>['id','customer_name','mobile','match_title','predicted_score_team_a','predicted_score_team_b','crm_matched','customer_exists','attended_match_time','created_at']
+            'title' => 'پیش‌بینی‌ها',
+            'min_role' => 'manager',
+            'table' => 'predictions',
+            'unique' => 'mobile',
+            'date_fields' => [],
+            'readonly_create' => true,
+            'search' => ['customer_name', 'mobile'],
+            'filters' => ['crm_matched', 'customer_exists', 'attended_match_time', 'match_id', 'is_correct_prediction', 'crm_match', 'attended_match'],
+            'join' => 'SELECT p.*, CONCAT(m.team_a, " - ", m.team_b) AS match_title FROM predictions p LEFT JOIN matches m ON p.match_id = m.id',
+            'required_tables' => ['matches'],
+            'fields' => [
+                'customer_name' => ['label' => 'نام', 'type' => 'text', 'required' => true],
+                'mobile' => ['label' => 'موبایل', 'type' => 'mobile', 'required' => true],
+                'match_id' => ['label' => 'مسابقه', 'type' => 'match', 'required' => true],
+                'predicted_score_team_a' => ['label' => 'گل تیم اول', 'type' => 'number', 'required' => true],
+                'predicted_score_team_b' => ['label' => 'گل تیم دوم', 'type' => 'number', 'required' => true],
+                'crm_matched' => ['label' => 'CRM Match', 'type' => 'checkbox'],
+                'customer_exists' => ['label' => 'مشتری موجود', 'type' => 'checkbox'],
+                'attended_match_time' => ['label' => 'حضور زمان مسابقه', 'type' => 'checkbox'],
+                'is_correct_prediction' => ['label' => 'پیش‌بینی صحیح', 'type' => 'checkbox'],
+                'crm_match' => ['label' => 'CRM Match (جدید)', 'type' => 'checkbox'],
+                'attended_match' => ['label' => 'حضور در مسابقه (جدید)', 'type' => 'checkbox'],
+            ],
+            'columns' => ['id', 'customer_name', 'mobile', 'match_title', 'predicted_score_team_a', 'predicted_score_team_b', 'crm_matched', 'customer_exists', 'attended_match_time', 'created_at']
         ],
         'banners' => [
-            'title'=>'بنرهای اصلی','min_role'=>'manager','table'=>'hero_banners','unique'=>null,'date_fields'=>['start_date','end_date'], 'search'=>['title','subtitle'],'filters'=>['active_status'],
-            'fields'=>[
-                'title'=>['label'=>'عنوان','type'=>'text','required'=>true], 'subtitle'=>['label'=>'زیرعنوان','type'=>'text'], 'description'=>['label'=>'توضیح','type'=>'textarea'],
-                'button_text'=>['label'=>'متن دکمه','type'=>'text'], 'button_link'=>['label'=>'لینک دکمه','type'=>'text'], 'image'=>['label'=>'تصویر','type'=>'image','path'=>'uploads/banners'],
-                'mobile_image'=>['label'=>'تصویر موبایل','type'=>'image','path'=>'uploads/banners'], 'display_order'=>['label'=>'ترتیب','type'=>'number'],
-                'active_status'=>['label'=>'فعال','type'=>'checkbox'], 'start_date'=>['label'=>'شروع','type'=>'datetime'], 'end_date'=>['label'=>'پایان','type'=>'datetime'],
-            ], 'columns'=>['id','title','display_order','active_status','start_date','end_date','created_at']
+            'title' => 'بنرهای اصلی',
+            'min_role' => 'manager',
+            'table' => 'hero_banners',
+            'unique' => null,
+            'date_fields' => ['start_date', 'end_date'],
+            'search' => ['title', 'subtitle'],
+            'filters' => ['active_status'],
+            'fields' => [
+                'title' => ['label' => 'عنوان', 'type' => 'text', 'required' => true],
+                'subtitle' => ['label' => 'زیرعنوان', 'type' => 'text'],
+                'description' => ['label' => 'توضیح', 'type' => 'textarea'],
+                'button_text' => ['label' => 'متن دکمه', 'type' => 'text'],
+                'button_link' => ['label' => 'لینک دکمه', 'type' => 'text'],
+                'image' => ['label' => 'تصویر', 'type' => 'image', 'path' => 'uploads/banners'],
+                'mobile_image' => ['label' => 'تصویر موبایل', 'type' => 'image', 'path' => 'uploads/banners'],
+                'display_order' => ['label' => 'ترتیب', 'type' => 'number'],
+                'active_status' => ['label' => 'فعال', 'type' => 'checkbox'],
+                'start_date' => ['label' => 'شروع', 'type' => 'datetime'],
+                'end_date' => ['label' => 'پایان', 'type' => 'datetime'],
+            ],
+            'columns' => ['id', 'title', 'display_order', 'active_status', 'start_date', 'end_date', 'created_at']
         ],
         'categories' => [
-            'title'=>'فیلترها و دسته‌بندی منو','min_role'=>'manager','table'=>'menu_categories','unique'=>'slug','date_fields'=>[], 'search'=>['name_fa','name_en','slug'],'filters'=>['is_active'],
-            'fields'=>[
-                'name_fa'=>['label'=>'نام فارسی','type'=>'text','required'=>true], 'name_en'=>['label'=>'نام انگلیسی','type'=>'text'], 'slug'=>['label'=>'اسلاگ','type'=>'text','required'=>true],
-                'icon'=>['label'=>'آیکن','type'=>'text'], 'sort_order'=>['label'=>'ترتیب','type'=>'number'], 'is_active'=>['label'=>'فعال','type'=>'checkbox'],
-            ], 'columns'=>['id','name_fa','slug','icon','sort_order','is_active']
+            'title' => 'فیلترها و دسته‌بندی منو',
+            'min_role' => 'manager',
+            'table' => 'menu_categories',
+            'unique' => 'slug',
+            'date_fields' => [],
+            'search' => ['name_fa', 'name_en', 'slug'],
+            'filters' => ['is_active'],
+            'fields' => [
+                'name_fa' => ['label' => 'نام فارسی', 'type' => 'text', 'required' => true],
+                'name_en' => ['label' => 'نام انگلیسی', 'type' => 'text'],
+                'slug' => ['label' => 'اسلاگ', 'type' => 'text', 'required' => true],
+                'icon' => ['label' => 'آیکن', 'type' => 'text'],
+                'sort_order' => ['label' => 'ترتیب', 'type' => 'number'],
+                'is_active' => ['label' => 'فعال', 'type' => 'checkbox'],
+            ],
+            'columns' => ['id', 'name_fa', 'slug', 'icon', 'sort_order', 'is_active']
         ],
         'menu-items' => [
-            'title'=>'آیتم‌های منو','min_role'=>'manager','table'=>'menu_items','unique'=>'slug','date_fields'=>[], 'search'=>['name_fa','name_en','slug','description_fa'],'filters'=>['category_id','is_available'],
-            'join'=>'SELECT mi.*, mc.name_fa AS category_title FROM menu_items mi LEFT JOIN menu_categories mc ON mi.category_id = mc.id', 'required_tables'=>['menu_categories'],
-            'fields'=>[
-                'category_id'=>['label'=>'دسته‌بندی','type'=>'category','required'=>true], 'name_fa'=>['label'=>'عنوان فارسی','type'=>'text','required'=>true], 'name_en'=>['label'=>'عنوان انگلیسی','type'=>'text'],
-                'slug'=>['label'=>'اسلاگ','type'=>'text','required'=>true], 'description_fa'=>['label'=>'توضیح فارسی','type'=>'textarea'], 'description_en'=>['label'=>'توضیح انگلیسی','type'=>'textarea'],
-                'image'=>['label'=>'تصویر','type'=>'image','path'=>'uploads/menu'], 'gallery_images'=>['label'=>'گالری (با کاما)','type'=>'text'], 'price'=>['label'=>'قیمت','type'=>'number','required'=>true],
-                'discount_price'=>['label'=>'قیمت تخفیف','type'=>'number'], 'is_available'=>['label'=>'فعال','type'=>'checkbox'], 'is_featured'=>['label'=>'ویژه','type'=>'checkbox'], 'sort_order'=>['label'=>'ترتیب','type'=>'number'],
-            ], 'columns'=>['id','category_title','name_fa','price','discount_price','is_available','sort_order']
+            'title' => 'آیتم‌های منو',
+            'min_role' => 'manager',
+            'table' => 'menu_items',
+            'unique' => 'slug',
+            'date_fields' => [],
+            'search' => ['name_fa', 'name_en', 'slug', 'description_fa'],
+            'filters' => ['category_id', 'is_available'],
+            'join' => 'SELECT mi.*, mc.name_fa AS category_title FROM menu_items mi LEFT JOIN menu_categories mc ON mi.category_id = mc.id',
+            'required_tables' => ['menu_categories'],
+            'fields' => [
+                'category_id' => ['label' => 'دسته‌بندی', 'type' => 'category', 'required' => true],
+                'name_fa' => ['label' => 'عنوان فارسی', 'type' => 'text', 'required' => true],
+                'name_en' => ['label' => 'عنوان انگلیسی', 'type' => 'text'],
+                'slug' => ['label' => 'اسلاگ', 'type' => 'text', 'required' => true],
+                'description_fa' => ['label' => 'توضیح فارسی', 'type' => 'textarea'],
+                'description_en' => ['label' => 'توضیح انگلیسی', 'type' => 'textarea'],
+                'image' => ['label' => 'تصویر', 'type' => 'image', 'path' => 'uploads/menu'],
+                'gallery_images' => ['label' => 'گالری (با کاما)', 'type' => 'text'],
+                'price' => ['label' => 'قیمت', 'type' => 'number', 'required' => true],
+                'discount_price' => ['label' => 'قیمت تخفیف', 'type' => 'number'],
+                'is_available' => ['label' => 'فعال', 'type' => 'checkbox'],
+                'is_featured' => ['label' => 'ویژه', 'type' => 'checkbox'],
+                'sort_order' => ['label' => 'ترتیب', 'type' => 'number'],
+            ],
+            'columns' => ['id', 'category_title', 'name_fa', 'price', 'discount_price', 'is_available', 'sort_order']
         ],
         'surveys' => [
-            'title'=>'فرم‌های نظرسنجی','min_role'=>'admin','table'=>'dynamic_forms','unique'=>'form_name','date_fields'=>[], 'search'=>['form_name','form_title_fa'],'filters'=>['is_active'],
-            'fields'=>[
-                'form_name'=>['label'=>'نام سیستمی','type'=>'text','required'=>true], 'form_title_fa'=>['label'=>'عنوان فارسی','type'=>'text','required'=>true], 'form_title_en'=>['label'=>'عنوان انگلیسی','type'=>'text'],
-                'form_description_fa'=>['label'=>'توضیح فارسی','type'=>'textarea'], 'form_schema'=>['label'=>'Schema JSON','type'=>'textarea','default'=>'{"fields":[]}'],
-                'is_active'=>['label'=>'فعال','type'=>'checkbox'], 'display_order'=>['label'=>'ترتیب','type'=>'number'],
-            ], 'columns'=>['id','form_name','form_title_fa','is_active','display_order','created_at']
+            'title' => 'فرم‌های نظرسنجی',
+            'min_role' => 'admin',
+            'table' => 'dynamic_forms',
+            'unique' => 'form_name',
+            'date_fields' => [],
+            'search' => ['form_name', 'form_title_fa'],
+            'filters' => ['is_active'],
+            'fields' => [
+                'form_name' => ['label' => 'نام سیستمی', 'type' => 'text', 'required' => true],
+                'form_title_fa' => ['label' => 'عنوان فارسی', 'type' => 'text', 'required' => true],
+                'form_title_en' => ['label' => 'عنوان انگلیسی', 'type' => 'text'],
+                'form_description_fa' => ['label' => 'توضیح فارسی', 'type' => 'textarea'],
+                'form_schema' => ['label' => 'Schema JSON', 'type' => 'textarea', 'default' => '{"fields":[]}'],
+                'is_active' => ['label' => 'فعال', 'type' => 'checkbox'],
+                'display_order' => ['label' => 'ترتیب', 'type' => 'number'],
+            ],
+            'columns' => ['id', 'form_name', 'form_title_fa', 'is_active', 'display_order', 'created_at']
         ],
         'survey-responses' => [
             'title'=>'پاسخ‌های نظرسنجی','min_role'=>'manager','table'=>'survey_responses','unique'=>'customer_phone','date_fields'=>[], 'date_column'=>'submitted_at', 'search'=>['customer_name','customer_phone','customer_email'],'filters'=>['form_id'],
