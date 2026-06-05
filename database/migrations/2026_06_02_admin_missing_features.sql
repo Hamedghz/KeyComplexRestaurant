@@ -3,8 +3,8 @@ ALTER TABLE `admins`
   MODIFY `role` enum('super_admin','admin','manager','employee') DEFAULT 'admin';
 
 ALTER TABLE `admins`
-  ADD COLUMN IF NOT EXISTS `department` varchar(100) DEFAULT NULL AFTER `role`,
-  ADD COLUMN IF NOT EXISTS `permissions` JSON DEFAULT NULL AFTER `department`;
+  ADD COLUMN `department` varchar(100) DEFAULT NULL AFTER `role`,
+  ADD COLUMN `permissions` JSON DEFAULT NULL AFTER `department`;
 
 CREATE TABLE IF NOT EXISTS `employee_performance` (
   `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,

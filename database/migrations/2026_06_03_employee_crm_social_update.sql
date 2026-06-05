@@ -1,12 +1,12 @@
 -- Employee evaluation, CRM acquisition, social links, and Balad fallback support.
 ALTER TABLE `admins`
-  ADD COLUMN IF NOT EXISTS `department` varchar(100) DEFAULT NULL AFTER `role`,
-  ADD COLUMN IF NOT EXISTS `permissions` JSON DEFAULT NULL AFTER `department`,
+  ADD COLUMN `department` varchar(100) DEFAULT NULL AFTER `role`,
+  ADD COLUMN `permissions` JSON DEFAULT NULL AFTER `department`,
   MODIFY `role` enum('super_admin','admin','manager','employee') DEFAULT 'admin';
 
 ALTER TABLE `crm_customers`
-  ADD COLUMN IF NOT EXISTS `acquisition_source` varchar(100) DEFAULT NULL AFTER `reminder_date`;
-CREATE INDEX IF NOT EXISTS `idx_crm_acquisition_source` ON `crm_customers` (`acquisition_source`);
+  ADD COLUMN `acquisition_source` varchar(100) DEFAULT NULL AFTER `reminder_date`;
+CREATE INDEX `idx_crm_acquisition_source` ON `crm_customers` (`acquisition_source`);
 
 CREATE TABLE IF NOT EXISTS `acquisition_sources` (
   `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,

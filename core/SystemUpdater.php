@@ -59,11 +59,23 @@ class SystemUpdater {
     }
 
     public function migrationStatus() {
-        $migrationDir = ROOT_PATH . '/database/migrations';
+        $migrationDirs = [ROOT_PATH . '/database/migrations', ROOT_PATH . '/migrations'];
+        $files = [];
+        foreach ($migrationDirs as $dir) {
+            if (!is_dir($dir)) {
+                continue;
+            }
+            foreach (glob($dir . '/*.sql') ?: [] as $file) {
+                $files[] = basename($dir) . '/' . basename($file);
+            }
+        }
+        sort($files, SORT_STRING);
+
         return [
-            'directory' => $migrationDir,
-            'files' => is_dir($migrationDir) ? array_map('basename', glob($migrationDir . '/*.sql') ?: []) : [],
+            'directory' => implode(', ', $migrationDirs),
+            'files' => $files,
             'pending_file' => STORAGE_PATH . '/pending-migrations.txt',
+            'version_table' => 'system_versions',
         ];
     }
 
@@ -203,25 +215,16 @@ class SystemUpdater {
     }
 
     private function runPendingMigrations() {
-        $migrationDir = ROOT_PATH . '/database/migrations';
-        if (!is_dir($migrationDir)) return;
-        $pdo = Database::getInstance()->getConnection();
-        $pdo->exec("CREATE TABLE IF NOT EXISTS `schema_migrations` (`migration` varchar(255) NOT NULL, `executed_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`migration`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-        $applied = $pdo->query('SELECT migration FROM schema_migrations')->fetchAll(PDO::FETCH_COLUMN) ?: [];
+        require_once ROOT_PATH . '/core/MigrationRunner.php';
+
+        $runner = new MigrationRunner(Database::getInstance()->getConnection(), [
+            ROOT_PATH . '/database/migrations',
+            ROOT_PATH . '/migrations',
+        ]);
+        $results = $runner->run();
         $log = [];
-        foreach (glob($migrationDir . '/*.sql') ?: [] as $file) {
-            $name = basename($file);
-            if (in_array($name, $applied, true)) continue;
-            $sql = trim((string)file_get_contents($file));
-            if ($sql === '') continue;
-            try {
-                $pdo->exec($sql);
-                $stmt = $pdo->prepare('INSERT INTO schema_migrations (migration) VALUES (?)');
-                $stmt->execute([$name]);
-                $log[] = 'applied ' . $name;
-            } catch (Throwable $e) {
-                throw new RuntimeException('Migration failed: ' . $name . ' - ' . $e->getMessage());
-            }
+        foreach ($results as $migration => $status) {
+            $log[] = $status . ' ' . $migration;
         }
         file_put_contents(STORAGE_PATH . '/pending-migrations.txt', $log ? implode("\n", $log) : 'No pending migrations at ' . date('c'), LOCK_EX);
     }
