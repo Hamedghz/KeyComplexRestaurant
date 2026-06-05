@@ -130,19 +130,66 @@ function adminSharedHostingCompatibleCreate(string $statement): string {
     return preg_replace('/\bJSON\b/i', 'LONGTEXT', $statement) ?: $statement;
 }
 
-function ensureAdminCanonicalTables(PDO $db): array {
+function ensureAdminCanonicalTables(PDO $db, array $requestedTables = []): array {
     $changes = [];
-    $tables = [
+    // Keep this list in dependency order. It is the shared-hosting fallback when
+    // the full schema synchronizer stops early on old MySQL/MariaDB features
+    // (for example native JSON columns). Missing admin modules should still be
+    // able to repair their own tables from database/schema.sql.
+    $canonicalOrder = [
         'admins',
+        'users',
+        'orders',
         'menu_categories',
         'menu_items',
         'dynamic_forms',
         'survey_responses',
+        'crm_customers',
+        'crm_timelines',
         'hero_banners',
         'matches',
         'predictions',
         'employee_evaluations',
+        'employee_monthly_inputs',
+        'employee_score_history',
+        'employee_rewards',
+        'employee_warnings',
+        'employee_performance',
+        'analytics_visitors',
+        'analytics_sessions',
+        'analytics_pageviews',
     ];
+
+    $dependencyMap = [
+        'menu_items' => ['menu_categories'],
+        'dynamic_forms' => ['admins'],
+        'survey_responses' => ['admins', 'users', 'orders', 'dynamic_forms'],
+        'crm_customers' => ['users'],
+        'crm_timelines' => ['users', 'crm_customers'],
+        'predictions' => ['matches'],
+        'employee_evaluations' => ['admins'],
+        'employee_monthly_inputs' => ['admins'],
+        'employee_score_history' => ['admins'],
+        'employee_rewards' => ['admins'],
+        'employee_warnings' => ['admins'],
+        'employee_performance' => ['admins'],
+    ];
+
+    if ($requestedTables) {
+        $wanted = [];
+        $addWithDependencies = function (string $table) use (&$wanted, &$addWithDependencies, $dependencyMap): void {
+            foreach (($dependencyMap[$table] ?? []) as $dependency) {
+                $addWithDependencies($dependency);
+            }
+            $wanted[$table] = true;
+        };
+        foreach ($requestedTables as $table) {
+            $addWithDependencies($table);
+        }
+        $tables = array_values(array_filter($canonicalOrder, static fn($table) => isset($wanted[$table])));
+    } else {
+        $tables = $canonicalOrder;
+    }
 
     foreach ($tables as $table) {
         if (adminTableExists($table)) {
