@@ -470,6 +470,19 @@ function renderAdminModule($module) {
         adminRenderSafeError($config['title'], "Schema bootstrap failed for module {$module}: " . $e->getMessage());
         return;
     }
+    $missingTables = [];
+    foreach (adminRequiredTables($config) as $requiredTable) {
+        if (!adminTableExists($requiredTable)) {
+            $missingTables[] = $requiredTable;
+        }
+    }
+    if ($missingTables) {
+        try {
+            ensureAdminCanonicalTables(Database::getInstance()->getConnection(), $missingTables);
+        } catch (Throwable $e) {
+            safeAdminLog("Targeted table repair failed for module {$module}: " . $e->getMessage());
+        }
+    }
     foreach (adminRequiredTables($config) as $requiredTable) {
         if (!adminTableExists($requiredTable)) {
             adminRenderSafeError($config['title'], "Missing table for module {$module}: {$requiredTable}");

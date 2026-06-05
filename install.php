@@ -3,7 +3,7 @@
  * KEY Restaurant & Coffeehouse production installer.
  *
  * Shared-hosting friendly installer: no shell commands, imports the consolidated
- * schema, runs SQL migrations once, writes config.php, creates runtime folders,
+ * schema, writes config.php, creates runtime folders,
  * creates the first administrator, and writes installed.lock.
  */
 
@@ -190,7 +190,7 @@ function installValue(string $name, string $default = ''): string {
 <body>
 <div class="wrap">
     <h1>KEY Restaurant & Coffeehouse Installer</h1>
-    <p class="note">Imports <strong>database/schema.sql</strong>, runs the single final migration once, reconciles schema safely, creates runtime directories, and writes production config.</p>
+    <p class="note">Imports <strong>database/schema.sql</strong> as the canonical fresh-install schema, creates runtime directories, and writes production config.</p>
 
     <?php if ($success): ?>
         <div class="alert success">

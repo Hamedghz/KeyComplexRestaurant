@@ -10,6 +10,13 @@ try {
     return;
 }
 if (!adminTableExists('admins') || !adminTableExists('employee_evaluations')) {
+    try {
+        ensureAdminCanonicalTables($db, ['admins', 'employee_evaluations']);
+    } catch (Throwable $e) {
+        safeAdminLog('Targeted employee evaluations table repair failed: ' . $e->getMessage());
+    }
+}
+if (!adminTableExists('admins') || !adminTableExists('employee_evaluations')) {
     adminRenderSafeError($pageTitle, 'Employee evaluations required table is missing.');
     return;
 }

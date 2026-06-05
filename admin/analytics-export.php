@@ -28,7 +28,8 @@ $exports = [
     ],
 ];
 if ($type === 'device') {
-    $group = array_key_exists((string)($_GET['group'] ?? 'device'), $deviceGroups) ? (string)$_GET['group'] : 'device';
+    $requestedGroup = (string)($_GET['group'] ?? 'device');
+    $group = array_key_exists($requestedGroup, $deviceGroups) ? $requestedGroup : 'device';
     $column = $deviceGroups[$group];
     $exports['device'] = [
         'headers' => ['label','visits','unique_sessions'],

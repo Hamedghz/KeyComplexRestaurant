@@ -1,6 +1,6 @@
 -- KEY Restaurant & Coffeehouse canonical production schema
 
--- Single source of truth generated from the legacy schema, survey schema, homepage extensions, database migrations, and production fixes.
+-- Single source of truth generated from the legacy schema, survey schema, homepage extensions, runtime analytics migration, admin CRUD tables, and production fixes.
 
 -- MySQL 5.7+/MariaDB compatible.
 
