@@ -6,6 +6,7 @@ $updater = new SystemUpdater();
 $pageTitle = 'بروزرسانی سیستم';
 $message = '';
 $error = '';
+$shellWarning = $updater->shellCommandsAvailable() ? '' : 'تابع exec روی هاست غیرفعال است؛ عملیات وابسته به git/tar/mysqldump اجرا نمی‌شود و صفحه بدون خطای ۵۰۰ فقط وضعیت محدود را نمایش می‌دهد.';
 $status = [];
 $logs = [];
 $migrationStatus = [];
@@ -55,6 +56,7 @@ include __DIR__ . '/includes/header.php';
     <div class="card-body">
         <?php if ($message): ?><div class="alert alert-info"><?php echo h($message); ?></div><?php endif; ?>
         <?php if ($error): ?><div class="alert" style="background:#f8d7da;color:#721c24"><?php echo h($error); ?></div><?php endif; ?>
+        <?php if ($shellWarning): ?><div class="alert" style="background:#fff3cd;color:#856404"><?php echo h($shellWarning); ?></div><?php endif; ?>
         <p>GitHub repository: <strong><?php echo h($status['github_url'] ?? $updater->githubUrl()); ?></strong></p>
         <p>نسخه فعلی: <strong><?php echo h($status['current'] ?? 'unknown'); ?></strong></p>
         <p>آخرین نسخه remote: <strong><?php echo h($status['latest'] ?? 'unknown'); ?></strong></p>

@@ -84,6 +84,94 @@ function ensureTableColumns(string $table, array $columns): void {
     }
 }
 
+
+function adminCanonicalCreateStatement(string $table): ?string {
+    $schemaFile = ROOT_PATH . '/database/schema.sql';
+    if (!is_readable($schemaFile)) {
+        return null;
+    }
+
+    $sql = file_get_contents($schemaFile);
+    if ($sql === false || trim($sql) === '') {
+        return null;
+    }
+
+    $quotedTable = preg_quote($table, '/');
+    if (!preg_match('/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`' . $quotedTable . '`/i', $sql, $match, PREG_OFFSET_CAPTURE)) {
+        return null;
+    }
+
+    $start = $match[0][1];
+    $quote = null;
+    $length = strlen($sql);
+    for ($i = $start; $i < $length; $i++) {
+        $char = $sql[$i];
+        if ($quote !== null) {
+            if ($char === $quote && ($i === 0 || $sql[$i - 1] !== '\\')) {
+                $quote = null;
+            }
+            continue;
+        }
+        if (in_array($char, ["'", '"', '`'], true)) {
+            $quote = $char;
+            continue;
+        }
+        if ($char === ';') {
+            return trim(substr($sql, $start, $i - $start + 1));
+        }
+    }
+
+    return null;
+}
+
+function adminSharedHostingCompatibleCreate(string $statement): string {
+    // Some shared hosts still run old MySQL/MariaDB variants. LONGTEXT preserves
+    // existing JSON payloads safely when a native JSON column is unavailable.
+    return preg_replace('/\bJSON\b/i', 'LONGTEXT', $statement) ?: $statement;
+}
+
+function ensureAdminCanonicalTables(PDO $db): array {
+    $changes = [];
+    $tables = [
+        'admins',
+        'menu_categories',
+        'menu_items',
+        'dynamic_forms',
+        'survey_responses',
+        'hero_banners',
+        'matches',
+        'predictions',
+        'employee_evaluations',
+    ];
+
+    foreach ($tables as $table) {
+        if (adminTableExists($table)) {
+            continue;
+        }
+
+        $statement = adminCanonicalCreateStatement($table);
+        if ($statement === null) {
+            $changes[] = "canonical create skipped for {$table} (schema statement missing)";
+            continue;
+        }
+
+        try {
+            $db->exec($statement);
+            $changes[] = "created missing canonical table {$table}";
+        } catch (Throwable $firstError) {
+            try {
+                $db->exec(adminSharedHostingCompatibleCreate($statement));
+                $changes[] = "created missing canonical table {$table} with shared-hosting compatible JSON columns";
+            } catch (Throwable $fallbackError) {
+                $changes[] = "canonical create failed for {$table} (خطا: " . $fallbackError->getMessage() . ')';
+                safeAdminLog("Canonical table repair failed for {$table}: " . $firstError->getMessage() . ' | fallback: ' . $fallbackError->getMessage());
+            }
+        }
+    }
+
+    return $changes;
+}
+
 function ensureAdminSchema(): array {
     $db = adminDb();
     $changes = [];
@@ -93,6 +181,11 @@ function ensureAdminSchema(): array {
         }
     } catch (Throwable $e) {
         $changes[] = 'schema-sync skipped (خطا: ' . $e->getMessage() . ')';
+        safeAdminLog('Schema synchronizer skipped: ' . $e->getMessage());
+    }
+
+    foreach (ensureAdminCanonicalTables($db) as $repairChange) {
+        $changes[] = 'canonical-table-repair: ' . $repairChange;
     }
 
     $run = function (string $sql, string $label) use ($db, &$changes) {

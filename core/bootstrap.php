@@ -108,10 +108,16 @@ if (!function_exists('str_ends_with')) {
     }
 }
 
-ini_set('session.cookie_httponly', '1');
-ini_set('session.use_only_cookies', '1');
-ini_set('session.cookie_secure', parse_url(BASE_URL, PHP_URL_SCHEME) === 'https' ? '1' : '0');
-ini_set('session.cookie_samesite', 'Lax');
+// Session INI values must be configured before any session is opened. Some
+// entry points (notably installer/update flows on shared hosting) may include
+// bootstrap after session_start(), so avoid noisy warnings that can break admin
+// responses while keeping the intended settings for normal requests.
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    ini_set('session.cookie_httponly', '1');
+    ini_set('session.use_only_cookies', '1');
+    ini_set('session.cookie_secure', parse_url(BASE_URL, PHP_URL_SCHEME) === 'https' ? '1' : '0');
+    ini_set('session.cookie_samesite', 'Lax');
+}
 
 if (!function_exists('generateCSRFToken')) {
     function generateCSRFToken() {
