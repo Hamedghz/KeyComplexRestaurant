@@ -6,6 +6,7 @@ $updater = new SystemUpdater();
 $pageTitle = 'بروزرسانی سیستم';
 $message = '';
 $error = '';
+$shellWarning = $updater->shellCommandsAvailable() ? '' : 'تابع exec روی هاست غیرفعال است؛ عملیات وابسته به git/tar/mysqldump اجرا نمی‌شود و صفحه بدون خطای ۵۰۰ فقط وضعیت محدود را نمایش می‌دهد.';
 $status = [];
 $logs = [];
 $migrationStatus = [];
@@ -23,18 +24,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message = 'Rollback از بکاپ انجام شد: ' . $updater->rollback();
         }
     } catch (Throwable $e) {
-        $error = $e->getMessage();
+        $error = 'عملیات بروزرسانی انجام نشد. جزئیات خطا در لاگ سیستم ثبت شد.';
+        safeAdminLog('System update action failed: ' . $e->getMessage());
     }
 }
 
 try {
     $status = $updater->check();
 } catch (Throwable $e) {
-    $error = $error ?: $e->getMessage();
+    $error = $error ?: 'بررسی بروزرسانی انجام نشد. جزئیات خطا در لاگ سیستم ثبت شد.';
+    safeAdminLog('System update check failed: ' . $e->getMessage());
     $status = ['current' => $updater->currentVersion(), 'latest' => 'unknown', 'update_available' => false];
 }
-$logs = $updater->updateLogs();
-$migrationStatus = $updater->migrationStatus();
+try {
+    $logs = $updater->updateLogs();
+} catch (Throwable $e) {
+    safeAdminLog('System update logs failed: ' . $e->getMessage());
+    $logs = [];
+}
+try {
+    $migrationStatus = $updater->migrationStatus();
+} catch (Throwable $e) {
+    safeAdminLog('System update migration status failed: ' . $e->getMessage());
+    $migrationStatus = [];
+}
 
 include __DIR__ . '/includes/header.php';
 ?>
@@ -43,6 +56,7 @@ include __DIR__ . '/includes/header.php';
     <div class="card-body">
         <?php if ($message): ?><div class="alert alert-info"><?php echo h($message); ?></div><?php endif; ?>
         <?php if ($error): ?><div class="alert" style="background:#f8d7da;color:#721c24"><?php echo h($error); ?></div><?php endif; ?>
+        <?php if ($shellWarning): ?><div class="alert" style="background:#fff3cd;color:#856404"><?php echo h($shellWarning); ?></div><?php endif; ?>
         <p>GitHub repository: <strong><?php echo h($status['github_url'] ?? $updater->githubUrl()); ?></strong></p>
         <p>نسخه فعلی: <strong><?php echo h($status['current'] ?? 'unknown'); ?></strong></p>
         <p>آخرین نسخه remote: <strong><?php echo h($status['latest'] ?? 'unknown'); ?></strong></p>

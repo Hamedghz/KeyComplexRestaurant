@@ -11,12 +11,30 @@ class SystemUpdater {
         $this->root = $root;
     }
 
+    private function canRunShellCommands(): bool {
+        if (!function_exists('exec')) {
+            return false;
+        }
+
+        $disabled = array_map('trim', explode(',', (string)ini_get('disable_functions')));
+        return !in_array('exec', $disabled, true);
+    }
+
     private function run(array $command, &$exitCode = null) {
+        if (!$this->canRunShellCommands()) {
+            $exitCode = 127;
+            return 'Shell command execution is disabled on this host.';
+        }
+
         $escaped = array_map('escapeshellarg', $command);
         $cmd = 'cd ' . escapeshellarg($this->root) . ' && ' . implode(' ', $escaped) . ' 2>&1';
         $output = [];
         exec($cmd, $output, $exitCode);
         return implode("\n", $output);
+    }
+
+    public function shellCommandsAvailable(): bool {
+        return $this->canRunShellCommands();
     }
 
     private function log(string $message): void {
@@ -44,7 +62,7 @@ class SystemUpdater {
     public function githubUrl(): string {
         $code = 0;
         $remote = trim($this->run(['git', 'config', '--get', 'remote.origin.url'], $code));
-        return $remote !== '' ? $remote : $this->githubRepo;
+        return $code === 0 && $remote !== '' ? $remote : $this->githubRepo;
     }
 
     public function updateLogs() {
@@ -84,7 +102,13 @@ class SystemUpdater {
         $this->run(['git', 'remote', 'set-url', 'origin', $this->githubRepo], $code);
         $fetchOutput = $this->run(['git', 'fetch', 'origin', $this->branch, '--tags', '--quiet'], $code);
         $localFull = trim($this->run(['git', 'rev-parse', 'HEAD'], $code));
+        if ($code !== 0) {
+            $localFull = '';
+        }
         $remoteFull = trim($this->run(['git', 'rev-parse', 'origin/' . $this->branch], $code));
+        if ($code !== 0) {
+            $remoteFull = '';
+        }
         $behind = 0;
         if ($localFull !== '' && $remoteFull !== '') {
             $count = trim($this->run(['git', 'rev-list', '--count', $localFull . '..' . $remoteFull], $code));
@@ -148,6 +172,10 @@ class SystemUpdater {
         if (!is_dir($dir)) mkdir($dir, 0755, true);
         $stamp = date('Ymd-His');
         $dbBackup = $this->backupDatabase($dir . '/database-' . $stamp . '.sql');
+        if (!$this->canRunShellCommands()) {
+            throw new RuntimeException('Shell command execution is disabled on this host; system file backup/update is unavailable. Database backup fallback may still be used separately.');
+        }
+
         $file = $dir . '/system-' . $stamp . '.tar.gz';
         $code = 0;
         $output = $this->run(['tar', '--exclude=.git', '--exclude=node_modules', '--exclude=storage/backups', '-czf', $file, '.'], $code);

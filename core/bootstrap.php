@@ -85,10 +85,39 @@ if (!is_dir(STORAGE_PATH . '/logs')) {
 }
 ini_set('error_log', STORAGE_PATH . '/logs/php-error.log');
 
-ini_set('session.cookie_httponly', '1');
-ini_set('session.use_only_cookies', '1');
-ini_set('session.cookie_secure', parse_url(BASE_URL, PHP_URL_SCHEME) === 'https' ? '1' : '0');
-ini_set('session.cookie_samesite', 'Lax');
+// PHP 8 string helpers are used by shared admin utilities. Production hosts may
+// still run PHP 7.4, so provide small compatible polyfills before any request
+// code calls them.
+if (!function_exists('str_starts_with')) {
+    function str_starts_with($haystack, $needle) {
+        $haystack = (string)$haystack;
+        $needle = (string)$needle;
+        return $needle === '' || strncmp($haystack, $needle, strlen($needle)) === 0;
+    }
+}
+
+if (!function_exists('str_ends_with')) {
+    function str_ends_with($haystack, $needle) {
+        $haystack = (string)$haystack;
+        $needle = (string)$needle;
+        if ($needle === '') {
+            return true;
+        }
+        $length = strlen($needle);
+        return substr($haystack, -$length) === $needle;
+    }
+}
+
+// Session INI values must be configured before any session is opened. Some
+// entry points (notably installer/update flows on shared hosting) may include
+// bootstrap after session_start(), so avoid noisy warnings that can break admin
+// responses while keeping the intended settings for normal requests.
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    ini_set('session.cookie_httponly', '1');
+    ini_set('session.use_only_cookies', '1');
+    ini_set('session.cookie_secure', parse_url(BASE_URL, PHP_URL_SCHEME) === 'https' ? '1' : '0');
+    ini_set('session.cookie_samesite', 'Lax');
+}
 
 if (!function_exists('generateCSRFToken')) {
     function generateCSRFToken() {

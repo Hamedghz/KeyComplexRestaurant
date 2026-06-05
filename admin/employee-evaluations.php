@@ -1,9 +1,18 @@
 <?php
-require_once __DIR__ . '/lib/admin_schema.php';
+require_once __DIR__ . '/lib/admin_crud.php';
 $currentAdmin = adminGuard('employee');
-ensureAdminSchema();
-$db = adminDb();
 $pageTitle = 'پرتال ارزیابی همکاران';
+try {
+    ensureAdminSchema();
+    $db = adminDb();
+} catch (Throwable $e) {
+    adminRenderSafeError($pageTitle, 'Employee evaluations bootstrap failed: ' . $e->getMessage());
+    return;
+}
+if (!adminTableExists('admins') || !adminTableExists('employee_evaluations')) {
+    adminRenderSafeError($pageTitle, 'Employee evaluations required table is missing.');
+    return;
+}
 $error = '';
 $message = '';
 $period = preg_match('/^\d{4}-\d{2}$/', (string)($_POST['period_month'] ?? $_GET['period_month'] ?? '')) ? (string)($_POST['period_month'] ?? $_GET['period_month']) : date('Y-m');
@@ -86,15 +95,23 @@ try {
         $message = 'ارزیابی به‌صورت خصوصی ذخیره شد.';
     }
 } catch (Throwable $e) {
-    $error = $e->getMessage();
+    $error = 'عملیات انجام نشد. جزئیات خطا در لاگ سیستم ثبت شد.';
+    safeAdminLog('Employee evaluation save failed: ' . $e->getMessage());
 }
 
+$employees = [];
+$mine = [];
+try {
 $employeesStmt = $db->prepare("SELECT id, username, full_name, role, department FROM admins WHERE is_active=1 AND role IN ('employee','manager','admin') AND id <> ? ORDER BY department, full_name, username");
 $employeesStmt->execute([$currentAdmin['id']]);
 $employees = $employeesStmt->fetchAll();
 $myStmt = $db->prepare('SELECT ev.*, a.full_name, a.username FROM employee_evaluations ev JOIN admins a ON a.id = ev.employee_id WHERE ev.evaluator_id = ? ORDER BY ev.updated_at DESC LIMIT 20');
 $myStmt->execute([$currentAdmin['id']]);
 $mine = $myStmt->fetchAll();
+} catch (Throwable $e) {
+    $error = 'داده‌های ارزیابی در حال حاضر قابل نمایش نیستند. جزئیات خطا در لاگ سیستم ثبت شد.';
+    safeAdminLog('Employee evaluation list failed: ' . $e->getMessage());
+}
 include __DIR__ . '/includes/header.php';
 ?>
 <?php if ($message): ?><div class="alert alert-info"><?php echo h($message); ?></div><?php endif; ?>
