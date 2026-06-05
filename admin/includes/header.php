@@ -546,19 +546,6 @@
                 <span>⬆️</span> بروزرسانی سیستم
             </a>
         </nav>
-        
-        <div class="sidebar-footer">
-            <div class="user-info">
-                <div class="user-avatar">
-                    <?php echo mb_substr($currentAdmin['full_name'] ?? 'A', 0, 1); ?>
-                </div>
-                <div>
-                    <strong><?php echo htmlspecialchars($currentAdmin['full_name'] ?? 'Admin'); ?></strong><br>
-                    <small><?php echo htmlspecialchars($currentAdmin['role'] ?? 'admin'); ?></small>
-                </div>
-            </div>
-            <a href="logout.php" class="logout-btn">خروج از پنل</a>
-        </div>
     </div>
     
     <div class="main-content">
