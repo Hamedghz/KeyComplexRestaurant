@@ -1474,5 +1474,6 @@ $featuredItems = $menuModel->getFeatured(6);
             });
         });
     </script>
+    <script src="<?php echo homeEscape(assetUrl('assets/js/analytics-tracker.js')); ?>" defer></script>
 </body>
 </html>
