@@ -8,7 +8,7 @@ Deploy the project files directly into the domain server root. There is no wrapp
 2. Make sure PHP can write `config.php`, `installed.lock`, `uploads/`, and `storage/`.
 3. Browse to `/install.php`.
 4. Enter database host, database name, username, and password.
-5. Submit the form. The installer will verify the DB connection, execute `database/schema.sql` and `database/survey_schema.sql`, provision the default admin, write `config.php`, and create `installed.lock`.
+5. Submit the form. The installer will verify the DB connection, execute `database/schema.sql`, provision the default admin, write `config.php`, and create `installed.lock`.
 6. Browse to `/index.php`.
 
 ## Security notes

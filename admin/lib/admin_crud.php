@@ -3,6 +3,7 @@ require_once __DIR__ . '/../../core/models/GenericModel.php';
 require_once __DIR__ . '/../../core/Auth.php';
 require_once __DIR__ . '/admin_schema.php';
 
+if (!function_exists('adminGuard')) {
 function adminGuard($requiredRole = 'employee') {
     if (session_status() !== PHP_SESSION_ACTIVE) session_start();
     $auth = new Auth();
@@ -16,9 +17,14 @@ function adminGuard($requiredRole = 'employee') {
     }
     return $auth->getCurrentAdmin();
 }
+}
 
+if (!function_exists('h')) {
 function h($value) { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'); }
+}
+if (!function_exists('redirectTo')) {
 function redirectTo($url) { header('Location: ' . $url); exit; }
+}
 
 function adminPermissionAllows(?array $admin, string $permission, array $fallbackRoles = ['manager','admin','super_admin']): bool {
     if (!$admin) {
@@ -62,8 +68,10 @@ function fetchAcquisitionSourceOptions(): array {
     return ['Instagram'=>'Instagram','Telegram'=>'Telegram','Google'=>'Google','Balad'=>'Balad','Friend Referral'=>'Friend Referral','Walk-in'=>'Walk-in','Website'=>'Website','Advertisement'=>'Advertisement','Other'=>'Other'];
 }
 
+if (!function_exists('safeAdminLog')) {
 function safeAdminLog(string $message): void {
     error_log('[admin] ' . $message);
+}
 }
 
 function adminModuleConfigs() {
@@ -204,10 +212,10 @@ function collectData($config, $current = []) {
 }
 
 function recalculatePredictionsForMatch(int $matchId): void {
-    if ($matchId <= 0 || !tableExists('matches') || !tableExists('predictions')) {
+    if ($matchId <= 0 || !adminTableExists('matches') || !adminTableExists('predictions')) {
         return;
     }
-    if (!columnExists('matches', 'match_finished') || !columnExists('matches', 'final_score_team_a') || !columnExists('matches', 'final_score_team_b') || !columnExists('predictions', 'is_correct_prediction')) {
+    if (!adminColumnExists('matches', 'match_finished') || !adminColumnExists('matches', 'final_score_team_a') || !adminColumnExists('matches', 'final_score_team_b') || !adminColumnExists('predictions', 'is_correct_prediction')) {
         return;
     }
     $db = Database::getInstance()->getConnection();
@@ -220,7 +228,7 @@ function recalculatePredictionsForMatch(int $matchId): void {
 }
 
 function existingColumns(string $table): array {
-    if (!tableExists($table)) {
+    if (!adminTableExists($table)) {
         return [];
     }
     try {
@@ -411,7 +419,7 @@ function renderAdminModule($module) {
     $config = moduleConfig($module);
     if (!$config) { http_response_code(404); echo 'Module not found'; return; }
     ensureAdminSchema();
-    if (!tableExists($config['table'])) {
+    if (!adminTableExists($config['table'])) {
         http_response_code(500);
         include __DIR__ . '/../includes/header.php';
         echo '<div class="card"><div class="card-body"><div class="alert" style="background:#f8d7da;color:#721c24">جدول مورد نیاز ماژول پیدا نشد: ' . h($config['table']) . '</div></div></div>';

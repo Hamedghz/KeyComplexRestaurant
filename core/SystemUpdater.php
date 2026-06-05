@@ -59,7 +59,7 @@ class SystemUpdater {
     }
 
     public function migrationStatus() {
-        $migrationDirs = [ROOT_PATH . '/database/migrations', ROOT_PATH . '/migrations'];
+        $migrationDirs = [ROOT_PATH . '/database/migrations'];
         $files = [];
         foreach ($migrationDirs as $dir) {
             if (!is_dir($dir)) {
@@ -72,7 +72,7 @@ class SystemUpdater {
         sort($files, SORT_STRING);
 
         return [
-            'directory' => implode(', ', $migrationDirs),
+            'directory' => ROOT_PATH . '/database/migrations',
             'files' => $files,
             'pending_file' => STORAGE_PATH . '/pending-migrations.txt',
             'version_table' => 'system_versions',
@@ -216,15 +216,20 @@ class SystemUpdater {
 
     private function runPendingMigrations() {
         require_once ROOT_PATH . '/core/MigrationRunner.php';
+        require_once ROOT_PATH . '/core/SchemaSynchronizer.php';
 
-        $runner = new MigrationRunner(Database::getInstance()->getConnection(), [
+        $pdo = Database::getInstance()->getConnection();
+        $runner = new MigrationRunner($pdo, [
             ROOT_PATH . '/database/migrations',
-            ROOT_PATH . '/migrations',
         ]);
         $results = $runner->run();
+        $syncChanges = SchemaSynchronizer::sync($pdo, ROOT_PATH . '/database/schema.sql');
         $log = [];
         foreach ($results as $migration => $status) {
             $log[] = $status . ' ' . $migration;
+        }
+        foreach ($syncChanges as $change) {
+            $log[] = 'schema-sync ' . $change;
         }
         file_put_contents(STORAGE_PATH . '/pending-migrations.txt', $log ? implode("\n", $log) : 'No pending migrations at ' . date('c'), LOCK_EX);
     }

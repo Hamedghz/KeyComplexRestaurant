@@ -6,7 +6,7 @@ This document provides step-by-step instructions to fix all production-blocking 
 ## 🚨 Critical Fixes Implemented
 
 ### 1. Database Migration
-**Location:** `migrations/001_fix_production_issues.sql`
+**Location:** `database/schema.sql` and `database/migrations/2026_06_05_final_schema.sql`
 
 **What it fixes:**
 - Makes all non-critical database fields nullable
@@ -19,7 +19,7 @@ This document provides step-by-step instructions to fix all production-blocking 
 **How to apply:**
 ```bash
 # Run the migration SQL file
-mysql -u your_username -p your_database < migrations/001_fix_production_issues.sql
+mysql -u your_username -p your_database < database/schema.sql
 ```
 
 ### 2. Pool Leads Collection System ✅
@@ -463,7 +463,7 @@ mysqldump -u username -p database_name > backup_$(date +%Y%m%d).sql
 
 ### Step 2: Run Migration
 ```bash
-mysql -u username -p database_name < migrations/001_fix_production_issues.sql
+mysql -u username -p database_name < database/schema.sql
 ```
 
 ### Step 3: Create Upload Directories

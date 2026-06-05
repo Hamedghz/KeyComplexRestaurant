@@ -23,16 +23,6 @@ $catalog = [
         'lotus_logo_image' => ['label' => 'تصویر لوگو', 'type' => 'image'],
         'lotus_title_fa' => ['label' => 'عنوان', 'type' => 'text'],
     ]],
-    'hero' => ['title' => 'Hero', 'fields' => [
-        'hero_title_fa' => ['label' => 'عنوان پیش‌فرض', 'type' => 'text'],
-        'hero_subtitle_fa' => ['label' => 'زیرعنوان پیش‌فرض', 'type' => 'text'],
-        'hero_cta_text_fa' => ['label' => 'متن CTA پیش‌فرض', 'type' => 'text'],
-        'lotus_subtitle_fa' => ['label' => 'زیرعنوان lotus', 'type' => 'text'],
-        'lotus_description_fa' => ['label' => 'توضیح lotus', 'type' => 'textarea'],
-        'lotus_cta_text_fa' => ['label' => 'متن دکمه اختیاری', 'type' => 'text'],
-        'lotus_cta_link' => ['label' => 'لینک دکمه اختیاری', 'type' => 'url'],
-        'lotus_active' => ['label' => 'فعال', 'type' => 'boolean'],
-    ]],
     'social_networks' => ['title' => 'Social Networks', 'fields' => []],
     'seo' => ['title' => 'SEO', 'fields' => [
         'seo_title_fa' => ['label' => 'عنوان SEO', 'type' => 'text'],
