@@ -61,7 +61,7 @@ include __DIR__ . '/includes/header.php';
             <button class="quick-action-btn" name="update_action" value="apply" type="submit" onclick="return confirm('قبل از بروزرسانی بکاپ فایل و دیتابیس ساخته می‌شود. ادامه می‌دهید؟')"><span class="icon">⬇️</span><span>Apply Update</span></button>
             <button class="quick-action-btn" name="update_action" value="rollback" type="submit" onclick="return confirm('Rollback آخرین بکاپ انجام شود؟')"><span class="icon">↩️</span><span>Rollback</span></button>
         </form>
-        <p class="text-muted mt-3">قواعد ایمنی: قبل از apply بکاپ فایل و دیتابیس ساخته می‌شود؛ migrationهای SQL جدید به‌صورت کنترل‌شده اجرا و در schema_migrations ثبت می‌شوند؛ cache پاک می‌شود؛ در صورت شکست update یا migration، rollback خودکار اجرا می‌شود.</p>
+        <p class="text-muted mt-3">قواعد ایمنی: قبل از apply بکاپ فایل و دیتابیس ساخته می‌شود؛ migrationهای SQL جدید به‌صورت کنترل‌شده اجرا و در system_versions ثبت می‌شوند؛ cache پاک می‌شود؛ در صورت شکست update یا migration، rollback خودکار اجرا می‌شود.</p>
     </div>
 </div>
 <div class="card"><div class="card-header"><h2>Migration Status</h2></div><div class="card-body"><p>مسیر migration: <?php echo h($migrationStatus['directory'] ?? ''); ?></p><ul><?php foreach (($migrationStatus['files'] ?? []) as $file): ?><li><?php echo h($file); ?></li><?php endforeach; ?></ul></div></div>

@@ -2,9 +2,9 @@
 /**
  * KEY Restaurant & Coffeehouse production installer.
  *
- * This installer is designed to run directly from the server root.
- * It collects database credentials, validates the connection, loads the SQL
- * schema files, writes /config.php, and creates installed.lock.
+ * Shared-hosting friendly installer: no shell commands, imports the consolidated
+ * schema, runs SQL migrations once, writes config.php, creates runtime folders,
+ * creates the first administrator, and writes installed.lock.
  */
 
 session_start();
@@ -12,21 +12,22 @@ session_start();
 $baseDir = __DIR__;
 $configPath = $baseDir . '/config.php';
 $lockPath = $baseDir . '/installed.lock';
-$schemaFiles = [
-    $baseDir . '/database/schema.sql',
-    $baseDir . '/database/survey_schema.sql',
-    $baseDir . '/database/migrations/2026_05_31_admin_crm_prediction_content.sql',
-    $baseDir . '/database/migrations/2026_05_31_security_performance_update.sql',
-];
+$schemaPath = $baseDir . '/database/full_schema.sql';
 $uploadDirs = [
     $baseDir . '/uploads',
+    $baseDir . '/uploads/media',
     $baseDir . '/uploads/menu',
+    $baseDir . '/uploads/avatars',
     $baseDir . '/uploads/logo',
     $baseDir . '/uploads/hero',
     $baseDir . '/uploads/banners',
     $baseDir . '/uploads/textures',
     $baseDir . '/uploads/models',
+    $baseDir . '/uploads/key-story',
+    $baseDir . '/uploads/gallery',
     $baseDir . '/storage',
+    $baseDir . '/storage/cache',
+    $baseDir . '/storage/logs',
 ];
 
 if (file_exists($lockPath) || file_exists($configPath)) {
@@ -39,54 +40,63 @@ $success = false;
 $detectedBaseUrl = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $dbHost = trim($_POST['db_host'] ?? '');
+    $dbHost = trim($_POST['db_host'] ?? 'localhost');
     $dbName = trim($_POST['db_name'] ?? '');
     $dbUser = trim($_POST['db_user'] ?? '');
     $dbPass = (string)($_POST['db_pass'] ?? '');
     $baseUrl = rtrim(trim($_POST['base_url'] ?? $detectedBaseUrl), '/');
     $environment = $_POST['environment'] ?? 'production';
+    $adminUsername = trim($_POST['admin_username'] ?? 'admin');
+    $adminEmail = trim($_POST['admin_email'] ?? 'admin@example.com');
+    $adminPassword = (string)($_POST['admin_password'] ?? '');
+    $adminName = trim($_POST['admin_name'] ?? 'KEY Administrator');
 
     if ($dbHost === '' || $dbName === '' || $dbUser === '') {
         $errors[] = 'Database host, database name, and username are required.';
     }
-
     if (!in_array($environment, ['production', 'local'], true)) {
         $errors[] = 'Invalid environment selected.';
     }
-
     if ($baseUrl === '' || !filter_var($baseUrl, FILTER_VALIDATE_URL)) {
         $errors[] = 'A valid base URL is required.';
     }
-
-    foreach ($schemaFiles as $schemaFile) {
-        if (!is_readable($schemaFile)) {
-            $errors[] = 'Schema file is missing or unreadable: ' . basename($schemaFile);
-        }
+    if ($adminUsername === '' || $adminEmail === '' || $adminPassword === '') {
+        $errors[] = 'Admin username, email, and password are required.';
+    }
+    if ($adminEmail !== '' && !filter_var($adminEmail, FILTER_VALIDATE_EMAIL)) {
+        $errors[] = 'A valid admin email is required.';
+    }
+    if ($adminPassword !== '' && strlen($adminPassword) < 8) {
+        $errors[] = 'Admin password must be at least 8 characters.';
+    }
+    if (!is_readable($schemaPath)) {
+        $errors[] = 'database/full_schema.sql is missing or unreadable.';
     }
 
     if (!$errors) {
         try {
-            $dsn = 'mysql:host=' . $dbHost . ';dbname=' . $dbName . ';charset=utf8mb4';
-            $pdo = new PDO($dsn, $dbUser, $dbPass, [
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                PDO::ATTR_EMULATE_PREPARES => false,
-                PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci',
+            require_once $baseDir . '/core/MigrationRunner.php';
+
+            $pdo = connectInstallerDatabase($dbHost, $dbName, $dbUser, $dbPass);
+            $runner = new MigrationRunner($pdo, [
+                $baseDir . '/database/migrations',
+                $baseDir . '/migrations',
             ]);
 
-            foreach ($schemaFiles as $schemaFile) {
-                installSqlFile($pdo, $schemaFile);
-            }
+            $runner->executeSqlFile($schemaPath);
+            $runner->markApplied('database/full_schema.sql');
+            $runner->run();
 
             $adminStmt = $pdo->prepare(
-                'INSERT IGNORE INTO admins (username, email, password, full_name, role, is_active) '
-                . 'VALUES (:username, :email, :password, :full_name, :role, 1)'
+                'INSERT INTO `admins` (`username`, `email`, `password`, `full_name`, `role`, `is_active`)
+                 VALUES (:username, :email, :password, :full_name, :role, 1)
+                 ON DUPLICATE KEY UPDATE `email` = VALUES(`email`), `password` = VALUES(`password`), `full_name` = VALUES(`full_name`), `role` = VALUES(`role`), `is_active` = 1'
             );
             $adminStmt->execute([
-                'username' => 'admin',
-                'email' => 'admin@example.com',
-                'password' => password_hash('admin123', PASSWORD_DEFAULT),
-                'full_name' => 'KEY Administrator',
+                'username' => $adminUsername,
+                'email' => $adminEmail,
+                'password' => password_hash($adminPassword, PASSWORD_DEFAULT),
+                'full_name' => $adminName !== '' ? $adminName : $adminUsername,
                 'role' => 'super_admin',
             ]);
 
@@ -96,7 +106,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
-            $config = [
+            writeInstallerConfig($configPath, [
                 'app' => [
                     'environment' => $environment,
                     'debug' => $environment !== 'production',
@@ -111,19 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'pass' => $dbPass,
                     'charset' => 'utf8mb4',
                 ],
-            ];
-
-            $configContent = "<?php\n";
-            $configContent .= "/**\n * Generated application configuration.\n * Do not expose or commit production credentials.\n */\n";
-            $configContent .= "if (isset(\$_SERVER['SCRIPT_FILENAME']) && realpath(\$_SERVER['SCRIPT_FILENAME']) === __FILE__) {\n";
-            $configContent .= "    http_response_code(403);\n";
-            $configContent .= "    exit('Forbidden');\n";
-            $configContent .= "}\n\n";
-            $configContent .= 'return ' . var_export($config, true) . ";\n";
-
-            if (file_put_contents($configPath, $configContent, LOCK_EX) === false) {
-                throw new RuntimeException('Could not write config.php. Check server-root permissions.');
-            }
+            ]);
 
             if (file_put_contents($lockPath, date('c'), LOCK_EX) === false) {
                 throw new RuntimeException('Could not write installed.lock. Check server-root permissions.');
@@ -131,215 +129,93 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $success = true;
         } catch (Throwable $e) {
-            $errors[] = $e->getMessage();
+            error_log('Installer failed: ' . $e->getMessage());
+            $errors[] = 'Installation failed. Please verify database credentials, permissions, and SQL compatibility.';
         }
     }
 }
 
+function connectInstallerDatabase(string $host, string $name, string $user, string $pass): PDO {
+    $dsn = 'mysql:host=' . $host . ';dbname=' . $name . ';charset=utf8mb4';
+    return new PDO($dsn, $user, $pass, [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES => false,
+        PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci',
+    ]);
+}
 
-function installSqlFile(PDO $pdo, string $schemaFile): void {
-    $sql = file_get_contents($schemaFile);
-    if ($sql === false) {
-        throw new RuntimeException('Could not read schema file: ' . basename($schemaFile));
-    }
+function writeInstallerConfig(string $path, array $config): void {
+    $configContent = "<?php\n";
+    $configContent .= "/**\n * Generated application configuration.\n * Do not expose or commit production credentials.\n */\n";
+    $configContent .= "if (isset(\$_SERVER['SCRIPT_FILENAME']) && realpath(\$_SERVER['SCRIPT_FILENAME']) === __FILE__) {\n";
+    $configContent .= "    http_response_code(403);\n";
+    $configContent .= "    exit('Forbidden');\n";
+    $configContent .= "}\n\n";
+    $configContent .= 'return ' . var_export($config, true) . ";\n";
 
-    $sql = makeSeedInsertsIdempotent($sql);
-
-    foreach (splitSqlStatements($sql) as $statement) {
-        try {
-            $pdo->exec($statement);
-        } catch (PDOException $e) {
-            if (isRecoverableInstallSqlError($e)) {
-                continue;
-            }
-
-            throw new RuntimeException(
-                'Could not apply ' . basename($schemaFile) . ': ' . $e->getMessage(),
-                (int)$e->getCode(),
-                $e
-            );
-        }
+    if (file_put_contents($path, $configContent, LOCK_EX) === false) {
+        throw new RuntimeException('Could not write config.php. Check server-root permissions.');
     }
 }
 
-function makeSeedInsertsIdempotent(string $sql): string {
-    return preg_replace(
-        '/INSERT\s+INTO\s+`(menu_categories|menu_items|settings|dynamic_forms)`/i',
-        'INSERT IGNORE INTO `$1`',
-        $sql
-    ) ?? $sql;
-}
-
-function isRecoverableInstallSqlError(PDOException $e): bool {
-    $errorInfo = $e->errorInfo;
-    $driverCode = isset($errorInfo[1]) ? (int)$errorInfo[1] : 0;
-
-    return in_array($driverCode, [1060, 1061, 1062, 1826], true);
-}
-
-function splitSqlStatements(string $sql): array {
-    $statements = [];
-    $buffer = '';
-    $length = strlen($sql);
-    $quote = null;
-    $lineComment = false;
-    $blockComment = false;
-
-    for ($i = 0; $i < $length; $i++) {
-        $char = $sql[$i];
-        $next = $i + 1 < $length ? $sql[$i + 1] : '';
-
-        if ($lineComment) {
-            $buffer .= $char;
-            if ($char === "\n") {
-                $lineComment = false;
-            }
-            continue;
-        }
-
-        if ($blockComment) {
-            $buffer .= $char;
-            if ($char === '*' && $next === '/') {
-                $buffer .= $next;
-                $i++;
-                $blockComment = false;
-            }
-            continue;
-        }
-
-        if ($quote !== null) {
-            $buffer .= $char;
-            if ($char === '\\' && $next !== '') {
-                $buffer .= $next;
-                $i++;
-                continue;
-            }
-            if ($char === $quote) {
-                $quote = null;
-            }
-            continue;
-        }
-
-        if (($char === '-' && $next === '-') || $char === '#') {
-            $lineComment = true;
-            $buffer .= $char;
-            if ($char === '-') {
-                $buffer .= $next;
-                $i++;
-            }
-            continue;
-        }
-
-        if ($char === '/' && $next === '*') {
-            $blockComment = true;
-            $buffer .= $char . $next;
-            $i++;
-            continue;
-        }
-
-        if ($char === "'" || $char === '"' || $char === '`') {
-            $quote = $char;
-            $buffer .= $char;
-            continue;
-        }
-
-        if ($char === ';') {
-            $statement = trim($buffer);
-            if ($statement !== '') {
-                $statements[] = $statement;
-            }
-            $buffer = '';
-            continue;
-        }
-
-        $buffer .= $char;
-    }
-
-    $statement = trim($buffer);
-    if ($statement !== '') {
-        $statements[] = $statement;
-    }
-
-    return $statements;
-}
-
-function oldValue($name, $fallback = '') {
-    return htmlspecialchars($_POST[$name] ?? $fallback, ENT_QUOTES, 'UTF-8');
+function installValue(string $name, string $default = ''): string {
+    return htmlspecialchars((string)($_POST[$name] ?? $default), ENT_QUOTES, 'UTF-8');
 }
 ?>
-<!doctype html>
-<html lang="fa" dir="rtl">
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>KEY Installer</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Install KEY Restaurant & Coffeehouse</title>
     <style>
-        :root { --primary: #004647; --accent: #D4AF37; --danger: #b42318; --ok: #067647; }
-        * { box-sizing: border-box; }
-        body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: Tahoma, Arial, sans-serif; background: linear-gradient(135deg, var(--primary), #001f20); color: #17202a; padding: 24px; }
-        main { width: min(760px, 100%); background: #fff; border-radius: 24px; padding: 32px; box-shadow: 0 24px 70px rgba(0,0,0,.35); }
-        h1 { margin-top: 0; color: var(--primary); }
-        label { display: block; margin: 16px 0 6px; font-weight: 700; }
-        input, select { width: 100%; padding: 12px 14px; border: 1px solid #d0d5dd; border-radius: 12px; font-size: 16px; direction: ltr; }
-        .hint { color: #667085; font-size: 13px; margin-top: 4px; }
-        .alert { border-radius: 14px; padding: 14px 16px; margin: 16px 0; }
-        .alert--error { background: #fef3f2; color: var(--danger); border: 1px solid #fecdca; }
-        .alert--success { background: #ecfdf3; color: var(--ok); border: 1px solid #abefc6; }
-        button, .button { display: inline-block; width: 100%; border: 0; border-radius: 14px; background: var(--primary); color: white; padding: 14px 18px; font-size: 18px; text-decoration: none; text-align: center; cursor: pointer; margin-top: 22px; }
-        code { direction: ltr; display: inline-block; background: #f2f4f7; padding: 2px 6px; border-radius: 6px; }
+        body{font-family:Arial,sans-serif;background:#f6f2ea;margin:0;padding:32px;color:#24201b}.wrap{max-width:760px;margin:auto;background:#fff;border-radius:18px;padding:28px;box-shadow:0 14px 40px rgba(0,0,0,.08)}h1{margin-top:0}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.field{margin-bottom:16px}label{display:block;font-weight:700;margin-bottom:6px}input,select{width:100%;box-sizing:border-box;border:1px solid #d7cbbb;border-radius:10px;padding:12px;font-size:15px}.alert{border-radius:12px;padding:14px;margin-bottom:18px}.error{background:#fff0f0;color:#8a1f1f}.success{background:#effaf1;color:#176c2f}.btn{background:#8b5e34;color:#fff;border:0;border-radius:12px;padding:14px 22px;font-size:16px;cursor:pointer}.note{color:#6f665e;font-size:14px}@media(max-width:700px){.grid{grid-template-columns:1fr}}
     </style>
 </head>
 <body>
-<main>
-    <?php if ($success): ?>
-        <h1>Installation complete</h1>
-        <div class="alert alert--success">
-            <p>Database tables were created, <code>config.php</code> was written, and <code>installed.lock</code> now protects the installer.</p>
-            <p>For additional security, remove write permissions from <code>config.php</code> after confirming the site works.</p>
-        </div>
-        <a class="button" href="index.php">Open site</a>
-        <a class="button" href="admin/" style="background: var(--accent); color: #1d2939;">Open admin</a>
-    <?php else: ?>
-        <h1>KEY Restaurant Production Installer</h1>
-        <p>This installer configures the site directly in the server root and detects the base URL from the current host.</p>
+<div class="wrap">
+    <h1>KEY Restaurant & Coffeehouse Installer</h1>
+    <p class="note">Imports <strong>database/full_schema.sql</strong>, runs pending migrations once, creates runtime directories, and writes production config.</p>
 
+    <?php if ($success): ?>
+        <div class="alert success">
+            <strong>Installation complete.</strong> Remove install.php or keep it protected by installed.lock, then sign in to /admin with your administrator account.
+        </div>
+    <?php else: ?>
         <?php if ($errors): ?>
-            <div class="alert alert--error">
-                <strong>Installation failed:</strong>
-                <ul>
-                    <?php foreach ($errors as $error): ?>
-                        <li><?php echo htmlspecialchars($error, ENT_QUOTES, 'UTF-8'); ?></li>
-                    <?php endforeach; ?>
-                </ul>
+            <div class="alert error">
+                <strong>Please fix the following:</strong>
+                <ul><?php foreach ($errors as $error): ?><li><?php echo htmlspecialchars($error, ENT_QUOTES, 'UTF-8'); ?></li><?php endforeach; ?></ul>
             </div>
         <?php endif; ?>
 
-        <form method="post" action="install.php" autocomplete="off">
-            <label for="db_host">Database host</label>
-            <input id="db_host" name="db_host" value="<?php echo oldValue('db_host'); ?>" required placeholder="Database host from your hosting panel">
+        <form method="post" autocomplete="off">
+            <h2>Database</h2>
+            <div class="grid">
+                <div class="field"><label>Host</label><input name="db_host" value="<?php echo installValue('db_host', 'localhost'); ?>" required></div>
+                <div class="field"><label>Database name</label><input name="db_name" value="<?php echo installValue('db_name'); ?>" required></div>
+                <div class="field"><label>Username</label><input name="db_user" value="<?php echo installValue('db_user'); ?>" required></div>
+                <div class="field"><label>Password</label><input name="db_pass" type="password" value="<?php echo installValue('db_pass'); ?>"></div>
+            </div>
 
-            <label for="db_name">Database name</label>
-            <input id="db_name" name="db_name" value="<?php echo oldValue('db_name'); ?>" required placeholder="Database name">
+            <h2>Application</h2>
+            <div class="grid">
+                <div class="field"><label>Base URL</label><input name="base_url" value="<?php echo installValue('base_url', $detectedBaseUrl); ?>" required></div>
+                <div class="field"><label>Environment</label><select name="environment"><option value="production">Production</option><option value="local">Local</option></select></div>
+            </div>
 
-            <label for="db_user">Database username</label>
-            <input id="db_user" name="db_user" value="<?php echo oldValue('db_user'); ?>" required placeholder="Database username">
+            <h2>First administrator</h2>
+            <div class="grid">
+                <div class="field"><label>Username</label><input name="admin_username" value="<?php echo installValue('admin_username', 'admin'); ?>" required></div>
+                <div class="field"><label>Email</label><input name="admin_email" type="email" value="<?php echo installValue('admin_email', 'admin@example.com'); ?>" required></div>
+                <div class="field"><label>Full name</label><input name="admin_name" value="<?php echo installValue('admin_name', 'KEY Administrator'); ?>"></div>
+                <div class="field"><label>Password</label><input name="admin_password" type="password" minlength="8" required></div>
+            </div>
 
-            <label for="db_pass">Database password</label>
-            <input id="db_pass" name="db_pass" type="password" value="<?php echo oldValue('db_pass'); ?>" placeholder="Database password">
-
-            <label for="base_url">Base URL</label>
-            <input id="base_url" name="base_url" value="<?php echo oldValue('base_url', $detectedBaseUrl); ?>" required>
-            <div class="hint">Use the public URL without a trailing slash.</div>
-
-            <label for="environment">Environment</label>
-            <select id="environment" name="environment">
-                <option value="production" <?php echo oldValue('environment', 'production') === 'production' ? 'selected' : ''; ?>>Production</option>
-                <option value="local" <?php echo oldValue('environment') === 'local' ? 'selected' : ''; ?>>Local development</option>
-            </select>
-
-            <button type="submit">Install and lock</button>
+            <button class="btn" type="submit">Install production system</button>
         </form>
     <?php endif; ?>
-</main>
+</div>
 </body>
 </html>
