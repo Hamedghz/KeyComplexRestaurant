@@ -6,7 +6,13 @@ require_once __DIR__ . '/admin_schema.php';
 if (!function_exists('adminGuard')) {
 function adminGuard($requiredRole = 'employee') {
     if (session_status() !== PHP_SESSION_ACTIVE) session_start();
-    $auth = new Auth();
+    try {
+        $auth = new Auth();
+    } catch (Throwable $e) {
+        error_log('[admin] Authentication bootstrap failed: ' . $e->getMessage());
+        http_response_code(500);
+        exit('درخواست قابل پردازش نیست. جزئیات خطا در لاگ سیستم ثبت شد.');
+    }
     if (!$auth->isLoggedIn()) {
         header('Location: index.php');
         exit;
@@ -107,7 +113,7 @@ function adminModuleConfigs() {
         'predictions' => [
             'title'=>'پیش‌بینی‌ها','min_role'=>'manager','table'=>'predictions','unique'=>'mobile','date_fields'=>[], 'readonly_create'=>true,
             'search'=>['customer_name','mobile'],'filters'=>['crm_matched','customer_exists','attended_match_time','match_id','is_correct_prediction','crm_match','attended_match'],
-            'join'=>'SELECT p.*, CONCAT(m.team_a, " - ", m.team_b) AS match_title FROM predictions p LEFT JOIN matches m ON p.match_id = m.id',
+            'join'=>'SELECT p.*, CONCAT(m.team_a, " - ", m.team_b) AS match_title FROM predictions p LEFT JOIN matches m ON p.match_id = m.id', 'required_tables'=>['matches'],
             'fields'=>[
                 'customer_name'=>['label'=>'نام','type'=>'text','required'=>true], 'mobile'=>['label'=>'موبایل','type'=>'mobile','required'=>true],
                 'match_id'=>['label'=>'مسابقه','type'=>'match','required'=>true], 'predicted_score_team_a'=>['label'=>'گل تیم اول','type'=>'number','required'=>true],
@@ -136,7 +142,7 @@ function adminModuleConfigs() {
         ],
         'menu-items' => [
             'title'=>'آیتم‌های منو','min_role'=>'manager','table'=>'menu_items','unique'=>'slug','date_fields'=>[], 'search'=>['name_fa','name_en','slug','description_fa'],'filters'=>['category_id','is_available'],
-            'join'=>'SELECT mi.*, mc.name_fa AS category_title FROM menu_items mi LEFT JOIN menu_categories mc ON mi.category_id = mc.id',
+            'join'=>'SELECT mi.*, mc.name_fa AS category_title FROM menu_items mi LEFT JOIN menu_categories mc ON mi.category_id = mc.id', 'required_tables'=>['menu_categories'],
             'fields'=>[
                 'category_id'=>['label'=>'دسته‌بندی','type'=>'category','required'=>true], 'name_fa'=>['label'=>'عنوان فارسی','type'=>'text','required'=>true], 'name_en'=>['label'=>'عنوان انگلیسی','type'=>'text'],
                 'slug'=>['label'=>'اسلاگ','type'=>'text','required'=>true], 'description_fa'=>['label'=>'توضیح فارسی','type'=>'textarea'], 'description_en'=>['label'=>'توضیح انگلیسی','type'=>'textarea'],
@@ -153,8 +159,8 @@ function adminModuleConfigs() {
             ], 'columns'=>['id','form_name','form_title_fa','is_active','display_order','created_at']
         ],
         'survey-responses' => [
-            'title'=>'پاسخ‌های نظرسنجی','min_role'=>'manager','table'=>'survey_responses','unique'=>'customer_phone','date_fields'=>[], 'search'=>['customer_name','customer_phone','customer_email'],'filters'=>['form_id'],
-            'join'=>'SELECT sr.*, df.form_title_fa AS form_title FROM survey_responses sr LEFT JOIN dynamic_forms df ON sr.form_id = df.id',
+            'title'=>'پاسخ‌های نظرسنجی','min_role'=>'manager','table'=>'survey_responses','unique'=>'customer_phone','date_fields'=>[], 'date_column'=>'submitted_at', 'search'=>['customer_name','customer_phone','customer_email'],'filters'=>['form_id'],
+            'join'=>'SELECT sr.*, df.form_title_fa AS form_title FROM survey_responses sr LEFT JOIN dynamic_forms df ON sr.form_id = df.id', 'required_tables'=>['dynamic_forms'],
             'fields'=>[
                 'form_id'=>['label'=>'فرم','type'=>'survey_form','required'=>true], 'customer_name'=>['label'=>'نام','type'=>'text'], 'customer_phone'=>['label'=>'موبایل','type'=>'mobile'],
                 'customer_email'=>['label'=>'ایمیل','type'=>'text'], 'response_data'=>['label'=>'داده پاسخ JSON','type'=>'textarea','default'=>'{}'],
@@ -167,16 +173,21 @@ function moduleConfig($key) { $configs = adminModuleConfigs(); return $configs[$
 function labelFor($config, $column) { return $config['fields'][$column]['label'] ?? ['id'=>'شناسه','created_at'=>'ایجاد','updated_at'=>'ویرایش','match_title'=>'مسابقه','category_title'=>'دسته‌بندی','submitted_at'=>'ثبت'][$column] ?? $column; }
 
 function fetchOptions($type) {
-    $db = Database::getInstance()->getConnection();
     $queries = [
-        'category' => 'SELECT id, name_fa AS title FROM menu_categories ORDER BY sort_order, name_fa',
-        'match' => "SELECT id, CONCAT(team_a, ' - ', team_b, ' (', match_date, ')') AS title FROM matches ORDER BY match_date DESC",
-        'survey_form' => 'SELECT id, form_title_fa AS title FROM dynamic_forms ORDER BY display_order, id DESC',
+        'category' => ['table' => 'menu_categories', 'sql' => 'SELECT id, name_fa AS title FROM menu_categories ORDER BY sort_order, name_fa'],
+        'match' => ['table' => 'matches', 'sql' => "SELECT id, CONCAT(team_a, ' - ', team_b, ' (', match_date, ')') AS title FROM matches ORDER BY match_date DESC"],
+        'survey_form' => ['table' => 'dynamic_forms', 'sql' => 'SELECT id, form_title_fa AS title FROM dynamic_forms ORDER BY display_order, id DESC'],
     ];
-    if (!isset($queries[$type])) return [];
-    $stmt = $db->prepare($queries[$type]);
-    $stmt->execute();
-    return $stmt->fetchAll();
+    if (!isset($queries[$type]) || !adminTableExists($queries[$type]['table'])) return [];
+    try {
+        $db = Database::getInstance()->getConnection();
+        $stmt = $db->prepare($queries[$type]['sql']);
+        $stmt->execute();
+        return $stmt->fetchAll();
+    } catch (Throwable $e) {
+        safeAdminLog('Option lookup failed for ' . $type . ': ' . $e->getMessage());
+        return [];
+    }
 }
 
 
@@ -238,6 +249,38 @@ function existingColumns(string $table): array {
         safeAdminLog("Cannot read columns for {$table}: " . $e->getMessage());
         return [];
     }
+}
+
+function adminRenderSafeError(string $title, string $logMessage, int $statusCode = 500): void {
+    safeAdminLog($logMessage);
+    http_response_code($statusCode);
+    $pageTitle = $title;
+    include __DIR__ . '/../includes/header.php';
+    echo '<div class="card"><div class="card-body"><div class="alert" style="background:#f8d7da;color:#721c24">درخواست قابل پردازش نیست. جزئیات خطا در لاگ سیستم ثبت شد.</div></div></div>';
+    include __DIR__ . '/../includes/footer.php';
+}
+
+function adminRequiredTables(array $config): array {
+    $tables = [$config['table']];
+    foreach (($config['required_tables'] ?? []) as $table) {
+        $tables[] = $table;
+    }
+    return array_values(array_unique($tables));
+}
+
+function adminSqlPrefix(array $config): string {
+    if (!empty($config['alias'])) {
+        return $config['alias'] . '.';
+    }
+    if ($config['table'] === 'predictions') return 'p.';
+    if ($config['table'] === 'menu_items') return 'mi.';
+    if ($config['table'] === 'survey_responses') return 'sr.';
+    return '';
+}
+
+function adminDateColumn(array $config): ?string {
+    $column = $config['date_column'] ?? 'created_at';
+    return in_array($column, existingColumns($config['table']), true) ? $column : null;
 }
 
 function renderField($name, $meta, $value = null) {
@@ -378,36 +421,38 @@ function getRows($config, $forExport = false) {
     $offset = ($page - 1) * $perPage;
     $base = $config['join'] ?? ('SELECT * FROM ' . $config['table']);
     $where = ['1=1']; $params = [];
+    $prefix = adminSqlPrefix($config);
+    $allowedColumns = existingColumns($config['table']);
     if (!empty($_GET['q'])) {
         $ors = [];
-        foreach ($config['search'] as $col) { $prefix = ''; if ($config['table'] === 'predictions') $prefix = 'p.'; elseif ($config['table'] === 'menu_items') $prefix = 'mi.'; elseif ($config['table'] === 'survey_responses') $prefix = 'sr.'; $ors[] = $prefix . $col . ' LIKE :q'; }
-        $where[] = '(' . implode(' OR ', $ors) . ')'; $params['q'] = '%' . $_GET['q'] . '%';
+        foreach (($config['search'] ?? []) as $col) {
+            if (in_array($col, $allowedColumns, true)) {
+                $ors[] = $prefix . $col . ' LIKE :q';
+            }
+        }
+        if ($ors) {
+            $where[] = '(' . implode(' OR ', $ors) . ')';
+            $params['q'] = '%' . $_GET['q'] . '%';
+        }
     }
     foreach (($config['filters'] ?? []) as $filter) {
-        if (isset($_GET[$filter]) && $_GET[$filter] !== '') {
-            $prefix = '';
-            if ($config['table'] === 'predictions') $prefix = 'p.';
-            elseif ($config['table'] === 'menu_items') $prefix = 'mi.';
-            elseif ($config['table'] === 'survey_responses') $prefix = 'sr.';
-            $where[] = $prefix . $filter . ' = :' . $filter; $params[$filter] = $_GET[$filter];
+        if (isset($_GET[$filter]) && $_GET[$filter] !== '' && in_array($filter, $allowedColumns, true)) {
+            $where[] = $prefix . $filter . ' = :' . $filter;
+            $params[$filter] = $_GET[$filter];
         }
     }
     if (!empty($_GET['ids']) && is_array($_GET['ids'])) {
         $ids = array_values(array_filter(array_map('intval', $_GET['ids'])));
         if ($ids) {
-            $prefix = '';
-            if ($config['table'] === 'predictions') $prefix = 'p.';
-            elseif ($config['table'] === 'menu_items') $prefix = 'mi.';
-            elseif ($config['table'] === 'survey_responses') $prefix = 'sr.';
             $placeholders = [];
             foreach ($ids as $idx => $id) { $key = 'id_' . $idx; $placeholders[] = ':' . $key; $params[$key] = $id; }
             $where[] = $prefix . 'id IN (' . implode(',', $placeholders) . ')';
         }
     }
-    if (!empty($_GET['date_from'])) { $where[] = (($config['table']==='predictions')?'p.':'') . 'created_at >= :date_from'; $params['date_from'] = parsePersianDate($_GET['date_from'], false) . ' 00:00:00'; }
-    if (!empty($_GET['date_to'])) { $where[] = (($config['table']==='predictions')?'p.':'') . 'created_at <= :date_to'; $params['date_to'] = parsePersianDate($_GET['date_to'], false) . ' 23:59:59'; }
-    $orderPrefix = ''; if ($config['table'] === 'predictions') $orderPrefix = 'p.'; elseif ($config['table'] === 'menu_items') $orderPrefix = 'mi.'; elseif ($config['table'] === 'survey_responses') $orderPrefix = 'sr.';
-    $sql = $base . ' WHERE ' . implode(' AND ', $where) . ' ORDER BY ' . $orderPrefix . 'id DESC LIMIT ' . $perPage . ' OFFSET ' . $offset;
+    $dateColumn = adminDateColumn($config);
+    if ($dateColumn && !empty($_GET['date_from'])) { $where[] = $prefix . $dateColumn . ' >= :date_from'; $params['date_from'] = parsePersianDate($_GET['date_from'], false) . ' 00:00:00'; }
+    if ($dateColumn && !empty($_GET['date_to'])) { $where[] = $prefix . $dateColumn . ' <= :date_to'; $params['date_to'] = parsePersianDate($_GET['date_to'], false) . ' 23:59:59'; }
+    $sql = $base . ' WHERE ' . implode(' AND ', $where) . ' ORDER BY ' . $prefix . 'id DESC LIMIT ' . $perPage . ' OFFSET ' . $offset;
     $stmt = $db->prepare($sql); $stmt->execute($params);
     $rows = $stmt->fetchAll();
     $countSql = 'SELECT COUNT(*) AS total FROM (' . $base . ' WHERE ' . implode(' AND ', $where) . ') x';
@@ -418,16 +463,19 @@ function getRows($config, $forExport = false) {
 function renderAdminModule($module) {
     $config = moduleConfig($module);
     if (!$config) { http_response_code(404); echo 'Module not found'; return; }
-    ensureAdminSchema();
-    if (!adminTableExists($config['table'])) {
-        http_response_code(500);
-        include __DIR__ . '/../includes/header.php';
-        echo '<div class="card"><div class="card-body"><div class="alert" style="background:#f8d7da;color:#721c24">جدول مورد نیاز ماژول پیدا نشد: ' . h($config['table']) . '</div></div></div>';
-        include __DIR__ . '/../includes/footer.php';
-        safeAdminLog("Missing table for module {$module}: {$config['table']}");
+    $currentAdmin = adminGuard($config['min_role'] ?? 'employee');
+    try {
+        ensureAdminSchema();
+    } catch (Throwable $e) {
+        adminRenderSafeError($config['title'], "Schema bootstrap failed for module {$module}: " . $e->getMessage());
         return;
     }
-    $currentAdmin = adminGuard($config['min_role'] ?? 'employee');
+    foreach (adminRequiredTables($config) as $requiredTable) {
+        if (!adminTableExists($requiredTable)) {
+            adminRenderSafeError($config['title'], "Missing table for module {$module}: {$requiredTable}");
+            return;
+        }
+    }
     $allowedColumns = existingColumns($config['table']);
     $config['fields'] = array_filter(
         $config['fields'],
@@ -448,7 +496,14 @@ function renderAdminModule($module) {
     $model = new GenericModel($config['table']);
     $action = $_GET['action'] ?? 'list';
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['crud_action'] ?? '') === 'delete') { requireValidCsrf(); $model->delete((int)($_POST['id'] ?? 0)); redirectTo(basename($_SERVER['PHP_SELF']) . '?deleted=1'); }
-    if ($action === 'export') { $data = getRows($config, true); outputExport($config, $_GET['format'] ?? 'csv', $data['rows']); }
+    if ($action === 'export') {
+        try {
+            $data = getRows($config, true); outputExport($config, $_GET['format'] ?? 'csv', $data['rows']);
+        } catch (Throwable $e) {
+            adminRenderSafeError($config['title'], "Export failed for module {$module}: " . $e->getMessage());
+            return;
+        }
+    }
     $message = '';
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['crud_action'] ?? '') === 'save') {
         try {
@@ -465,7 +520,8 @@ function renderAdminModule($module) {
             }
             redirectTo(basename($_SERVER['PHP_SELF']) . '?saved=1');
         } catch (Throwable $e) {
-            $message = $e->getMessage();
+            $message = 'ذخیره انجام نشد. جزئیات خطا در لاگ سیستم ثبت شد.';
+            safeAdminLog("Save failed for module {$module}: " . $e->getMessage());
         }
     }
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['crud_action'] ?? '') === 'import') {
@@ -476,7 +532,8 @@ function renderAdminModule($module) {
             $report = applyImport($config, $rows, $mapping);
             $message = 'Import: ' . $report['inserted'] . ' ایجاد، ' . $report['updated'] . ' بروزرسانی. ' . implode(' | ', array_slice($report['errors'], 0, 5));
         } catch (Throwable $e) {
-            $message = $e->getMessage();
+            $message = 'Import انجام نشد. جزئیات خطا در لاگ سیستم ثبت شد.';
+            safeAdminLog("Import failed for module {$module}: " . $e->getMessage());
         }
     }
     $pageTitle = $config['title']; include __DIR__ . '/../includes/header.php';
@@ -512,7 +569,13 @@ function renderAdminModule($module) {
         }
         echo '<button class="btn btn-primary">فیلتر</button></form>';
         echo '<details class="import-box"><summary>Import CSV/XLSX با mapping خودکار/دستی</summary><form method="post" enctype="multipart/form-data"><input type="hidden" name="crud_action" value="import"><input type="hidden" name="' . CSRF_TOKEN_NAME . '" value="' . h(generateCSRFToken()) . '"><input class="form-control" type="file" name="import_file" accept=".csv,.xlsx" required><textarea class="form-control" name="mapping" placeholder="اختیاری: {&quot;mobile&quot;:&quot;phone&quot;}"></textarea><button class="btn btn-warning">Preview/Import</button><p class="text-muted">ردیف اول فایل به عنوان header استفاده می‌شود؛ ستون‌های هم‌نام خودکار map می‌شوند، JSON بالا override دستی است، duplicate با unique key مثل mobile بروزرسانی می‌شود.</p></form></details>';
-        $data = getRows($config); $rows = $data['rows'];
+        try {
+            $data = getRows($config); $rows = $data['rows'];
+        } catch (Throwable $e) {
+            safeAdminLog("List query failed for module {$module}: " . $e->getMessage());
+            $data = ['rows'=>[],'page'=>1,'total'=>0,'perPage'=>20]; $rows = [];
+            echo '<div class="alert" style="background:#f8d7da;color:#721c24">داده‌ها در حال حاضر قابل نمایش نیستند. جزئیات خطا در لاگ سیستم ثبت شد.</div>';
+        }
         echo '<form method="get"><input type="hidden" name="action" value="export"><div class="mb-3"><button class="btn" name="format" value="csv">خروجی CSV ردیف‌های انتخابی</button> <button class="btn" name="format" value="xlsx">خروجی Excel ردیف‌های انتخابی</button></div><div class="table-responsive"><table class="table"><thead><tr><th><input type="checkbox"></th>';
         foreach ($config['columns'] as $col) echo '<th>' . h(labelFor($config, $col)) . '</th>';
         echo '<th>عملیات</th></tr></thead><tbody>';

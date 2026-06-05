@@ -6,7 +6,13 @@ require_once __DIR__ . '/../../core/SchemaSynchronizer.php';
 if (!function_exists('adminGuard')) {
     function adminGuard($requiredRole = 'employee') {
         if (session_status() !== PHP_SESSION_ACTIVE) session_start();
-        $auth = new Auth();
+        try {
+            $auth = new Auth();
+        } catch (Throwable $e) {
+            error_log('[admin] Authentication bootstrap failed: ' . $e->getMessage());
+            http_response_code(500);
+            exit('درخواست قابل پردازش نیست. جزئیات خطا در لاگ سیستم ثبت شد.');
+        }
         if (!$auth->isLoggedIn()) {
             header('Location: index.php');
             exit;
