@@ -117,11 +117,7 @@ class MigrationRunner {
             return;
         }
 
-        if ($this->executeCreateIndexIfNotExists($statement)) {
-            return;
-        }
-
-        if (stripos($statement, 'ADD COLUMN IF NOT EXISTS') !== false || stripos($statement, 'ADD INDEX') !== false) {
+        if (preg_match('/^ALTER\s+TABLE\s+/i', $statement) && preg_match('/\bADD\s+(COLUMN|UNIQUE\s+KEY|UNIQUE\s+INDEX|KEY|INDEX)\b/i', $statement)) {
             if ($this->executeCompatibleAlter($statement)) {
                 return;
             }
@@ -135,21 +131,6 @@ class MigrationRunner {
             }
             throw $e;
         }
-    }
-
-    private function executeCreateIndexIfNotExists(string $statement): bool {
-        if (!preg_match('/^CREATE\s+(UNIQUE\s+)?INDEX\s+IF\s+NOT\s+EXISTS\s+`?([^`\s]+)`?\s+ON\s+`?([^`\s]+)`?\s*(\(.+\))\s*$/is', $statement, $m)) {
-            return false;
-        }
-        $unique = trim((string)$m[1]) !== '' ? 'UNIQUE ' : '';
-        $index = $m[2];
-        $table = $m[3];
-        $columns = $m[4];
-        if (schemaIndexExists($this->pdo, $table, $index)) {
-            return true;
-        }
-        $this->pdo->exec('CREATE ' . $unique . 'INDEX `' . str_replace('`', '``', $index) . '` ON `' . str_replace('`', '``', $table) . '` ' . $columns);
-        return true;
     }
 
     private function executeCompatibleAlter(string $statement): bool {

@@ -1,10 +1,11 @@
-# Database migrations
+# Database schema and migrations
 
-Run migrations in phpMyAdmin or with the MySQL CLI after importing `database/schema.sql` and `database/survey_schema.sql`.
+`database/schema.sql` is the canonical production schema and the only schema file the installer imports.
+
+Active migrations are limited to `database/migrations/`. The current final migration is:
 
 ```sql
-SOURCE database/migrations/2026_05_31_admin_crm_prediction_content.sql;
-SOURCE database/migrations/2026_05_31_security_performance_update.sql;
+database/migrations/2026_06_05_final_schema.sql
 ```
 
-The migration adds the admin CRM, hero banner, match, prediction and extended menu fields. Existing datetime values remain standard Gregorian `date/datetime` values in MySQL; PHP helpers render and parse Jalali dates for users and admins.
+The application migration flow records migration execution in `system_versions` and then reconciles existing installations against `database/schema.sql` with safe PHP existence checks before adding missing columns or indexes. Do not add MySQL-8-only IF-NOT-EXISTS ALTER or INDEX statements.

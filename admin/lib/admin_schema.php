@@ -1,11 +1,37 @@
 <?php
-require_once __DIR__ . '/admin_crud.php';
+require_once __DIR__ . '/../../core/Auth.php';
+require_once __DIR__ . '/../../core/SchemaSynchronizer.php';
+
+
+if (!function_exists('adminGuard')) {
+    function adminGuard($requiredRole = 'employee') {
+        if (session_status() !== PHP_SESSION_ACTIVE) session_start();
+        $auth = new Auth();
+        if (!$auth->isLoggedIn()) {
+            header('Location: index.php');
+            exit;
+        }
+        if (!$auth->hasPermission($requiredRole)) {
+            http_response_code(403);
+            exit('دسترسی کافی نیست.');
+        }
+        return $auth->getCurrentAdmin();
+    }
+}
+
+if (!function_exists('h')) {
+    function h($value) { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'); }
+}
+
+if (!function_exists('safeAdminLog')) {
+    function safeAdminLog(string $message): void { error_log('[admin] ' . $message); }
+}
 
 function adminDb(): PDO {
     return Database::getInstance()->getConnection();
 }
 
-function tableExists(string $table): bool {
+function adminTableExists(string $table): bool {
     try {
         $stmt = adminDb()->prepare('SHOW TABLES LIKE :table');
         $stmt->execute(['table' => $table]);
@@ -15,7 +41,7 @@ function tableExists(string $table): bool {
     }
 }
 
-function columnExists(string $table, string $column): bool {
+function adminColumnExists(string $table, string $column): bool {
     try {
         $stmt = adminDb()->prepare('SHOW COLUMNS FROM `' . str_replace('`', '``', $table) . '` LIKE :column');
         $stmt->execute(['column' => $column]);
@@ -26,7 +52,7 @@ function columnExists(string $table, string $column): bool {
 }
 
 
-function indexExists(string $table, string $index): bool {
+function adminIndexExists(string $table, string $index): bool {
     try {
         $stmt = adminDb()->prepare('SHOW INDEX FROM `' . str_replace('`', '``', $table) . '` WHERE Key_name = :index_name');
         $stmt->execute(['index_name' => $index]);
@@ -37,12 +63,12 @@ function indexExists(string $table, string $index): bool {
 }
 
 function ensureTableColumns(string $table, array $columns): void {
-    if (!tableExists($table)) {
+    if (!adminTableExists($table)) {
         return;
     }
     $db = adminDb();
     foreach ($columns as $column => $definition) {
-        if (!columnExists($table, $column)) {
+        if (!adminColumnExists($table, $column)) {
             try {
                 $db->exec("ALTER TABLE `" . str_replace('`', '``', $table) . "` ADD COLUMN `" . str_replace('`', '``', $column) . "` {$definition}");
             } catch (Throwable $e) {
@@ -55,6 +81,14 @@ function ensureTableColumns(string $table, array $columns): void {
 function ensureAdminSchema(): array {
     $db = adminDb();
     $changes = [];
+    try {
+        foreach (SchemaSynchronizer::sync($db, ROOT_PATH . '/database/schema.sql') as $syncChange) {
+            $changes[] = 'schema-sync: ' . $syncChange;
+        }
+    } catch (Throwable $e) {
+        $changes[] = 'schema-sync skipped (خطا: ' . $e->getMessage() . ')';
+    }
+
     $run = function (string $sql, string $label) use ($db, &$changes) {
         try {
             $db->exec($sql);
@@ -94,27 +128,27 @@ function ensureAdminSchema(): array {
         KEY `idx_activity_created` (`created_at`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول activity_log');
 
-    if (tableExists('admins')) {
-        if (!columnExists('admins', 'department')) {
+    if (adminTableExists('admins')) {
+        if (!adminColumnExists('admins', 'department')) {
             $run("ALTER TABLE `admins` ADD COLUMN `department` varchar(100) DEFAULT NULL AFTER `role`", 'افزودن department به admins');
         }
-        if (!columnExists('admins', 'permissions')) {
+        if (!adminColumnExists('admins', 'permissions')) {
             $run("ALTER TABLE `admins` ADD COLUMN `permissions` JSON DEFAULT NULL AFTER `department`", 'افزودن permissions به admins');
         }
         $run("ALTER TABLE `admins` MODIFY `role` enum('super_admin','admin','manager','employee') DEFAULT 'admin'", 'همگام‌سازی نقش employee در admins');
     }
 
-    if (tableExists('crm_customers')) {
-        if (!columnExists('crm_customers', 'acquisition_source')) {
+    if (adminTableExists('crm_customers')) {
+        if (!adminColumnExists('crm_customers', 'acquisition_source')) {
             $run("ALTER TABLE `crm_customers` ADD COLUMN `acquisition_source` varchar(100) DEFAULT NULL AFTER `reminder_date`", 'افزودن acquisition_source به CRM');
         }
-        if (!indexExists('crm_customers', 'idx_crm_acquisition_source')) {
+        if (!adminIndexExists('crm_customers', 'idx_crm_acquisition_source')) {
             $run("ALTER TABLE `crm_customers` ADD INDEX `idx_crm_acquisition_source` (`acquisition_source`)", 'ایندکس منبع جذب CRM');
         }
-        if (!columnExists('crm_customers', 'attended_match_event')) {
+        if (!adminColumnExists('crm_customers', 'attended_match_event')) {
             $run("ALTER TABLE `crm_customers` ADD COLUMN `attended_match_event` tinyint(1) NOT NULL DEFAULT 0 AFTER `tags`", 'افزودن attended_match_event به CRM');
         }
-        if (!indexExists('crm_customers', 'idx_crm_attended')) {
+        if (!adminIndexExists('crm_customers', 'idx_crm_attended')) {
             $run("ALTER TABLE `crm_customers` ADD INDEX `idx_crm_attended` (`attended_match_event`)", 'ایندکس حضور مسابقه CRM');
         }
     }
@@ -274,18 +308,18 @@ function ensureAdminSchema(): array {
         CONSTRAINT `fk_employee_performance_evaluator` FOREIGN KEY (`evaluated_by`) REFERENCES `admins` (`id`) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول employee_performance');
 
-    if (tableExists('matches')) {
+    if (adminTableExists('matches')) {
         ensureTableColumns('matches', [
             'final_score_team_a' => 'int(11) DEFAULT NULL',
             'final_score_team_b' => 'int(11) DEFAULT NULL',
             'match_finished' => 'tinyint(1) NOT NULL DEFAULT 0',
         ]);
-        if (!indexExists('matches', 'idx_matches_finished')) {
+        if (!adminIndexExists('matches', 'idx_matches_finished')) {
             $run("ALTER TABLE `matches` ADD INDEX `idx_matches_finished` (`match_finished`)", 'ایندکس پایان مسابقه');
         }
     }
 
-    if (tableExists('predictions')) {
+    if (adminTableExists('predictions')) {
         ensureTableColumns('predictions', [
             'is_correct_prediction' => 'tinyint(1) NOT NULL DEFAULT 0',
             'crm_match' => 'tinyint(1) NOT NULL DEFAULT 0',
@@ -413,7 +447,7 @@ function ensureAdminSchema(): array {
 }
 
 function schemaColumns(string $table): array {
-    if (!tableExists($table)) return [];
+    if (!adminTableExists($table)) return [];
     $stmt = adminDb()->query('DESCRIBE `' . str_replace('`', '``', $table) . '`');
     return $stmt->fetchAll();
 }

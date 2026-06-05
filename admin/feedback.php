@@ -25,7 +25,7 @@ function loadFeedbackRows(PDO $db): array {
         $where='1=1'; $params=[]; if($q!==''){ $where='customer_name LIKE :q OR customer_phone LIKE :q OR customer_email LIKE :q OR review_text LIKE :q'; $params['q']='%'.$q.'%'; }
         $stmt=$db->prepare("SELECT 'feedback' source,id,customer_name,customer_phone,customer_email,rating,review_text,admin_response,is_approved,is_featured,created_at FROM feedback WHERE $where ORDER BY created_at DESC LIMIT 300"); $stmt->execute($params); $rows=array_merge($rows,$stmt->fetchAll());
     }
-    if (($source === '' || $source === 'survey') && tableExists('survey_responses')) {
+    if (($source === '' || $source === 'survey') && adminTableExists('survey_responses')) {
         $where='1=1'; $params=[]; if($q!==''){ $where='sr.customer_name LIKE :q OR sr.customer_phone LIKE :q OR sr.customer_email LIKE :q OR sr.response_data LIKE :q'; $params['q']='%'.$q.'%'; }
         $stmt=$db->prepare("SELECT 'survey' source,sr.id,sr.customer_name,sr.customer_phone,sr.customer_email,'' rating,CAST(sr.response_data AS CHAR) review_text,'' admin_response,1 is_approved,0 is_featured,sr.submitted_at created_at FROM survey_responses sr WHERE $where ORDER BY sr.submitted_at DESC LIMIT 300"); $stmt->execute($params); $rows=array_merge($rows,$stmt->fetchAll());
     }

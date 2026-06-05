@@ -12,7 +12,7 @@ session_start();
 $baseDir = __DIR__;
 $configPath = $baseDir . '/config.php';
 $lockPath = $baseDir . '/installed.lock';
-$schemaPath = $baseDir . '/database/full_schema.sql';
+$schemaPath = $baseDir . '/database/schema.sql';
 $uploadDirs = [
     $baseDir . '/uploads',
     $baseDir . '/uploads/media',
@@ -70,21 +70,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Admin password must be at least 8 characters.';
     }
     if (!is_readable($schemaPath)) {
-        $errors[] = 'database/full_schema.sql is missing or unreadable.';
+        $errors[] = 'database/schema.sql is missing or unreadable.';
     }
 
     if (!$errors) {
         try {
             require_once $baseDir . '/core/MigrationRunner.php';
+            require_once $baseDir . '/core/SchemaSynchronizer.php';
 
             $pdo = connectInstallerDatabase($dbHost, $dbName, $dbUser, $dbPass);
             $runner = new MigrationRunner($pdo, [
                 $baseDir . '/database/migrations',
-                $baseDir . '/migrations',
             ]);
 
             $runner->executeSqlFile($schemaPath);
-            $runner->markApplied('database/full_schema.sql');
+            SchemaSynchronizer::sync($pdo, $schemaPath);
+            $runner->markApplied('database/schema.sql');
             $runner->run();
 
             $adminStmt = $pdo->prepare(
@@ -176,7 +177,7 @@ function installValue(string $name, string $default = ''): string {
 <body>
 <div class="wrap">
     <h1>KEY Restaurant & Coffeehouse Installer</h1>
-    <p class="note">Imports <strong>database/full_schema.sql</strong>, runs pending migrations once, creates runtime directories, and writes production config.</p>
+    <p class="note">Imports <strong>database/schema.sql</strong>, runs the single final migration once, reconciles schema safely, creates runtime directories, and writes production config.</p>
 
     <?php if ($success): ?>
         <div class="alert success">
