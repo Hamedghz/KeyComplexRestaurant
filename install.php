@@ -76,17 +76,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$errors) {
         try {
             require_once $baseDir . '/core/MigrationRunner.php';
-            require_once $baseDir . '/core/SchemaSynchronizer.php';
 
             $pdo = connectInstallerDatabase($dbHost, $dbName, $dbUser, $dbPass);
-            $runner = new MigrationRunner($pdo, [
-                $baseDir . '/database/migrations',
-            ]);
-
+            $runner = new MigrationRunner($pdo, []);
             $runner->executeSqlFile($schemaPath);
-            $runner->markApplied('database/schema.sql');
-            $runner->run();
-            SchemaSynchronizer::sync($pdo, $schemaPath);
 
             $adminStmt = $pdo->prepare(
                 'INSERT INTO `admins` (`username`, `email`, `password`, `full_name`, `role`, `is_active`)
