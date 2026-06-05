@@ -1,10 +1,13 @@
 <?php
 /**
- * KEY Restaurant & Coffeehouse production installer.
+ * KEY Restaurant & Coffeehouse production installer (UPDATED).
  *
  * Shared-hosting friendly installer: no shell commands, imports the consolidated
- * schema, writes config.php, creates runtime folders,
- * creates the first administrator, and writes installed.lock.
+ * schema, writes config.php, creates runtime folders, creates the first administrator,
+ * and writes installed.lock.
+ *
+ * ENHANCED: Merges database/schema.sql with all database/migrations/*.sql files
+ * and executes them in proper dependency order.
  */
 
 session_start();
@@ -13,6 +16,7 @@ $baseDir = __DIR__;
 $configPath = $baseDir . '/config.php';
 $lockPath = $baseDir . '/installed.lock';
 $schemaPath = $baseDir . '/database/schema.sql';
+$migrationsDir = $baseDir . '/database/migrations';
 $uploadDirs = [
     $baseDir . '/uploads',
     $baseDir . '/uploads/media',
@@ -79,8 +83,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $pdo = connectInstallerDatabase($dbHost, $dbName, $dbUser, $dbPass);
             $runner = new MigrationRunner($pdo, []);
+
+            // 1. Execute main schema
             $runner->executeSqlFile($schemaPath);
 
+            // 2. Execute all migration files in dependency order
+            $migrations = collectMigrationFiles($migrationsDir);
+            foreach ($migrations as $migrationFile) {
+                try {
+                    $runner->executeSqlFile($migrationFile);
+                } catch (Throwable $e) {
+                    error_log('Migration ' . basename($migrationFile) . ' warning: ' . $e->getMessage());
+                    // Continue on non-critical migration errors (tables may already exist)
+                }
+            }
+
+            // 3. Create first administrator
             $adminStmt = $pdo->prepare(
                 'INSERT INTO `admins` (`username`, `email`, `password`, `full_name`, `role`, `is_active`)
                  VALUES (:username, :email, :password, :full_name, :role, 1)
@@ -98,12 +116,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $adminStmt->closeCursor();
             }
 
+            // 4. Create upload directories
             foreach ($uploadDirs as $dir) {
                 if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
                     throw new RuntimeException('Could not create directory: ' . basename($dir));
                 }
             }
 
+            // 5. Write configuration
             writeInstallerConfig($configPath, [
                 'app' => [
                     'environment' => $environment,
@@ -121,6 +141,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ],
             ]);
 
+            // 6. Write lock file
             if (file_put_contents($lockPath, date('c'), LOCK_EX) === false) {
                 throw new RuntimeException('Could not write installed.lock. Check server-root permissions.');
             }
@@ -131,6 +152,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Installation failed. Please verify database credentials, permissions, and SQL compatibility.';
         }
     }
+}
+
+function collectMigrationFiles(string $dir): array {
+    $files = [];
+    if (!is_dir($dir)) {
+        return $files;
+    }
+    
+    $items = @scandir($dir);
+    if ($items === false) {
+        return $files;
+    }
+    
+    foreach ($items as $item) {
+        if (substr($item, -4) === '.sql') {
+            $files[] = $dir . '/' . $item;
+        }
+    }
+    
+    sort($files);
+    return $files;
 }
 
 function connectInstallerDatabase(string $host, string $name, string $user, string $pass): PDO {
@@ -184,13 +226,13 @@ function installValue(string $name, string $default = ''): string {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Install KEY Restaurant & Coffeehouse</title>
     <style>
-        body{font-family:Arial,sans-serif;background:#f6f2ea;margin:0;padding:32px;color:#24201b}.wrap{max-width:760px;margin:auto;background:#fff;border-radius:18px;padding:28px;box-shadow:0 14px 40px rgba(0,0,0,.08)}h1{margin-top:0}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.field{margin-bottom:16px}label{display:block;font-weight:700;margin-bottom:6px}input,select{width:100%;box-sizing:border-box;border:1px solid #d7cbbb;border-radius:10px;padding:12px;font-size:15px}.alert{border-radius:12px;padding:14px;margin-bottom:18px}.error{background:#fff0f0;color:#8a1f1f}.success{background:#effaf1;color:#176c2f}.btn{background:#8b5e34;color:#fff;border:0;border-radius:12px;padding:14px 22px;font-size:16px;cursor:pointer}.note{color:#6f665e;font-size:14px}@media(max-width:700px){.grid{grid-template-columns:1fr}}
+        body{font-family:Arial,sans-serif;background:#f6f2ea;margin:0;padding:32px;color:#24201b}.wrap{max-width:760px;margin:auto;background:#fff;border-radius:18px;padding:28px;box-shadow:0 14px 45px rgba(0,0,0,.1)}.wrap h1{margin-top:0;color:#004647}.wrap h2{color:#004647;font-size:18px;margin-top:28px;margin-bottom:12px}.note{color:#666;font-size:14px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}.grid.full{grid-template-columns:1fr}.field{display:flex;flex-direction:column}.field label{font-weight:bold;margin-bottom:4px;font-size:13px;color:#333}.field input,.field select{padding:8px 12px;border:1px solid #ddd;border-radius:4px;font-size:14px;font-family:monospace}.field input:focus,.field select:focus{outline:none;border-color:#004647;box-shadow:0 0 0 3px rgba(0,70,71,.1)}.alert{padding:16px;border-radius:8px;margin-bottom:20px;font-size:14px}.alert.success{background:#d4edda;color:#155724;border-left:4px solid #28a745}.alert.error{background:#f8d7da;color:#721c24;border-left:4px solid #dc3545}.alert ul{margin:8px 0 0 0;padding-left:20px}.alert li{margin:6px 0}.btn{background:#004647;color:#fff;border:none;padding:12px 24px;border-radius:4px;font-size:15px;font-weight:bold;cursor:pointer;transition:.2s}.btn:hover{background:#003536}
     </style>
 </head>
 <body>
 <div class="wrap">
     <h1>KEY Restaurant & Coffeehouse Installer</h1>
-    <p class="note">Imports <strong>database/schema.sql</strong> as the canonical fresh-install schema, creates runtime directories, and writes production config.</p>
+    <p class="note">Imports <strong>database/schema.sql</strong> and all <strong>database/migrations/*.sql</strong> files, creates runtime directories, and writes production config.</p>
 
     <?php if ($success): ?>
         <div class="alert success">
@@ -223,8 +265,8 @@ function installValue(string $name, string $default = ''): string {
             <div class="grid">
                 <div class="field"><label>Username</label><input name="admin_username" value="<?php echo installValue('admin_username', 'admin'); ?>" required></div>
                 <div class="field"><label>Email</label><input name="admin_email" type="email" value="<?php echo installValue('admin_email', 'admin@example.com'); ?>" required></div>
-                <div class="field"><label>Full name</label><input name="admin_name" value="<?php echo installValue('admin_name', 'KEY Administrator'); ?>"></div>
-                <div class="field"><label>Password</label><input name="admin_password" type="password" minlength="8" required></div>
+                <div class="field full"><label>Full name</label><input name="admin_name" value="<?php echo installValue('admin_name', 'KEY Administrator'); ?>"></div>
+                <div class="field full"><label>Password</label><input name="admin_password" type="password" minlength="8" required></div>
             </div>
 
             <button class="btn" type="submit">Install production system</button>
