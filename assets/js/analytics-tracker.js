@@ -1,4 +1,15 @@
 (function () {
+  function uuid() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+      return window.crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+      var r = Math.random() * 16 | 0;
+      var v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
+
   try {
     var path = window.location.pathname || '/';
     var ignoredPrefixes = ['/admin/', '/api/', '/assets/', '/uploads/'];
@@ -6,16 +17,6 @@
       return;
     }
 
-    function uuid() {
-      if (window.crypto && typeof window.crypto.randomUUID === 'function') {
-        return window.crypto.randomUUID();
-      }
-      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-        var r = Math.random() * 16 | 0;
-        var v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-      });
-    }
 
     var visitorKey = 'key_analytics_visitor_uuid';
     var sessionKey = 'key_analytics_session_uuid';

@@ -88,6 +88,72 @@ function analyticsTrackClassifySource(array $payload): array {
     return ['source' => $host !== '' ? $host : 'unknown', 'medium' => 'referral', 'campaign' => '', 'class' => $host !== '' ? 'referral' : 'unknown'];
 }
 
+function analyticsTrackDetectSourceLabel(array $source, array $payload): string {
+    $raw = strtolower(($source['source'] ?? '') . ' ' . ($payload['utm_source'] ?? '') . ' ' . ($payload['utm_medium'] ?? '') . ' ' . ($payload['referrer'] ?? ''));
+    if (str_contains($raw, 'instagram')) return 'Instagram';
+    if (str_contains($raw, 'telegram') || str_contains($raw, 't.me')) return 'Telegram';
+    if (str_contains($raw, 'whatsapp')) return 'WhatsApp';
+    if (str_contains($raw, 'sms')) return 'SMS';
+    if (str_contains($raw, 'maps.google') || str_contains($raw, 'google maps')) return 'Google Maps';
+    if (str_contains($raw, 'google')) return 'Google Search';
+    if (str_contains($raw, 'qr')) return 'QR Code';
+    if (str_contains($raw, 'crm')) return 'CRM Campaign Link';
+    if (str_contains($raw, 'cpc') || str_contains($raw, 'paid') || str_contains($raw, 'ads')) return 'Paid Ads';
+    if (($source['medium'] ?? '') === 'referral') return 'Referral Website';
+    if (($source['medium'] ?? '') === 'direct') return 'Direct Entry';
+    return 'Unknown';
+}
+
+function analyticsTrackTargetAction(string $path): array {
+    $path = strtolower($path);
+    if (str_contains($path, 'prediction')) return ['prediction_submit', 'predictions'];
+    if (str_contains($path, 'survey')) return ['survey_start', 'surveys'];
+    if (str_contains($path, 'menu-item') || str_contains($path, 'item')) return ['menu_item_view', 'menu-items'];
+    if (str_contains($path, 'category') || str_contains($path, 'menu')) return ['category_view', 'categories'];
+    if (str_contains($path, 'match') || str_contains($path, 'campaign')) return ['match_view', 'matches'];
+    if (str_contains($path, 'banner')) return ['banner_interaction', 'banners'];
+    if (str_contains($path, 'crm')) return ['crm_link_entry', 'crm'];
+    return ['menu_view', 'home'];
+}
+
+function analyticsTrackEnsurePathTable(PDO $db): void {
+    $db->exec("CREATE TABLE IF NOT EXISTS `visitor_analytics_logs` (
+        `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        `session_id` varchar(64) NOT NULL,
+        `user_id` int(11) UNSIGNED DEFAULT NULL,
+        `customer_id` int(11) UNSIGNED DEFAULT NULL,
+        `source_type` varchar(100) DEFAULT NULL,
+        `source_name` varchar(150) DEFAULT NULL,
+        `campaign_type` varchar(100) DEFAULT NULL,
+        `entry_link` varchar(500) DEFAULT NULL,
+        `referrer_url` varchar(500) DEFAULT NULL,
+        `utm_source` varchar(100) DEFAULT NULL,
+        `utm_medium` varchar(100) DEFAULT NULL,
+        `utm_campaign` varchar(150) DEFAULT NULL,
+        `landing_page` varchar(500) DEFAULT NULL,
+        `current_page` varchar(500) DEFAULT NULL,
+        `next_page` varchar(500) DEFAULT NULL,
+        `related_module` varchar(100) DEFAULT NULL,
+        `related_record_id` int(11) UNSIGNED DEFAULT NULL,
+        `event_type` enum('external_entry','page_view','banner_view','banner_click','match_view','prediction_start','prediction_submit','category_view','menu_item_view','survey_view','survey_start','survey_submit','crm_link_entry','exit') NOT NULL DEFAULT 'page_view',
+        `target_action` varchar(100) DEFAULT NULL,
+        `device_type` varchar(50) DEFAULT NULL,
+        `browser` varchar(100) DEFAULT NULL,
+        `operating_system` varchar(100) DEFAULT NULL,
+        `ip_address` varchar(64) DEFAULT NULL,
+        `branch_id` int(11) UNSIGNED DEFAULT NULL,
+        `is_new_visitor` tinyint(1) NOT NULL DEFAULT 0,
+        `is_converted` tinyint(1) NOT NULL DEFAULT 0,
+        `duration_seconds` int(11) DEFAULT NULL,
+        `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`),
+        KEY `idx_visitor_logs_session` (`session_id`),
+        KEY `idx_visitor_logs_source` (`source_type`, `source_name`),
+        KEY `idx_visitor_logs_action` (`target_action`, `is_converted`),
+        KEY `idx_visitor_logs_created` (`created_at`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+}
+
 function analyticsTrackEnsureTables(PDO $db): void {
     $schema = ROOT_PATH . '/database/migrations/2026_06_05_runtime_analytics.sql';
     if (!is_readable($schema)) {
@@ -122,6 +188,7 @@ try {
 
     $db = Database::getInstance()->getConnection();
     analyticsTrackEnsureTables($db);
+    analyticsTrackEnsurePathTable($db);
 
     $now = date('Y-m-d H:i:s');
     $visitorUuid = analyticsTrackUuid($payload['visitor_uuid'] ?? '');
@@ -183,6 +250,49 @@ try {
         'browser_language' => $language,
         'timezone' => $timezone,
         'viewed_at' => $now,
+    ]);
+
+    $previousStmt = $db->prepare('SELECT id, current_page, landing_page, created_at FROM visitor_analytics_logs WHERE session_id = :session_id ORDER BY id DESC LIMIT 1');
+    $previousStmt->execute(['session_id' => $sessionUuid]);
+    $previous = $previousStmt->fetch();
+    if ($previous && !empty($previous['id'])) {
+        $duration = max(0, strtotime($now) - strtotime((string)$previous['created_at']));
+        $db->prepare('UPDATE visitor_analytics_logs SET next_page = :next_page, duration_seconds = COALESCE(duration_seconds, :duration) WHERE id = :id')
+            ->execute(['next_page' => $pagePath, 'duration' => $duration, 'id' => $previous['id']]);
+    }
+    [$targetAction, $relatedModule] = analyticsTrackTargetAction($pagePath);
+    $isConverted = in_array($targetAction, ['prediction_submit','survey_submit','menu_item_view','banner_interaction','campaign_click'], true) ? 1 : 0;
+    $eventType = $previous ? 'page_view' : 'external_entry';
+    if ($targetAction === 'prediction_submit') $eventType = 'prediction_submit';
+    elseif ($targetAction === 'survey_start') $eventType = 'survey_view';
+    elseif ($targetAction === 'menu_item_view') $eventType = 'menu_item_view';
+    elseif ($targetAction === 'category_view') $eventType = 'category_view';
+    elseif ($targetAction === 'match_view') $eventType = 'match_view';
+    elseif ($targetAction === 'banner_interaction') $eventType = 'banner_click';
+    elseif ($targetAction === 'crm_link_entry') $eventType = 'crm_link_entry';
+    $pathStmt = $db->prepare('INSERT INTO visitor_analytics_logs (session_id, source_type, source_name, campaign_type, entry_link, referrer_url, utm_source, utm_medium, utm_campaign, landing_page, current_page, related_module, event_type, target_action, device_type, browser, operating_system, ip_address, is_new_visitor, is_converted, created_at) VALUES (:session_id, :source_type, :source_name, :campaign_type, :entry_link, :referrer_url, :utm_source, :utm_medium, :utm_campaign, :landing_page, :current_page, :related_module, :event_type, :target_action, :device_type, :browser, :operating_system, :ip_address, :is_new_visitor, :is_converted, :created_at)');
+    $pathStmt->execute([
+        'session_id' => $sessionUuid,
+        'source_type' => analyticsTrackDetectSourceLabel($source, $payload),
+        'source_name' => $source['source'],
+        'campaign_type' => $source['medium'],
+        'entry_link' => $pageUrl,
+        'referrer_url' => $referrer,
+        'utm_source' => analyticsTrackString($payload['utm_source'] ?? '', 100),
+        'utm_medium' => analyticsTrackString($payload['utm_medium'] ?? '', 100),
+        'utm_campaign' => analyticsTrackString($payload['utm_campaign'] ?? '', 150),
+        'landing_page' => $previous ? (($previous['landing_page'] ?? '') ?: $pagePath) : $pagePath,
+        'current_page' => $pagePath,
+        'related_module' => $relatedModule,
+        'event_type' => $eventType,
+        'target_action' => $targetAction,
+        'device_type' => $parsed['device_type'],
+        'browser' => $parsed['browser'],
+        'operating_system' => $parsed['os'],
+        'ip_address' => $ipHash,
+        'is_new_visitor' => $previous ? 0 : 1,
+        'is_converted' => $isConverted,
+        'created_at' => $now,
     ]);
 
     analyticsTrackJson(['ok' => true]);

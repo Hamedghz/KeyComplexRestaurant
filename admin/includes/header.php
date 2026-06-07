@@ -530,6 +530,9 @@
             <a href="analytics-traffic-sources.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'analytics-traffic-sources.php' ? 'active' : ''; ?>">
                 <span>🧭</span> Traffic Sources
             </a>
+            <a href="visitor-analytics.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'visitor-analytics.php' ? 'active' : ''; ?>">
+                <span>🧩</span> Visitor Path Analytics
+            </a>
             <a href="analytics-live.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'analytics-live.php' ? 'active' : ''; ?>">
                 <span>🟢</span> Live Visitors
             </a>
