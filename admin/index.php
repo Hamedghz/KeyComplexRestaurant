@@ -183,11 +183,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             <button type="submit" class="btn-login">ورود به پنل</button>
         </form>
-        
-        <div class="footer-text">
-            نام کاربری پیش‌فرض: <strong>admin</strong><br>
-            رمز عبور پیش‌فرض: <strong>admin123</strong>
-        </div>
     </div>
 </body>
 </html>

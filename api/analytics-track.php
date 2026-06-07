@@ -155,7 +155,7 @@ function analyticsTrackEnsurePathTable(PDO $db): void {
 }
 
 function analyticsTrackEnsureTables(PDO $db): void {
-    $schema = ROOT_PATH . '/database/migrations/2026_06_05_runtime_analytics.sql';
+    $schema = ROOT_PATH . '/database/schema.sql';
     if (!is_readable($schema)) {
         return;
     }
@@ -163,9 +163,21 @@ function analyticsTrackEnsureTables(PDO $db): void {
     if ($sql === false) {
         return;
     }
+    $allowedTables = [
+        'schema_migrations' => true,
+        'traffic_logs' => true,
+        'traffic_sources' => true,
+        'visitor_sessions' => true,
+        'visitor_locations' => true,
+        'traffic_statistics' => true,
+        'analytics_visitors' => true,
+        'analytics_sessions' => true,
+        'analytics_pageviews' => true,
+        'visitor_analytics_logs' => true,
+    ];
     foreach (array_filter(array_map('trim', explode(';', $sql))) as $statement) {
-        if (stripos($statement, 'CREATE TABLE') === 0) {
-            $db->exec($statement);
+        if (preg_match('/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`([^`]+)`/i', $statement, $match, PREG_OFFSET_CAPTURE) && isset($allowedTables[$match[1][0]])) {
+            $db->exec(substr($statement, $match[0][1]));
         }
     }
 }

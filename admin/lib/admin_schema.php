@@ -86,13 +86,8 @@ function ensureTableColumns(string $table, array $columns): void {
 
 
 function adminCanonicalSchemaFiles(): array {
-    $candidates = [
-        ROOT_PATH . '/database/schema.sql',
-        ROOT_PATH . '/database/migrations/2026_06_05_runtime_analytics.sql',
-        ROOT_PATH . '/database/migrations/2026_06_05_final_schema.sql',
-    ];
-
-    return array_values(array_filter($candidates, static fn($file) => is_readable($file)));
+    $schema = ROOT_PATH . '/database/schema.sql';
+    return is_readable($schema) ? [$schema] : [];
 }
 
 function adminExtractCreateStatement(string $sql, string $table): ?string {
@@ -154,8 +149,16 @@ function ensureAdminCanonicalTables(PDO $db, array $requestedTables = []): array
     // able to repair their own tables from database/schema.sql.
     $canonicalOrder = [
         'admins',
+        'admin_sessions',
+        'activity_log',
         'users',
         'orders',
+        'order_items',
+        'feedback',
+        'media',
+        'settings',
+        'newsletter_subscribers',
+        'memberships',
         'menu_categories',
         'menu_items',
         'dynamic_forms',
@@ -165,20 +168,38 @@ function ensureAdminCanonicalTables(PDO $db, array $requestedTables = []): array
         'hero_banners',
         'matches',
         'predictions',
+        'system_versions',
+        'acquisition_sources',
+        'social_links',
         'employee_evaluations',
         'employee_monthly_inputs',
         'employee_score_history',
         'employee_rewards',
         'employee_warnings',
         'employee_performance',
+        'key_story_settings',
+        'pool_leads',
+        'traffic_logs',
+        'traffic_sources',
+        'visitor_sessions',
+        'visitor_locations',
+        'traffic_statistics',
+        'schema_migrations',
         'analytics_visitors',
         'analytics_sessions',
         'analytics_pageviews',
+        'visitor_analytics_logs',
     ];
 
     $dependencyMap = [
         'menu_items' => ['menu_categories'],
         'dynamic_forms' => ['admins'],
+        'admin_sessions' => ['admins'],
+        'activity_log' => ['admins'],
+        'order_items' => ['orders', 'menu_items'],
+        'feedback' => ['users', 'orders'],
+        'media' => ['admins'],
+        'memberships' => ['users'],
         'survey_responses' => ['admins', 'users', 'orders', 'dynamic_forms'],
         'crm_customers' => ['users'],
         'crm_timelines' => ['users', 'crm_customers'],
@@ -472,23 +493,62 @@ function ensureAdminSchema(): array {
 
     if (adminTableExists('matches')) {
         ensureTableColumns('matches', [
+            'team_one_name' => 'varchar(120) DEFAULT NULL',
+            'team_two_name' => 'varchar(120) DEFAULT NULL',
+            'team_one_logo' => 'varchar(255) DEFAULT NULL',
+            'team_two_logo' => 'varchar(255) DEFAULT NULL',
+            'prediction_start_at' => 'datetime DEFAULT NULL',
+            'prediction_end_at' => 'datetime DEFAULT NULL',
+            'match_start_at' => 'datetime DEFAULT NULL',
+            'match_end_at' => 'datetime DEFAULT NULL',
             'final_score_team_a' => 'int(11) DEFAULT NULL',
             'final_score_team_b' => 'int(11) DEFAULT NULL',
+            'final_team_one_score' => 'int(11) DEFAULT NULL',
+            'final_team_two_score' => 'int(11) DEFAULT NULL',
+            'final_result_status' => 'varchar(50) DEFAULT NULL',
             'match_finished' => 'tinyint(1) NOT NULL DEFAULT 0',
+            'reward_title' => 'varchar(200) DEFAULT NULL',
+            'points_reward' => 'int(11) NOT NULL DEFAULT 0',
         ]);
+        $run("ALTER TABLE `matches` MODIFY `status` enum('active','inactive','archived','scheduled','live','finished','cancelled') NOT NULL DEFAULT 'active'", 'همگام‌سازی وضعیت مسابقه');
         if (!adminIndexExists('matches', 'idx_matches_finished')) {
             $run("ALTER TABLE `matches` ADD INDEX `idx_matches_finished` (`match_finished`)", 'ایندکس پایان مسابقه');
+        }
+        foreach (['idx_matches_status' => '(`status`)', 'idx_matches_prediction_start' => '(`prediction_start_at`)', 'idx_matches_prediction_end' => '(`prediction_end_at`)', 'idx_matches_match_start' => '(`match_start_at`)'] as $index => $columns) {
+            if (!adminIndexExists('matches', $index)) {
+                $run("ALTER TABLE `matches` ADD INDEX `{$index}` {$columns}", 'ایندکس ' . $index);
+            }
         }
     }
 
     if (adminTableExists('predictions')) {
         ensureTableColumns('predictions', [
+            'customer_id' => 'int(11) UNSIGNED DEFAULT NULL',
+            'customer_last_name' => 'varchar(150) DEFAULT NULL',
+            'customer_mobile' => 'varchar(20) DEFAULT NULL',
+            'team_one_name' => 'varchar(120) DEFAULT NULL',
+            'team_two_name' => 'varchar(120) DEFAULT NULL',
+            'predicted_team_one_score' => 'tinyint UNSIGNED DEFAULT NULL',
+            'predicted_team_two_score' => 'tinyint UNSIGNED DEFAULT NULL',
+            'wants_reservation' => 'tinyint(1) NOT NULL DEFAULT 0',
+            'reserve_table_interest' => 'tinyint(1) NOT NULL DEFAULT 0',
             'is_correct_prediction' => 'tinyint(1) NOT NULL DEFAULT 0',
+            'is_winner' => 'tinyint(1) NOT NULL DEFAULT 0',
+            'evaluated_at' => 'datetime DEFAULT NULL',
             'crm_match' => 'tinyint(1) NOT NULL DEFAULT 0',
             'attended_match' => 'tinyint(1) NOT NULL DEFAULT 0',
+            'source' => 'varchar(150) DEFAULT NULL',
+            'ip_address' => 'varchar(45) DEFAULT NULL',
+            'user_agent' => 'varchar(255) DEFAULT NULL',
+            'submitted_at' => 'timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP',
         ]);
         $run("UPDATE `predictions` SET `crm_match` = `crm_matched` WHERE (`crm_match` IS NULL OR `crm_match` = 0) AND `crm_matched` = 1", 'همگام‌سازی crm_match');
         $run("UPDATE `predictions` SET `attended_match` = `attended_match_time` WHERE (`attended_match` IS NULL OR `attended_match` = 0) AND `attended_match_time` = 1", 'همگام‌سازی attended_match');
+        foreach (['idx_predictions_customer_mobile' => '(`customer_mobile`)', 'idx_predictions_customer_id' => '(`customer_id`)', 'idx_predictions_winner' => '(`is_winner`)'] as $index => $columns) {
+            if (!adminIndexExists('predictions', $index)) {
+                $run("ALTER TABLE `predictions` ADD INDEX `{$index}` {$columns}", 'ایندکس ' . $index);
+            }
+        }
     }
 
     $run("CREATE TABLE IF NOT EXISTS `pool_leads` (
@@ -694,33 +754,38 @@ function adminModuleDefinitions(): array {
             'columns' => ['id','full_name','mobile','customer_status','points_balance','total_orders','total_purchase_volume','acquisition_source','attended_match_event','tags','created_at'],
         ],
         'matches' => [
-            'title' => 'مدیریت مسابقات', 'min_role' => 'manager', 'table' => 'matches', 'search' => ['title','team_a','team_b','status','campaign_target'], 'filters' => ['campaign_status','status','is_active','match_finished'], 'date_column' => 'match_date',
+            'title' => 'مدیریت مسابقات', 'min_role' => 'manager', 'table' => 'matches', 'search' => ['title','team_a','team_b','team_one_name','team_two_name','status','campaign_target'], 'filters' => ['status','is_active','active_for_prediction','match_finished'], 'date_column' => 'match_start_at',
+            'join' => 'SELECT m.*, (SELECT COUNT(*) FROM predictions p WHERE p.match_id = m.id) AS prediction_count, (SELECT COUNT(*) FROM predictions p WHERE p.match_id = m.id AND COALESCE(p.is_winner, p.is_correct_prediction, 0) = 1) AS winner_count FROM matches m', 'alias' => 'm', 'required_tables' => ['predictions'],
             'fields' => [
                 'title' => ['label'=>'عنوان کمپین/مسابقه','type'=>'text'], 'description' => ['label'=>'توضیح','type'=>'textarea'], 'rules' => ['label'=>'قوانین','type'=>'textarea'], 'participation_conditions' => ['label'=>'شرایط مشارکت','type'=>'textarea'],
-                'team_a' => ['label'=>'تیم اول','type'=>'text','required'=>true], 'team_b' => ['label'=>'تیم دوم','type'=>'text','required'=>true],
-                'match_date' => ['label'=>'تاریخ مسابقه','type'=>'date','required'=>true], 'kickoff_time' => ['label'=>'ساعت شروع','type'=>'time','required'=>true], 'broadcast_time' => ['label'=>'ساعت پخش','type'=>'time'],
-                'prediction_open_at' => ['label'=>'شروع پیش‌بینی','type'=>'datetime','required'=>true], 'prediction_close_at' => ['label'=>'پایان پیش‌بینی','type'=>'datetime','required'=>true],
-                'status' => ['label'=>'وضعیت مسابقه','type'=>'select','options'=>['scheduled'=>'برنامه‌ریزی شده','live'=>'زنده','finished'=>'تمام شده','cancelled'=>'لغو شده']],
+                'team_a' => ['label'=>'نام تیم اول','type'=>'text','required'=>true], 'team_b' => ['label'=>'نام تیم دوم','type'=>'text','required'=>true],
+                'team_one_logo' => ['label'=>'لوگو/تصویر تیم اول','type'=>'image','folder'=>'matches'], 'team_two_logo' => ['label'=>'لوگو/تصویر تیم دوم','type'=>'image','folder'=>'matches'],
+                'match_start_at' => ['label'=>'زمان شروع مسابقه','type'=>'datetime','required'=>true], 'match_end_at' => ['label'=>'زمان پایان مسابقه','type'=>'datetime'],
+                'prediction_start_at' => ['label'=>'شروع پیش‌بینی','type'=>'datetime','required'=>true], 'prediction_end_at' => ['label'=>'پایان پیش‌بینی','type'=>'datetime','required'=>true],
+                'match_date' => ['label'=>'تاریخ مسابقه','type'=>'date'], 'kickoff_time' => ['label'=>'ساعت شروع','type'=>'time'], 'broadcast_time' => ['label'=>'ساعت پخش','type'=>'time'],
+                'prediction_open_at' => ['label'=>'شروع پیش‌بینی قدیمی','type'=>'datetime'], 'prediction_close_at' => ['label'=>'پایان پیش‌بینی قدیمی','type'=>'datetime'],
+                'status' => ['label'=>'وضعیت مسابقه','type'=>'select','options'=>['active'=>'فعال','inactive'=>'غیرفعال','archived'=>'آرشیو','scheduled'=>'برنامه‌ریزی شده','live'=>'زنده','finished'=>'تمام شده','cancelled'=>'لغو شده']],
                 'campaign_status' => ['label'=>'وضعیت کمپین','type'=>'select','options'=>['active'=>'فعال','inactive'=>'غیرفعال','archived'=>'آرشیو']],
                 'start_date' => ['label'=>'شروع کمپین','type'=>'datetime'], 'end_date' => ['label'=>'پایان کمپین','type'=>'datetime'],
                 'participant_count' => ['label'=>'تعداد مشارکت','type'=>'number'], 'banner_id' => ['label'=>'بنر مرتبط','type'=>'banner'], 'menu_item_id' => ['label'=>'آیتم منو مرتبط','type'=>'menu_item'], 'campaign_target' => ['label'=>'هدف کمپین','type'=>'text'],
-                'reward_points' => ['label'=>'امتیاز پاداش','type'=>'number'], 'reward_description' => ['label'=>'شرح پاداش','type'=>'textarea'],
+                'reward_title' => ['label'=>'عنوان پاداش','type'=>'text'], 'points_reward' => ['label'=>'امتیاز پاداش','type'=>'number'], 'reward_points' => ['label'=>'امتیاز پاداش قدیمی','type'=>'number'], 'reward_description' => ['label'=>'شرح پاداش','type'=>'textarea'],
                 'is_active' => ['label'=>'فعال','type'=>'checkbox'], 'active_for_prediction' => ['label'=>'فعال برای پیش‌بینی','type'=>'checkbox'],
-                'final_score_team_a' => ['label'=>'نتیجه نهایی تیم اول','type'=>'number'], 'final_score_team_b' => ['label'=>'نتیجه نهایی تیم دوم','type'=>'number'], 'match_finished' => ['label'=>'مسابقه تمام شده','type'=>'checkbox'],
+                'final_team_one_score' => ['label'=>'نتیجه نهایی تیم اول','type'=>'number'], 'final_team_two_score' => ['label'=>'نتیجه نهایی تیم دوم','type'=>'number'], 'final_result_status' => ['label'=>'وضعیت نتیجه','type'=>'select','options'=>['pending'=>'در انتظار','entered'=>'ثبت شده','evaluated'=>'ارزیابی شده']],
+                'final_score_team_a' => ['label'=>'نتیجه نهایی تیم اول قدیمی','type'=>'number'], 'final_score_team_b' => ['label'=>'نتیجه نهایی تیم دوم قدیمی','type'=>'number'], 'match_finished' => ['label'=>'مسابقه تمام شده','type'=>'checkbox'],
             ],
-            'columns' => ['id','title','team_a','team_b','match_date','campaign_status','participant_count','reward_points','is_active','match_finished','created_at'],
+            'columns' => ['id','title','team_a','team_b','match_start_at','prediction_start_at','prediction_end_at','status','points_reward','prediction_count','winner_count','match_finished','created_at'],
         ],
         'predictions' => [
-            'title' => 'پیش‌بینی‌ها', 'min_role' => 'manager', 'table' => 'predictions', 'readonly_create' => true, 'search' => ['customer_name','mobile'], 'filters' => ['match_id','status','is_winner','is_correct_prediction','customer_exists','crm_matched'], 'date_column' => 'created_at',
+            'title' => 'پیش‌بینی‌ها', 'min_role' => 'manager', 'table' => 'predictions', 'readonly_create' => true, 'search' => ['customer_name','customer_last_name','mobile','customer_mobile'], 'filters' => ['match_id','status','is_winner','wants_reservation','customer_exists','crm_match'], 'date_column' => 'created_at',
             'fields' => [
                 'customer_name' => ['label'=>'نام','type'=>'text','required'=>true], 'mobile' => ['label'=>'موبایل','type'=>'mobile','required'=>true], 'match_id' => ['label'=>'مسابقه','type'=>'match','required'=>true],
                 'prediction_content' => ['label'=>'محتوای پیش‌بینی','type'=>'textarea'],
                 'predicted_score_team_a' => ['label'=>'گل تیم اول','type'=>'number','required'=>true], 'predicted_score_team_b' => ['label'=>'گل تیم دوم','type'=>'number','required'=>true],
-                'status' => ['label'=>'وضعیت','type'=>'select','options'=>['pending'=>'در انتظار','approved'=>'تایید','rejected'=>'رد']], 'is_winner' => ['label'=>'برنده','type'=>'checkbox'], 'points_awarded' => ['label'=>'امتیاز اعطا شده','type'=>'number'], 'crm_follow_up' => ['label'=>'ارسال به CRM','type'=>'checkbox'],
-                'crm_matched' => ['label'=>'تطابق CRM','type'=>'checkbox'], 'customer_exists' => ['label'=>'مشتری موجود','type'=>'checkbox'], 'is_correct_prediction' => ['label'=>'پیش‌بینی صحیح','type'=>'checkbox'],
+                'status' => ['label'=>'وضعیت','type'=>'select','options'=>['pending'=>'در انتظار','approved'=>'تایید','rejected'=>'رد']], 'is_winner' => ['label'=>'برنده','type'=>'checkbox'], 'points_awarded' => ['label'=>'امتیاز اعطا شده','type'=>'number'], 'wants_reservation' => ['label'=>'علاقه‌مند به رزرو','type'=>'checkbox'], 'crm_follow_up' => ['label'=>'ارسال به CRM','type'=>'checkbox'],
+                'crm_match' => ['label'=>'تطابق CRM','type'=>'checkbox'], 'crm_matched' => ['label'=>'تطابق CRM قدیمی','type'=>'checkbox'], 'customer_exists' => ['label'=>'مشتری موجود','type'=>'checkbox'], 'is_correct_prediction' => ['label'=>'پیش‌بینی صحیح','type'=>'checkbox'],
             ],
-            'join' => 'SELECT p.*, CONCAT(m.team_a, " - ", m.team_b) AS match_title FROM predictions p LEFT JOIN matches m ON p.match_id = m.id', 'alias' => 'p', 'required_tables' => ['matches'],
-            'columns' => ['id','customer_name','mobile','match_title','status','is_winner','points_awarded','is_correct_prediction','crm_follow_up','created_at'],
+            'join' => 'SELECT p.*, CONCAT(COALESCE(m.team_one_name, m.team_a), " - ", COALESCE(m.team_two_name, m.team_b)) AS match_title, COALESCE(p.team_one_name, m.team_one_name, m.team_a) AS prediction_team_one, COALESCE(p.team_two_name, m.team_two_name, m.team_b) AS prediction_team_two, COALESCE(p.predicted_team_one_score, p.predicted_score_team_a) AS prediction_score_one, COALESCE(p.predicted_team_two_score, p.predicted_score_team_b) AS prediction_score_two, COALESCE(m.final_team_one_score, m.final_score_team_a) AS final_score_one, COALESCE(m.final_team_two_score, m.final_score_team_b) AS final_score_two, CASE WHEN c.id IS NULL THEN "missing" ELSE "exists" END AS crm_status FROM predictions p LEFT JOIN matches m ON p.match_id = m.id LEFT JOIN crm_customers c ON c.mobile = COALESCE(p.customer_mobile, p.mobile)', 'alias' => 'p', 'required_tables' => ['matches','crm_customers'],
+            'columns' => ['id','match_title','prediction_team_one','prediction_team_two','prediction_score_one','prediction_score_two','final_score_one','final_score_two','customer_name','customer_last_name','customer_mobile','wants_reservation','is_winner','crm_status','submitted_at'],
         ],
         'banners' => [
             'title' => 'بنرهای اصلی', 'min_role' => 'manager', 'table' => 'hero_banners', 'search' => ['title','subtitle'], 'filters' => ['display_location','active_status'], 'date_column' => 'created_at',
@@ -786,7 +851,24 @@ function adminModuleDefinition(string $key): ?array {
 }
 
 function adminModuleLabel(array $config, string $column): string {
-    return $config['fields'][$column]['label'] ?? ['id'=>'شناسه','created_at'=>'ایجاد','updated_at'=>'ویرایش','match_title'=>'مسابقه','category_title'=>'دسته‌بندی','form_title'=>'فرم','submitted_at'=>'ارسال'][$column] ?? $column;
+    return $config['fields'][$column]['label'] ?? [
+        'id'=>'شناسه',
+        'created_at'=>'ایجاد',
+        'updated_at'=>'ویرایش',
+        'match_title'=>'مسابقه',
+        'category_title'=>'دسته‌بندی',
+        'form_title'=>'فرم',
+        'submitted_at'=>'ارسال',
+        'prediction_count'=>'تعداد پیش‌بینی',
+        'winner_count'=>'تعداد برنده',
+        'prediction_team_one'=>'تیم اول',
+        'prediction_team_two'=>'تیم دوم',
+        'prediction_score_one'=>'گل پیش‌بینی تیم اول',
+        'prediction_score_two'=>'گل پیش‌بینی تیم دوم',
+        'final_score_one'=>'گل نهایی تیم اول',
+        'final_score_two'=>'گل نهایی تیم دوم',
+        'crm_status'=>'وضعیت CRM',
+    ][$column] ?? $column;
 }
 
 function adminModuleRequiredTables(array $config): array {
@@ -804,6 +886,17 @@ function adminModuleOptionalColumns(): array {
             'description' => "text DEFAULT NULL",
             'rules' => "text DEFAULT NULL",
             'participation_conditions' => "text DEFAULT NULL",
+            'team_one_name' => "varchar(120) DEFAULT NULL",
+            'team_two_name' => "varchar(120) DEFAULT NULL",
+            'team_one_logo' => "varchar(255) DEFAULT NULL",
+            'team_two_logo' => "varchar(255) DEFAULT NULL",
+            'final_team_one_score' => "int(11) DEFAULT NULL",
+            'final_team_two_score' => "int(11) DEFAULT NULL",
+            'final_result_status' => "varchar(50) DEFAULT NULL",
+            'prediction_start_at' => "datetime DEFAULT NULL",
+            'prediction_end_at' => "datetime DEFAULT NULL",
+            'match_start_at' => "datetime DEFAULT NULL",
+            'match_end_at' => "datetime DEFAULT NULL",
             'start_date' => "datetime DEFAULT NULL",
             'end_date' => "datetime DEFAULT NULL",
             'campaign_status' => "enum('active','inactive','archived') NOT NULL DEFAULT 'active'",
@@ -811,15 +904,31 @@ function adminModuleOptionalColumns(): array {
             'banner_id' => "int(11) UNSIGNED DEFAULT NULL",
             'menu_item_id' => "int(11) UNSIGNED DEFAULT NULL",
             'campaign_target' => "varchar(150) DEFAULT NULL",
+            'reward_title' => "varchar(200) DEFAULT NULL",
+            'points_reward' => "int(11) NOT NULL DEFAULT 0",
             'reward_points' => "int(11) NOT NULL DEFAULT 0",
             'reward_description' => "text DEFAULT NULL",
         ],
         'predictions' => [
+            'customer_id' => "int(11) UNSIGNED DEFAULT NULL",
+            'customer_last_name' => "varchar(150) DEFAULT NULL",
+            'customer_mobile' => "varchar(20) DEFAULT NULL",
+            'team_one_name' => "varchar(120) DEFAULT NULL",
+            'team_two_name' => "varchar(120) DEFAULT NULL",
+            'predicted_team_one_score' => "tinyint UNSIGNED DEFAULT NULL",
+            'predicted_team_two_score' => "tinyint UNSIGNED DEFAULT NULL",
             'prediction_content' => "text DEFAULT NULL",
             'status' => "enum('pending','approved','rejected') NOT NULL DEFAULT 'pending'",
             'is_winner' => "tinyint(1) NOT NULL DEFAULT 0",
+            'evaluated_at' => "datetime DEFAULT NULL",
             'points_awarded' => "int(11) NOT NULL DEFAULT 0",
             'crm_follow_up' => "tinyint(1) NOT NULL DEFAULT 0",
+            'wants_reservation' => "tinyint(1) NOT NULL DEFAULT 0",
+            'reserve_table_interest' => "tinyint(1) NOT NULL DEFAULT 0",
+            'source' => "varchar(150) DEFAULT NULL",
+            'ip_address' => "varchar(45) DEFAULT NULL",
+            'user_agent' => "varchar(255) DEFAULT NULL",
+            'submitted_at' => "timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP",
         ],
         'menu_categories' => [
             'image' => "varchar(255) DEFAULT NULL",
@@ -906,7 +1015,7 @@ function adminOptionRows(string $type): array {
 function adminModuleNormalizeConfig(array $config): array {
     $allowed = adminModuleExistingColumnNames($config['table']);
     $config['fields'] = array_filter($config['fields'], static fn($field) => in_array($field, $allowed, true), ARRAY_FILTER_USE_KEY);
-    $virtualColumns = ['match_title','category_title','form_title'];
+    $virtualColumns = ['match_title','category_title','form_title','prediction_count','winner_count','prediction_team_one','prediction_team_two','prediction_score_one','prediction_score_two','final_score_one','final_score_two','crm_status'];
     $config['columns'] = array_values(array_filter($config['columns'], static fn($col) => in_array($col, $allowed, true) || in_array($col, $virtualColumns, true)));
     $config['filters'] = array_values(array_filter($config['filters'] ?? [], static fn($col) => in_array($col, $allowed, true)));
     $config['search'] = array_values(array_filter($config['search'] ?? [], static fn($col) => in_array($col, $allowed, true)));
@@ -957,6 +1066,71 @@ function adminModuleCollectData(array $config, array $current = [], ?array $admi
         $data['created_by'] = $admin['id'] ?? null;
     }
     return $data;
+}
+
+function adminModulePrepareData(array $config, array $data, array $current = []): array {
+    if (($config['table'] ?? '') === 'matches') {
+        $teamOne = $data['team_a'] ?? $data['team_one_name'] ?? $current['team_a'] ?? $current['team_one_name'] ?? null;
+        $teamTwo = $data['team_b'] ?? $data['team_two_name'] ?? $current['team_b'] ?? $current['team_two_name'] ?? null;
+        if ($teamOne !== null) {
+            if (array_key_exists('team_a', $data) || adminColumnExists('matches', 'team_a')) $data['team_a'] = $teamOne;
+            if (adminColumnExists('matches', 'team_one_name')) $data['team_one_name'] = $teamOne;
+        }
+        if ($teamTwo !== null) {
+            if (array_key_exists('team_b', $data) || adminColumnExists('matches', 'team_b')) $data['team_b'] = $teamTwo;
+            if (adminColumnExists('matches', 'team_two_name')) $data['team_two_name'] = $teamTwo;
+        }
+
+        if (!empty($data['match_start_at'])) {
+            $timestamp = strtotime((string)$data['match_start_at']);
+            if ($timestamp) {
+                if (adminColumnExists('matches', 'match_date')) $data['match_date'] = date('Y-m-d', $timestamp);
+                if (adminColumnExists('matches', 'kickoff_time')) $data['kickoff_time'] = date('H:i:s', $timestamp);
+                if (adminColumnExists('matches', 'broadcast_time') && empty($data['broadcast_time'])) $data['broadcast_time'] = date('H:i:s', $timestamp);
+            }
+        } elseif (!empty($data['match_date']) && !empty($data['kickoff_time']) && adminColumnExists('matches', 'match_start_at')) {
+            $data['match_start_at'] = trim((string)$data['match_date'] . ' ' . (string)$data['kickoff_time']);
+        }
+
+        foreach ([['prediction_start_at', 'prediction_open_at'], ['prediction_end_at', 'prediction_close_at'], ['final_team_one_score', 'final_score_team_a'], ['final_team_two_score', 'final_score_team_b'], ['points_reward', 'reward_points']] as [$preferred, $legacy]) {
+            $value = $data[$preferred] ?? $data[$legacy] ?? $current[$preferred] ?? $current[$legacy] ?? null;
+            if ($value !== null && $value !== '') {
+                if (adminColumnExists('matches', $preferred)) $data[$preferred] = $value;
+                if (adminColumnExists('matches', $legacy)) $data[$legacy] = $value;
+            }
+        }
+
+        $status = (string)($data['status'] ?? $current['status'] ?? 'active');
+        if (adminColumnExists('matches', 'is_active')) {
+            $data['is_active'] = in_array($status, ['active', 'scheduled', 'live'], true) ? 1 : (isset($data['is_active']) ? (int)$data['is_active'] : 0);
+        }
+        if (adminColumnExists('matches', 'active_for_prediction')) {
+            $data['active_for_prediction'] = in_array($status, ['active', 'scheduled', 'live'], true) ? 1 : (isset($data['active_for_prediction']) ? (int)$data['active_for_prediction'] : 0);
+        }
+        if (($data['final_team_one_score'] ?? $data['final_score_team_a'] ?? null) !== null && ($data['final_team_two_score'] ?? $data['final_score_team_b'] ?? null) !== null) {
+            if (adminColumnExists('matches', 'match_finished')) $data['match_finished'] = 1;
+            if (adminColumnExists('matches', 'final_result_status')) $data['final_result_status'] = 'entered';
+        }
+    }
+
+    if (($config['table'] ?? '') === 'predictions') {
+        $mobile = $data['customer_mobile'] ?? $data['mobile'] ?? $current['customer_mobile'] ?? $current['mobile'] ?? null;
+        if ($mobile !== null) {
+            $mobile = normalizeMobile($mobile);
+            if (adminColumnExists('predictions', 'mobile')) $data['mobile'] = $mobile;
+            if (adminColumnExists('predictions', 'customer_mobile')) $data['customer_mobile'] = $mobile;
+        }
+        foreach ([['predicted_team_one_score', 'predicted_score_team_a'], ['predicted_team_two_score', 'predicted_score_team_b'], ['wants_reservation', 'reserve_table_interest'], ['crm_match', 'crm_matched']] as [$preferred, $legacy]) {
+            $value = $data[$preferred] ?? $data[$legacy] ?? $current[$preferred] ?? $current[$legacy] ?? null;
+            if ($value !== null && $value !== '') {
+                if (adminColumnExists('predictions', $preferred)) $data[$preferred] = $value;
+                if (adminColumnExists('predictions', $legacy)) $data[$legacy] = $value;
+            }
+        }
+    }
+
+    $allowed = adminModuleExistingColumnNames($config['table']);
+    return array_intersect_key($data, array_flip($allowed));
 }
 
 function adminModuleSave(array $config, array $data, int $id = 0): int {
@@ -1074,12 +1248,33 @@ function adminModuleExportCsv(array $config): void {
 
 function adminRecalculatePredictionsForMatch(int $matchId): void {
     if (!adminTableExists('matches') || !adminTableExists('predictions')) return;
-    $stmt = adminDb()->prepare('SELECT final_score_team_a, final_score_team_b, match_finished FROM matches WHERE id = ? LIMIT 1');
+    $stmt = adminDb()->prepare('SELECT final_score_team_a, final_score_team_b, final_team_one_score, final_team_two_score, match_finished, reward_points, points_reward FROM matches WHERE id = ? LIMIT 1');
     $stmt->execute([$matchId]);
     $match = $stmt->fetch();
-    if (!$match || !(int)($match['match_finished'] ?? 0) || $match['final_score_team_a'] === null || $match['final_score_team_b'] === null) return;
-    adminDb()->prepare('UPDATE predictions SET is_correct_prediction = CASE WHEN predicted_score_team_a = :a AND predicted_score_team_b = :b THEN 1 ELSE 0 END WHERE match_id = :id')
-        ->execute(['a' => $match['final_score_team_a'], 'b' => $match['final_score_team_b'], 'id' => $matchId]);
+    $scoreOne = $match['final_team_one_score'] ?? $match['final_score_team_a'] ?? null;
+    $scoreTwo = $match['final_team_two_score'] ?? $match['final_score_team_b'] ?? null;
+    if (!$match || !(int)($match['match_finished'] ?? 0) || $scoreOne === null || $scoreTwo === null) return;
+
+    $sets = [
+        'is_correct_prediction = CASE WHEN COALESCE(predicted_team_one_score, predicted_score_team_a) = :a AND COALESCE(predicted_team_two_score, predicted_score_team_b) = :b THEN 1 ELSE 0 END',
+    ];
+    if (adminColumnExists('predictions', 'is_winner')) {
+        $sets[] = 'is_winner = CASE WHEN COALESCE(predicted_team_one_score, predicted_score_team_a) = :a AND COALESCE(predicted_team_two_score, predicted_score_team_b) = :b THEN 1 ELSE 0 END';
+    }
+    if (adminColumnExists('predictions', 'evaluated_at')) {
+        $sets[] = 'evaluated_at = NOW()';
+    }
+    $params = ['a' => $scoreOne, 'b' => $scoreTwo, 'id' => $matchId];
+    if (adminColumnExists('predictions', 'points_awarded')) {
+        $sets[] = 'points_awarded = CASE WHEN COALESCE(predicted_team_one_score, predicted_score_team_a) = :a AND COALESCE(predicted_team_two_score, predicted_score_team_b) = :b THEN :points ELSE 0 END';
+        $params['points'] = (int)($match['points_reward'] ?? $match['reward_points'] ?? 0);
+    }
+    adminDb()->prepare('UPDATE predictions SET ' . implode(', ', $sets) . ' WHERE match_id = :id')
+        ->execute($params);
+
+    if (adminColumnExists('matches', 'final_result_status')) {
+        adminDb()->prepare('UPDATE matches SET final_result_status = :status WHERE id = :id')->execute(['status' => 'evaluated', 'id' => $matchId]);
+    }
 }
 
 function ensureAdminVisitorAnalyticsSchema(): void {

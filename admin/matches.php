@@ -45,6 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
             }
             $current = $id ? (adminModuleFetchRow($config, $id) ?: []) : [];
             $data = adminModuleCollectData($config, $current, $currentAdmin);
+            $data = adminModulePrepareData($config, $data, $current);
             $savedId = adminModuleSave($config, $data, $id);
             if ($config['table'] === 'matches') {
                 adminRecalculatePredictionsForMatch($savedId);

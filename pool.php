@@ -6,7 +6,7 @@
 
 require_once __DIR__ . '/core/bootstrap.php';
 
-$pageTitle = 'ثبت‌نام استخر KEY';
+$pageTitle = 'فرم استخر ';
 $message = '';
 $status = '';
 $formData = ['full_name' => '', 'mobile' => '', 'acquisition_source' => ''];
@@ -220,8 +220,8 @@ $csrfToken = generateCSRFToken();
 <body>
     <div class="container">
         <div class="logo">
-            <h1>استخر KEY</h1>
-            <p>ثبت‌نام و دریافت اطلاعات</p>
+            <h1>استخر </h1>
+            <p>ثبت‌ و دریافت اطلاعات</p>
         </div>
 
         <?php if ($message): ?>
@@ -260,7 +260,7 @@ $csrfToken = generateCSRFToken();
                 </select>
             </div>
 
-            <button type="submit" class="btn">ثبت‌نام</button>
+            <button type="submit" class="btn">ثبت‌</button>
         </form>
 
         <div class="back-link">
