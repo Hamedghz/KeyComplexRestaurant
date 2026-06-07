@@ -7,17 +7,34 @@ require_once __DIR__ . '/Model.php';
 
 class Survey extends Model {
     protected $table = 'dynamic_forms';
+
+    private function hasColumn(string $column): bool {
+        try {
+            $stmt = $this->db->prepare('SHOW COLUMNS FROM dynamic_forms LIKE :column_name');
+            $stmt->execute(['column_name' => $column]);
+            return (bool)$stmt->fetchColumn();
+        } catch (Throwable $e) {
+            error_log('Survey column lookup failed: ' . $e->getMessage());
+            return false;
+        }
+    }
     
     /**
      * Get active survey form
      */
     public function getActiveForm() {
-        $stmt = $this->db->prepare("
-            SELECT * FROM dynamic_forms 
-            WHERE is_active = 1 
-            ORDER BY display_order ASC, created_at DESC 
-            LIMIT 1
-        ");
+        $sql = "
+            SELECT * FROM dynamic_forms
+            WHERE is_active = 1
+        ";
+        if ($this->hasColumn('start_date')) {
+            $sql .= " AND (start_date IS NULL OR start_date <= NOW())";
+        }
+        if ($this->hasColumn('end_date')) {
+            $sql .= " AND (end_date IS NULL OR end_date >= NOW())";
+        }
+        $sql .= " ORDER BY display_order ASC, created_at DESC LIMIT 1";
+        $stmt = $this->db->prepare($sql);
         $stmt->execute();
         $form = $stmt->fetch();
         
