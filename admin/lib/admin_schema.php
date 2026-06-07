@@ -85,17 +85,17 @@ function ensureTableColumns(string $table, array $columns): void {
 }
 
 
-function adminCanonicalCreateStatement(string $table): ?string {
-    $schemaFile = ROOT_PATH . '/database/schema.sql';
-    if (!is_readable($schemaFile)) {
-        return null;
-    }
+function adminCanonicalSchemaFiles(): array {
+    $candidates = [
+        ROOT_PATH . '/database/schema.sql',
+        ROOT_PATH . '/database/migrations/2026_06_05_runtime_analytics.sql',
+        ROOT_PATH . '/database/migrations/2026_06_05_final_schema.sql',
+    ];
 
-    $sql = file_get_contents($schemaFile);
-    if ($sql === false || trim($sql) === '') {
-        return null;
-    }
+    return array_values(array_filter($candidates, static fn($file) => is_readable($file)));
+}
 
+function adminExtractCreateStatement(string $sql, string $table): ?string {
     $quotedTable = preg_quote($table, '/');
     if (!preg_match('/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`' . $quotedTable . '`/i', $sql, $match, PREG_OFFSET_CAPTURE)) {
         return null;
@@ -118,6 +118,22 @@ function adminCanonicalCreateStatement(string $table): ?string {
         }
         if ($char === ';') {
             return trim(substr($sql, $start, $i - $start + 1));
+        }
+    }
+
+    return null;
+}
+
+function adminCanonicalCreateStatement(string $table): ?string {
+    foreach (adminCanonicalSchemaFiles() as $schemaFile) {
+        $sql = file_get_contents($schemaFile);
+        if ($sql === false || trim($sql) === '') {
+            continue;
+        }
+
+        $statement = adminExtractCreateStatement($sql, $table);
+        if ($statement !== null) {
+            return $statement;
         }
     }
 
@@ -613,4 +629,502 @@ function uploadAdminImage(string $field, string $folder, string $current = ''): 
     $target = $dir . '/' . $name;
     if (!move_uploaded_file($_FILES[$field]['tmp_name'], $target)) throw new RuntimeException('آپلود فایل ناموفق بود.');
     return 'uploads/' . trim($folder, '/') . '/' . $name;
+}
+
+if (!function_exists('redirectTo')) {
+    function redirectTo($url) {
+        header('Location: ' . $url);
+        exit;
+    }
+}
+
+function adminPermissionAllows(?array $admin, string $permission, array $fallbackRoles = ['manager', 'admin', 'super_admin']): bool {
+    if (!$admin) return false;
+    $role = (string)($admin['role'] ?? 'employee');
+    if ($role === 'super_admin') return true;
+    $raw = $admin['permissions'] ?? null;
+    $permissions = [];
+    if (is_string($raw) && trim($raw) !== '') {
+        $decoded = json_decode($raw, true);
+        if (is_array($decoded)) $permissions = $decoded;
+    } elseif (is_array($raw)) {
+        $permissions = $raw;
+    }
+    if (array_key_exists($permission, $permissions)) return (bool)$permissions[$permission];
+    return in_array($role, $fallbackRoles, true);
+}
+
+function adminAcquisitionSourceOptions(): array {
+    try {
+        if (adminTableExists('acquisition_sources')) {
+            $stmt = adminDb()->query('SELECT title FROM acquisition_sources WHERE active = 1 ORDER BY sort_order ASC, title ASC');
+            $rows = $stmt->fetchAll(PDO::FETCH_COLUMN);
+            if ($rows) return array_combine($rows, $rows) ?: [];
+        }
+    } catch (Throwable $e) {
+        safeAdminLog('Acquisition source lookup failed: ' . $e->getMessage());
+    }
+    return ['Instagram'=>'Instagram','Telegram'=>'Telegram','Google'=>'Google','Balad'=>'Balad','Friend Referral'=>'Friend Referral','Walk-in'=>'Walk-in','Website'=>'Website','Advertisement'=>'Advertisement','Other'=>'Other'];
+}
+
+function adminModuleDefinitions(): array {
+    return [
+        'crm' => [
+            'title' => 'CRM مشتریان', 'min_role' => 'manager', 'table' => 'crm_customers', 'unique' => 'mobile',
+            'search' => ['full_name','mobile','tags','acquisition_source'], 'filters' => ['acquisition_source','customer_status','attended_match_event'], 'date_column' => 'created_at',
+            'fields' => [
+                'full_name' => ['label'=>'نام کامل','type'=>'text','required'=>true],
+                'mobile' => ['label'=>'موبایل','type'=>'mobile','required'=>true],
+                'birth_date' => ['label'=>'تولد','type'=>'date'],
+                'first_purchase_date' => ['label'=>'اولین خرید','type'=>'date'],
+                'total_orders' => ['label'=>'تعداد سفارش','type'=>'number'],
+                'total_purchase_volume' => ['label'=>'حجم خرید','type'=>'number'],
+                'reminder_date' => ['label'=>'یادآوری','type'=>'date'],
+                'acquisition_source' => ['label'=>'منبع جذب','type'=>'select','options'=>adminAcquisitionSourceOptions()],
+                'notes' => ['label'=>'یادداشت','type'=>'textarea'],
+                'surveys_completed_count' => ['label'=>'تعداد نظرسنجی','type'=>'number'],
+                'last_visit_date' => ['label'=>'آخرین مراجعه','type'=>'date'],
+                'tags' => ['label'=>'برچسب‌ها','type'=>'text'],
+                'customer_status' => ['label'=>'وضعیت مشتری','type'=>'select','options'=>['new_customer'=>'مشتری جدید','loyal_customer'=>'وفادار','vip'=>'VIP','dissatisfied_customer'=>'ناراضی','churn_risk'=>'ریسک ریزش']],
+                'points_balance' => ['label'=>'امتیازها','type'=>'number'],
+                'rewards_notes' => ['label'=>'یادداشت پاداش‌ها','type'=>'textarea'],
+                'follow_up_notes' => ['label'=>'یادداشت پیگیری اپراتور','type'=>'textarea'],
+                'attended_match_event' => ['label'=>'حضور در رویداد مسابقه','type'=>'checkbox'],
+            ],
+            'columns' => ['id','full_name','mobile','customer_status','points_balance','total_orders','total_purchase_volume','acquisition_source','attended_match_event','tags','created_at'],
+        ],
+        'matches' => [
+            'title' => 'مدیریت مسابقات', 'min_role' => 'manager', 'table' => 'matches', 'search' => ['title','team_a','team_b','status','campaign_target'], 'filters' => ['campaign_status','status','is_active','match_finished'], 'date_column' => 'match_date',
+            'fields' => [
+                'title' => ['label'=>'عنوان کمپین/مسابقه','type'=>'text'], 'description' => ['label'=>'توضیح','type'=>'textarea'], 'rules' => ['label'=>'قوانین','type'=>'textarea'], 'participation_conditions' => ['label'=>'شرایط مشارکت','type'=>'textarea'],
+                'team_a' => ['label'=>'تیم اول','type'=>'text','required'=>true], 'team_b' => ['label'=>'تیم دوم','type'=>'text','required'=>true],
+                'match_date' => ['label'=>'تاریخ مسابقه','type'=>'date','required'=>true], 'kickoff_time' => ['label'=>'ساعت شروع','type'=>'time','required'=>true], 'broadcast_time' => ['label'=>'ساعت پخش','type'=>'time'],
+                'prediction_open_at' => ['label'=>'شروع پیش‌بینی','type'=>'datetime','required'=>true], 'prediction_close_at' => ['label'=>'پایان پیش‌بینی','type'=>'datetime','required'=>true],
+                'status' => ['label'=>'وضعیت مسابقه','type'=>'select','options'=>['scheduled'=>'برنامه‌ریزی شده','live'=>'زنده','finished'=>'تمام شده','cancelled'=>'لغو شده']],
+                'campaign_status' => ['label'=>'وضعیت کمپین','type'=>'select','options'=>['active'=>'فعال','inactive'=>'غیرفعال','archived'=>'آرشیو']],
+                'start_date' => ['label'=>'شروع کمپین','type'=>'datetime'], 'end_date' => ['label'=>'پایان کمپین','type'=>'datetime'],
+                'participant_count' => ['label'=>'تعداد مشارکت','type'=>'number'], 'banner_id' => ['label'=>'بنر مرتبط','type'=>'banner'], 'menu_item_id' => ['label'=>'آیتم منو مرتبط','type'=>'menu_item'], 'campaign_target' => ['label'=>'هدف کمپین','type'=>'text'],
+                'reward_points' => ['label'=>'امتیاز پاداش','type'=>'number'], 'reward_description' => ['label'=>'شرح پاداش','type'=>'textarea'],
+                'is_active' => ['label'=>'فعال','type'=>'checkbox'], 'active_for_prediction' => ['label'=>'فعال برای پیش‌بینی','type'=>'checkbox'],
+                'final_score_team_a' => ['label'=>'نتیجه نهایی تیم اول','type'=>'number'], 'final_score_team_b' => ['label'=>'نتیجه نهایی تیم دوم','type'=>'number'], 'match_finished' => ['label'=>'مسابقه تمام شده','type'=>'checkbox'],
+            ],
+            'columns' => ['id','title','team_a','team_b','match_date','campaign_status','participant_count','reward_points','is_active','match_finished','created_at'],
+        ],
+        'predictions' => [
+            'title' => 'پیش‌بینی‌ها', 'min_role' => 'manager', 'table' => 'predictions', 'readonly_create' => true, 'search' => ['customer_name','mobile'], 'filters' => ['match_id','status','is_winner','is_correct_prediction','customer_exists','crm_matched'], 'date_column' => 'created_at',
+            'fields' => [
+                'customer_name' => ['label'=>'نام','type'=>'text','required'=>true], 'mobile' => ['label'=>'موبایل','type'=>'mobile','required'=>true], 'match_id' => ['label'=>'مسابقه','type'=>'match','required'=>true],
+                'prediction_content' => ['label'=>'محتوای پیش‌بینی','type'=>'textarea'],
+                'predicted_score_team_a' => ['label'=>'گل تیم اول','type'=>'number','required'=>true], 'predicted_score_team_b' => ['label'=>'گل تیم دوم','type'=>'number','required'=>true],
+                'status' => ['label'=>'وضعیت','type'=>'select','options'=>['pending'=>'در انتظار','approved'=>'تایید','rejected'=>'رد']], 'is_winner' => ['label'=>'برنده','type'=>'checkbox'], 'points_awarded' => ['label'=>'امتیاز اعطا شده','type'=>'number'], 'crm_follow_up' => ['label'=>'ارسال به CRM','type'=>'checkbox'],
+                'crm_matched' => ['label'=>'تطابق CRM','type'=>'checkbox'], 'customer_exists' => ['label'=>'مشتری موجود','type'=>'checkbox'], 'is_correct_prediction' => ['label'=>'پیش‌بینی صحیح','type'=>'checkbox'],
+            ],
+            'join' => 'SELECT p.*, CONCAT(m.team_a, " - ", m.team_b) AS match_title FROM predictions p LEFT JOIN matches m ON p.match_id = m.id', 'alias' => 'p', 'required_tables' => ['matches'],
+            'columns' => ['id','customer_name','mobile','match_title','status','is_winner','points_awarded','is_correct_prediction','crm_follow_up','created_at'],
+        ],
+        'banners' => [
+            'title' => 'بنرهای اصلی', 'min_role' => 'manager', 'table' => 'hero_banners', 'search' => ['title','subtitle'], 'filters' => ['display_location','active_status'], 'date_column' => 'created_at',
+            'fields' => [
+                'title' => ['label'=>'عنوان','type'=>'text','required'=>true], 'subtitle' => ['label'=>'زیرعنوان','type'=>'text'], 'description' => ['label'=>'توضیح','type'=>'textarea'],
+                'button_text' => ['label'=>'متن دکمه','type'=>'text'], 'button_link' => ['label'=>'لینک دکمه','type'=>'text'], 'image' => ['label'=>'تصویر','type'=>'image','folder'=>'banners'], 'mobile_image' => ['label'=>'تصویر موبایل','type'=>'image','folder'=>'banners'],
+                'display_location' => ['label'=>'محل نمایش','type'=>'select','options'=>['homepage'=>'Homepage','menu_page'=>'Menu page','campaigns_page'=>'Campaigns','qr_menu'=>'QR Menu','customer_panel'=>'Customer panel']],
+                'match_id' => ['label'=>'کمپین/مسابقه مرتبط','type'=>'match'], 'menu_item_id' => ['label'=>'آیتم منو مرتبط','type'=>'menu_item'], 'category_id' => ['label'=>'دسته مرتبط','type'=>'category'], 'loyalty_campaign' => ['label'=>'کمپین وفاداری','type'=>'text'],
+                'display_order' => ['label'=>'ترتیب','type'=>'number'], 'active_status' => ['label'=>'فعال','type'=>'checkbox'], 'start_date' => ['label'=>'شروع','type'=>'datetime'], 'end_date' => ['label'=>'پایان','type'=>'datetime'],
+            ],
+            'columns' => ['id','title','display_location','display_order','active_status','start_date','end_date','created_at'],
+        ],
+        'categories' => [
+            'title' => 'فیلترها و دسته‌بندی منو', 'min_role' => 'manager', 'table' => 'menu_categories', 'unique' => 'slug', 'search' => ['name_fa','name_en','slug'], 'filters' => ['is_active','visible_qr_menu','visible_website','visible_kiosk'], 'date_column' => 'created_at',
+            'fields' => [
+                'name_fa' => ['label'=>'نام فارسی','type'=>'text','required'=>true], 'name_en' => ['label'=>'نام انگلیسی','type'=>'text','required'=>true], 'slug' => ['label'=>'اسلاگ','type'=>'text','required'=>true],
+                'description_fa' => ['label'=>'توضیح فارسی','type'=>'textarea'], 'description_en' => ['label'=>'توضیح انگلیسی','type'=>'textarea'], 'icon' => ['label'=>'آیکن','type'=>'text'], 'image' => ['label'=>'تصویر','type'=>'image','folder'=>'categories'], 'parent_id' => ['label'=>'دسته والد','type'=>'category'], 'sepid_id' => ['label'=>'شناسه Sepid','type'=>'text'],
+                'visible_qr_menu' => ['label'=>'نمایش در QR Menu','type'=>'checkbox'], 'visible_website' => ['label'=>'نمایش در وب‌سایت','type'=>'checkbox'], 'visible_kiosk' => ['label'=>'نمایش در کیوسک','type'=>'checkbox'],
+                'sort_order' => ['label'=>'ترتیب','type'=>'number'], 'is_active' => ['label'=>'فعال','type'=>'checkbox'],
+            ],
+            'columns' => ['id','name_fa','slug','icon','sort_order','visible_qr_menu','visible_website','visible_kiosk','is_active','created_at'],
+        ],
+        'menu-items' => [
+            'title' => 'آیتم‌های منو', 'min_role' => 'manager', 'table' => 'menu_items', 'unique' => 'slug', 'search' => ['name_fa','name_en','slug','description_fa'], 'filters' => ['category_id','availability_status','is_available','is_featured','visible_qr_menu','visible_website'], 'date_column' => 'created_at',
+            'join' => 'SELECT mi.*, mc.name_fa AS category_title FROM menu_items mi LEFT JOIN menu_categories mc ON mi.category_id = mc.id', 'alias' => 'mi', 'required_tables' => ['menu_categories'],
+            'fields' => [
+                'category_id' => ['label'=>'دسته‌بندی','type'=>'category','required'=>true], 'name_fa' => ['label'=>'عنوان فارسی','type'=>'text','required'=>true], 'name_en' => ['label'=>'عنوان انگلیسی','type'=>'text','required'=>true], 'slug' => ['label'=>'اسلاگ','type'=>'text','required'=>true],
+                'description_fa' => ['label'=>'توضیح فارسی','type'=>'textarea'], 'description_en' => ['label'=>'توضیح انگلیسی','type'=>'textarea'], 'price' => ['label'=>'قیمت','type'=>'number','required'=>true], 'discount_price' => ['label'=>'قیمت تخفیف','type'=>'number'],
+                'image' => ['label'=>'تصویر','type'=>'image','folder'=>'menu'], 'gallery_images' => ['label'=>'گالری JSON','type'=>'textarea'], 'ingredients_fa' => ['label'=>'مواد اولیه فارسی','type'=>'textarea'], 'ingredients_en' => ['label'=>'مواد اولیه انگلیسی','type'=>'textarea'],
+                'calories' => ['label'=>'کالری','type'=>'number'], 'preparation_time' => ['label'=>'زمان آماده‌سازی','type'=>'number'],
+                'availability_status' => ['label'=>'وضعیت موجودی','type'=>'select','options'=>['available'=>'موجود','unavailable'=>'ناموجود','limited'=>'محدود']],
+                'visible_qr_menu' => ['label'=>'نمایش در QR Menu','type'=>'checkbox'], 'visible_website' => ['label'=>'نمایش در وب‌سایت','type'=>'checkbox'], 'visible_kiosk' => ['label'=>'نمایش در کیوسک','type'=>'checkbox'], 'visible_loyalty' => ['label'=>'نمایش در وفاداری','type'=>'checkbox'],
+                'campaign_price' => ['label'=>'قیمت کمپین','type'=>'number'], 'promo_text' => ['label'=>'متن تبلیغاتی','type'=>'text'], 'promo_image' => ['label'=>'تصویر تبلیغاتی','type'=>'image','folder'=>'menu'], 'sepid_id' => ['label'=>'شناسه Sepid','type'=>'text'],
+                'is_available' => ['label'=>'فعال','type'=>'checkbox'], 'is_featured' => ['label'=>'ویژه','type'=>'checkbox'], 'is_vegetarian' => ['label'=>'گیاهی','type'=>'checkbox'], 'is_spicy' => ['label'=>'تند','type'=>'checkbox'], 'sort_order' => ['label'=>'ترتیب','type'=>'number'],
+            ],
+            'columns' => ['id','category_title','name_fa','price','campaign_price','availability_status','visible_qr_menu','visible_website','is_featured','sort_order'],
+        ],
+        'surveys' => [
+            'title' => 'فرم‌های نظرسنجی', 'min_role' => 'admin', 'table' => 'dynamic_forms', 'unique' => 'form_name', 'search' => ['form_name','form_title_fa'], 'filters' => ['is_active','branch_id'], 'date_column' => 'created_at',
+            'fields' => [
+                'form_name' => ['label'=>'نام سیستمی','type'=>'text','required'=>true], 'form_title_fa' => ['label'=>'عنوان فارسی','type'=>'text','required'=>true], 'form_title_en' => ['label'=>'عنوان انگلیسی','type'=>'text'],
+                'form_description_fa' => ['label'=>'توضیح فارسی','type'=>'textarea'], 'form_description_en' => ['label'=>'توضیح انگلیسی','type'=>'textarea'], 'form_schema' => ['label'=>'Schema JSON','type'=>'textarea','default'=>'{"fields":[]}'],
+                'start_date' => ['label'=>'شروع انتشار','type'=>'datetime'], 'end_date' => ['label'=>'پایان انتشار','type'=>'datetime'], 'publishing_channels' => ['label'=>'کانال‌های انتشار','type'=>'text'], 'branch_id' => ['label'=>'شعبه','type'=>'number'], 'survey_version' => ['label'=>'نسخه','type'=>'number'],
+                'is_active' => ['label'=>'فعال','type'=>'checkbox'], 'display_order' => ['label'=>'ترتیب','type'=>'number'],
+            ],
+            'columns' => ['id','form_name','form_title_fa','is_active','publishing_channels','branch_id','survey_version','display_order','created_at'],
+        ],
+        'survey-responses' => [
+            'title' => 'پاسخ‌های نظرسنجی', 'min_role' => 'manager', 'table' => 'survey_responses', 'readonly_create' => true, 'search' => ['customer_name','customer_phone','customer_email'], 'filters' => ['form_id','branch_id','is_dissatisfied','crm_follow_up'], 'date_column' => 'submitted_at',
+            'join' => 'SELECT sr.*, df.form_title_fa AS form_title FROM survey_responses sr LEFT JOIN dynamic_forms df ON sr.form_id = df.id', 'alias' => 'sr', 'required_tables' => ['dynamic_forms'],
+            'fields' => [
+                'form_id' => ['label'=>'فرم','type'=>'survey_form','required'=>true], 'customer_name' => ['label'=>'نام مشتری','type'=>'text'], 'customer_phone' => ['label'=>'موبایل','type'=>'mobile'], 'customer_email' => ['label'=>'ایمیل','type'=>'text'], 'response_data' => ['label'=>'داده پاسخ JSON','type'=>'textarea','default'=>'{}'],
+                'branch_id' => ['label'=>'شعبه','type'=>'number'], 'satisfaction_score' => ['label'=>'امتیاز رضایت','type'=>'number'], 'is_dissatisfied' => ['label'=>'مشتری ناراضی','type'=>'checkbox'], 'crm_follow_up' => ['label'=>'پیگیری CRM','type'=>'checkbox'],
+            ],
+            'columns' => ['id','form_title','customer_name','customer_phone','satisfaction_score','is_dissatisfied','crm_follow_up','submitted_at'],
+        ],
+    ];
+}
+
+function adminModuleDefinition(string $key): ?array {
+    $modules = adminModuleDefinitions();
+    return $modules[$key] ?? null;
+}
+
+function adminModuleLabel(array $config, string $column): string {
+    return $config['fields'][$column]['label'] ?? ['id'=>'شناسه','created_at'=>'ایجاد','updated_at'=>'ویرایش','match_title'=>'مسابقه','category_title'=>'دسته‌بندی','form_title'=>'فرم','submitted_at'=>'ارسال'][$column] ?? $column;
+}
+
+function adminModuleRequiredTables(array $config): array {
+    return array_values(array_unique(array_merge([$config['table']], $config['required_tables'] ?? [])));
+}
+
+function adminModuleExistingColumnNames(string $table): array {
+    return array_map(static fn($row) => $row['Field'], schemaColumns($table));
+}
+
+function adminModuleOptionalColumns(): array {
+    return [
+        'matches' => [
+            'title' => "varchar(200) DEFAULT NULL",
+            'description' => "text DEFAULT NULL",
+            'rules' => "text DEFAULT NULL",
+            'participation_conditions' => "text DEFAULT NULL",
+            'start_date' => "datetime DEFAULT NULL",
+            'end_date' => "datetime DEFAULT NULL",
+            'campaign_status' => "enum('active','inactive','archived') NOT NULL DEFAULT 'active'",
+            'participant_count' => "int(11) NOT NULL DEFAULT 0",
+            'banner_id' => "int(11) UNSIGNED DEFAULT NULL",
+            'menu_item_id' => "int(11) UNSIGNED DEFAULT NULL",
+            'campaign_target' => "varchar(150) DEFAULT NULL",
+            'reward_points' => "int(11) NOT NULL DEFAULT 0",
+            'reward_description' => "text DEFAULT NULL",
+        ],
+        'predictions' => [
+            'prediction_content' => "text DEFAULT NULL",
+            'status' => "enum('pending','approved','rejected') NOT NULL DEFAULT 'pending'",
+            'is_winner' => "tinyint(1) NOT NULL DEFAULT 0",
+            'points_awarded' => "int(11) NOT NULL DEFAULT 0",
+            'crm_follow_up' => "tinyint(1) NOT NULL DEFAULT 0",
+        ],
+        'menu_categories' => [
+            'image' => "varchar(255) DEFAULT NULL",
+            'parent_id' => "int(11) UNSIGNED DEFAULT NULL",
+            'sepid_id' => "varchar(100) DEFAULT NULL",
+            'visible_qr_menu' => "tinyint(1) NOT NULL DEFAULT 1",
+            'visible_website' => "tinyint(1) NOT NULL DEFAULT 1",
+            'visible_kiosk' => "tinyint(1) NOT NULL DEFAULT 1",
+        ],
+        'menu_items' => [
+            'availability_status' => "enum('available','unavailable','limited') NOT NULL DEFAULT 'available'",
+            'visible_qr_menu' => "tinyint(1) NOT NULL DEFAULT 1",
+            'visible_website' => "tinyint(1) NOT NULL DEFAULT 1",
+            'visible_kiosk' => "tinyint(1) NOT NULL DEFAULT 1",
+            'visible_loyalty' => "tinyint(1) NOT NULL DEFAULT 1",
+            'campaign_price' => "decimal(10,2) DEFAULT NULL",
+            'promo_text' => "varchar(255) DEFAULT NULL",
+            'promo_image' => "varchar(255) DEFAULT NULL",
+            'sepid_id' => "varchar(100) DEFAULT NULL",
+            'sepid_last_sync_at' => "datetime DEFAULT NULL",
+        ],
+        'dynamic_forms' => [
+            'start_date' => "datetime DEFAULT NULL",
+            'end_date' => "datetime DEFAULT NULL",
+            'publishing_channels' => "varchar(255) DEFAULT NULL",
+            'branch_id' => "int(11) UNSIGNED DEFAULT NULL",
+            'survey_version' => "int(11) NOT NULL DEFAULT 1",
+        ],
+        'survey_responses' => [
+            'branch_id' => "int(11) UNSIGNED DEFAULT NULL",
+            'satisfaction_score' => "decimal(5,2) DEFAULT NULL",
+            'is_dissatisfied' => "tinyint(1) NOT NULL DEFAULT 0",
+            'crm_follow_up' => "tinyint(1) NOT NULL DEFAULT 0",
+        ],
+        'crm_customers' => [
+            'customer_status' => "enum('new_customer','loyal_customer','vip','dissatisfied_customer','churn_risk') NOT NULL DEFAULT 'new_customer'",
+            'points_balance' => "int(11) NOT NULL DEFAULT 0",
+            'rewards_notes' => "text DEFAULT NULL",
+            'follow_up_notes' => "text DEFAULT NULL",
+        ],
+        'hero_banners' => [
+            'display_location' => "enum('homepage','menu_page','campaigns_page','qr_menu','customer_panel') NOT NULL DEFAULT 'homepage'",
+            'match_id' => "int(11) UNSIGNED DEFAULT NULL",
+            'menu_item_id' => "int(11) UNSIGNED DEFAULT NULL",
+            'category_id' => "int(11) UNSIGNED DEFAULT NULL",
+            'loyalty_campaign' => "varchar(150) DEFAULT NULL",
+        ],
+    ];
+}
+
+function adminEnsureModuleOptionalColumns(string $table): void {
+    $columns = adminModuleOptionalColumns()[$table] ?? [];
+    if (!$columns || !adminTableExists($table)) return;
+    ensureTableColumns($table, $columns);
+}
+
+function adminEnsureModuleTables(array $config): void {
+    $missing = [];
+    foreach (adminModuleRequiredTables($config) as $table) {
+        if (!adminTableExists($table)) $missing[] = $table;
+    }
+    if ($missing) ensureAdminCanonicalTables(adminDb(), $missing);
+    foreach (adminModuleRequiredTables($config) as $table) {
+        adminEnsureModuleOptionalColumns($table);
+    }
+}
+
+function adminModulePrefix(array $config): string {
+    return !empty($config['alias']) ? $config['alias'] . '.' : '';
+}
+
+function adminOptionRows(string $type): array {
+    $queries = [
+        'category' => ['table'=>'menu_categories', 'sql'=>'SELECT id, name_fa AS title FROM menu_categories ORDER BY sort_order, name_fa'],
+        'match' => ['table'=>'matches', 'sql'=>"SELECT id, CONCAT(team_a, ' - ', team_b, ' (', match_date, ')') AS title FROM matches ORDER BY match_date DESC"],
+        'survey_form' => ['table'=>'dynamic_forms', 'sql'=>'SELECT id, form_title_fa AS title FROM dynamic_forms ORDER BY display_order, id DESC'],
+        'banner' => ['table'=>'hero_banners', 'sql'=>'SELECT id, title FROM hero_banners ORDER BY display_order, id DESC'],
+        'menu_item' => ['table'=>'menu_items', 'sql'=>'SELECT id, name_fa AS title FROM menu_items ORDER BY sort_order, id DESC'],
+    ];
+    if (!isset($queries[$type]) || !adminTableExists($queries[$type]['table'])) return [];
+    try { return adminDb()->query($queries[$type]['sql'])->fetchAll(); } catch (Throwable $e) { safeAdminLog('Option lookup failed: ' . $e->getMessage()); return []; }
+}
+
+function adminModuleNormalizeConfig(array $config): array {
+    $allowed = adminModuleExistingColumnNames($config['table']);
+    $config['fields'] = array_filter($config['fields'], static fn($field) => in_array($field, $allowed, true), ARRAY_FILTER_USE_KEY);
+    $virtualColumns = ['match_title','category_title','form_title'];
+    $config['columns'] = array_values(array_filter($config['columns'], static fn($col) => in_array($col, $allowed, true) || in_array($col, $virtualColumns, true)));
+    $config['filters'] = array_values(array_filter($config['filters'] ?? [], static fn($col) => in_array($col, $allowed, true)));
+    $config['search'] = array_values(array_filter($config['search'] ?? [], static fn($col) => in_array($col, $allowed, true)));
+    return $config;
+}
+
+
+function adminModuleUploadImage(string $field, string $folder, string $current = ''): string {
+    if (empty($_FILES[$field]['name']) || ($_FILES[$field]['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        return $current;
+    }
+    $validation = validateUploadedFile($_FILES[$field], ALLOWED_IMAGE_EXTENSIONS, ALLOWED_IMAGE_TYPES);
+    if (!$validation['valid']) {
+        throw new RuntimeException($validation['message']);
+    }
+    $dir = UPLOAD_PATH . '/' . trim($folder, '/');
+    return optimizeUploadedImage($_FILES[$field]['tmp_name'], $dir, uniqid($field . '_', true));
+}
+
+function adminModuleImageSrc($value, string $folder): string {
+    $value = ltrim((string)$value, '/');
+    if ($value === '') return '';
+    if (str_starts_with($value, 'uploads/')) return '../' . $value;
+    return '../uploads/' . trim($folder, '/') . '/' . $value;
+}
+
+function adminModuleCollectData(array $config, array $current = [], ?array $admin = null): array {
+    $data = [];
+    foreach ($config['fields'] as $name => $meta) {
+        if (!empty($meta['readonly'])) continue;
+        $type = $meta['type'];
+        if ($type === 'image') {
+            $data[$name] = adminModuleUploadImage($name, $meta['folder'] ?? 'admin', (string)($current[$name] ?? ''));
+            continue;
+        }
+        if ($type === 'checkbox') {
+            $data[$name] = isset($_POST[$name]) ? 1 : 0;
+            continue;
+        }
+        $value = $_POST[$name] ?? ($meta['default'] ?? null);
+        if ($type === 'mobile') $value = normalizeMobile($value);
+        if ($type === 'date') $value = parsePersianDate($value, false);
+        if ($type === 'datetime') $value = parsePersianDate($value, true);
+        if ($type === 'number' && $value === '') $value = null;
+        $data[$name] = $value === '' ? null : $value;
+    }
+    if ($config['table'] === 'dynamic_forms' && !$current && adminColumnExists('dynamic_forms', 'created_by')) {
+        $data['created_by'] = $admin['id'] ?? null;
+    }
+    return $data;
+}
+
+function adminModuleSave(array $config, array $data, int $id = 0): int {
+    $db = adminDb();
+    if ($id > 0) {
+        if (!$data) return $id;
+        $sets = [];
+        foreach ($data as $column => $value) $sets[] = '`' . str_replace('`', '``', $column) . '` = :' . $column;
+        $data['id'] = $id;
+        $db->prepare('UPDATE `' . str_replace('`', '``', $config['table']) . '` SET ' . implode(', ', $sets) . ' WHERE id = :id')->execute($data);
+        return $id;
+    }
+    $columns = array_keys($data);
+    $quoted = array_map(static fn($column) => '`' . str_replace('`', '``', $column) . '`', $columns);
+    $placeholders = array_map(static fn($column) => ':' . $column, $columns);
+    $db->prepare('INSERT INTO `' . str_replace('`', '``', $config['table']) . '` (' . implode(', ', $quoted) . ') VALUES (' . implode(', ', $placeholders) . ')')->execute($data);
+    return (int)$db->lastInsertId();
+}
+
+function adminModuleDelete(array $config, int $id): void {
+    adminDb()->prepare('DELETE FROM `' . str_replace('`', '``', $config['table']) . '` WHERE id = ?')->execute([$id]);
+}
+
+function adminModuleFetchRow(array $config, int $id): ?array {
+    $stmt = adminDb()->prepare('SELECT * FROM `' . str_replace('`', '``', $config['table']) . '` WHERE id = ? LIMIT 1');
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function adminModuleRows(array $config, int $perPage = 20): array {
+    $db = adminDb();
+    $page = max(1, (int)($_GET['page'] ?? 1));
+    $offset = ($page - 1) * $perPage;
+    $base = $config['join'] ?? ('SELECT * FROM `' . str_replace('`', '``', $config['table']) . '`');
+    $prefix = adminModulePrefix($config);
+    $where = ['1=1']; $params = [];
+    if (trim((string)($_GET['q'] ?? '')) !== '') {
+        $ors = [];
+        foreach ($config['search'] ?? [] as $column) $ors[] = $prefix . '`' . str_replace('`', '``', $column) . '` LIKE :q';
+        if ($ors) { $where[] = '(' . implode(' OR ', $ors) . ')'; $params['q'] = '%' . trim((string)$_GET['q']) . '%'; }
+    }
+    foreach ($config['filters'] ?? [] as $filter) {
+        if (isset($_GET[$filter]) && $_GET[$filter] !== '') { $where[] = $prefix . '`' . str_replace('`', '``', $filter) . '` = :' . $filter; $params[$filter] = $_GET[$filter]; }
+    }
+    $dateColumn = $config['date_column'] ?? null;
+    if ($dateColumn && adminColumnExists($config['table'], $dateColumn)) {
+        if (!empty($_GET['date_from'])) { $where[] = $prefix . '`' . $dateColumn . '` >= :date_from'; $params['date_from'] = parsePersianDate($_GET['date_from'], false) . ' 00:00:00'; }
+        if (!empty($_GET['date_to'])) { $where[] = $prefix . '`' . $dateColumn . '` <= :date_to'; $params['date_to'] = parsePersianDate($_GET['date_to'], false) . ' 23:59:59'; }
+    }
+    $whereSql = implode(' AND ', $where);
+    $sort = (string)($_GET['sort'] ?? '');
+    $allowedColumns = adminModuleExistingColumnNames($config['table']);
+    $orderColumn = in_array($sort, $allowedColumns, true) ? $sort : (adminColumnExists($config['table'], 'id') ? 'id' : ($dateColumn ?: '1'));
+    $orderDirection = strtolower((string)($_GET['order'] ?? 'desc')) === 'asc' ? 'ASC' : 'DESC';
+    $stmt = $db->prepare($base . ' WHERE ' . $whereSql . ' ORDER BY ' . $prefix . '`' . str_replace('`', '``', $orderColumn) . '` ' . $orderDirection . ' LIMIT ' . $perPage . ' OFFSET ' . $offset);
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll();
+    $count = $db->prepare('SELECT COUNT(*) AS total FROM (' . $base . ' WHERE ' . $whereSql . ') x');
+    $count->execute($params);
+    return ['rows'=>$rows, 'page'=>$page, 'perPage'=>$perPage, 'total'=>(int)($count->fetch()['total'] ?? 0)];
+}
+
+function adminModuleRenderField(string $name, array $meta, $value = null): void {
+    $type = $meta['type'];
+    if (in_array($type, ['date','datetime'], true) && $value) $value = formatJalaliDateTime($value, $type === 'datetime');
+    echo '<div class="form-group"><label>' . h($meta['label']) . (!empty($meta['required']) ? ' *' : '') . '</label>';
+    $required = !empty($meta['required']) ? 'required' : '';
+    if ($type === 'textarea') {
+        echo '<textarea class="form-control" name="' . h($name) . '" ' . $required . '>' . h($value ?? $meta['default'] ?? '') . '</textarea>';
+    } elseif ($type === 'select') {
+        echo '<select class="form-control" name="' . h($name) . '" ' . $required . '>';
+        foreach (($meta['options'] ?? []) as $key => $label) echo '<option value="' . h($key) . '" ' . ((string)$value === (string)$key ? 'selected' : '') . '>' . h($label) . '</option>';
+        echo '</select>';
+    } elseif (in_array($type, ['category','match','survey_form','banner','menu_item'], true)) {
+        echo '<select class="form-control" name="' . h($name) . '" ' . $required . '><option value="">انتخاب کنید</option>';
+        foreach (adminOptionRows($type) as $option) echo '<option value="' . h($option['id']) . '" ' . ((string)$value === (string)$option['id'] ? 'selected' : '') . '>' . h($option['title']) . '</option>';
+        echo '</select>';
+    } elseif ($type === 'checkbox') {
+        echo '<label><input type="checkbox" name="' . h($name) . '" value="1" ' . ($value ? 'checked' : '') . '> فعال</label>';
+    } elseif ($type === 'image') {
+        echo '<input class="form-control" type="file" name="' . h($name) . '" accept="image/*">';
+        if ($value) echo '<p><img src="' . h(adminModuleImageSrc($value, $meta['folder'] ?? 'admin')) . '" style="max-width:140px;border-radius:8px"></p>';
+    } else {
+        $htmlType = $type === 'number' ? 'number' : ($type === 'time' ? 'time' : 'text');
+        echo '<input class="form-control" type="' . h($htmlType) . '" name="' . h($name) . '" value="' . h($value ?? $meta['default'] ?? '') . '" ' . $required . '>';
+    }
+    if (in_array($type, ['date','datetime'], true)) echo '<small class="text-muted">فرمت شمسی: 1405/03/10' . ($type === 'datetime' ? ' 18:30' : '') . '</small>';
+    echo '</div>';
+}
+
+function adminModuleFormatValue(string $column, $value): string {
+    if ($value === null || $value === '') return '';
+    if (str_ends_with($column, '_date')) return formatJalaliDateTime($value, false);
+    if (str_ends_with($column, '_at') || $column === 'submitted_at') return formatJalaliDateTime($value, true);
+    if ((string)$value === '1') return '✓';
+    if ((string)$value === '0') return '✗';
+    return (string)$value;
+}
+
+
+function adminModuleExportCsv(array $config): void {
+    $data = adminModuleRows($config, 10000);
+    $filename = $config['table'] . '-' . date('Ymd-His') . '.csv';
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    $out = fopen('php://output', 'w');
+    fprintf($out, chr(0xEF).chr(0xBB).chr(0xBF));
+    fputcsv($out, array_map(static fn($column) => adminModuleLabel($config, $column), $config['columns']));
+    foreach ($data['rows'] as $row) {
+        fputcsv($out, array_map(static fn($column) => adminModuleFormatValue($column, $row[$column] ?? ''), $config['columns']));
+    }
+    exit;
+}
+
+function adminRecalculatePredictionsForMatch(int $matchId): void {
+    if (!adminTableExists('matches') || !adminTableExists('predictions')) return;
+    $stmt = adminDb()->prepare('SELECT final_score_team_a, final_score_team_b, match_finished FROM matches WHERE id = ? LIMIT 1');
+    $stmt->execute([$matchId]);
+    $match = $stmt->fetch();
+    if (!$match || !(int)($match['match_finished'] ?? 0) || $match['final_score_team_a'] === null || $match['final_score_team_b'] === null) return;
+    adminDb()->prepare('UPDATE predictions SET is_correct_prediction = CASE WHEN predicted_score_team_a = :a AND predicted_score_team_b = :b THEN 1 ELSE 0 END WHERE match_id = :id')
+        ->execute(['a' => $match['final_score_team_a'], 'b' => $match['final_score_team_b'], 'id' => $matchId]);
+}
+
+function ensureAdminVisitorAnalyticsSchema(): void {
+    $db = adminDb();
+    $db->exec("CREATE TABLE IF NOT EXISTS `visitor_analytics_logs` (
+        `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        `session_id` varchar(64) NOT NULL,
+        `user_id` int(11) UNSIGNED DEFAULT NULL,
+        `customer_id` int(11) UNSIGNED DEFAULT NULL,
+        `source_type` varchar(100) DEFAULT NULL,
+        `source_name` varchar(150) DEFAULT NULL,
+        `referrer_url` varchar(500) DEFAULT NULL,
+        `utm_source` varchar(100) DEFAULT NULL,
+        `utm_medium` varchar(100) DEFAULT NULL,
+        `utm_campaign` varchar(150) DEFAULT NULL,
+        `landing_page` varchar(500) DEFAULT NULL,
+        `current_page` varchar(500) DEFAULT NULL,
+        `next_page` varchar(500) DEFAULT NULL,
+        `related_module` varchar(100) DEFAULT NULL,
+        `related_record_id` int(11) UNSIGNED DEFAULT NULL,
+        `event_type` enum('external_entry','page_view','banner_view','banner_click','match_view','prediction_start','prediction_submit','category_view','menu_item_view','survey_view','survey_start','survey_submit','crm_link_entry','exit') NOT NULL DEFAULT 'page_view',
+        `target_action` varchar(100) DEFAULT NULL,
+        `device_type` varchar(50) DEFAULT NULL,
+        `browser` varchar(100) DEFAULT NULL,
+        `operating_system` varchar(100) DEFAULT NULL,
+        `ip_address` varchar(64) DEFAULT NULL,
+        `branch_id` int(11) UNSIGNED DEFAULT NULL,
+        `is_new_visitor` tinyint(1) NOT NULL DEFAULT 0,
+        `is_converted` tinyint(1) NOT NULL DEFAULT 0,
+        `duration_seconds` int(11) DEFAULT NULL,
+        `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`),
+        KEY `idx_visitor_logs_session` (`session_id`),
+        KEY `idx_visitor_logs_source` (`source_type`, `source_name`),
+        KEY `idx_visitor_logs_pages` (`landing_page`(191), `current_page`(191), `next_page`(191)),
+        KEY `idx_visitor_logs_action` (`target_action`, `is_converted`),
+        KEY `idx_visitor_logs_created` (`created_at`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    ensureTableColumns('visitor_analytics_logs', [
+        'campaign_type' => "varchar(100) DEFAULT NULL AFTER source_name",
+        'entry_link' => "varchar(500) DEFAULT NULL AFTER campaign_type",
+    ]);
+}
+
+function adminVisitorAnalyticsSources(): array {
+    return ['Instagram','Telegram','WhatsApp','SMS','Google Search','Google Maps','QR Code','CRM Campaign Link','Referral Website','Paid Ads','Direct Entry','Unknown'];
 }

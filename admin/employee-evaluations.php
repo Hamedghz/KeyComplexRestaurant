@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/lib/admin_crud.php';
+require_once __DIR__ . '/lib/admin_schema.php';
 $currentAdmin = adminGuard('employee');
 $pageTitle = 'پرتال ارزیابی همکاران';
 try {
