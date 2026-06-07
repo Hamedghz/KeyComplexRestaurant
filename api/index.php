@@ -251,7 +251,7 @@ function apiMenu(PDO $db, string $method): void {
     if ($method !== 'GET') {
         apiRespond(['success' => false, 'message' => 'Method not allowed'], 405);
     }
-    $stmt = $db->prepare('SELECT mi.*, mc.name_fa AS category_name_fa, mc.name_en AS category_name_en FROM `menu_items` mi JOIN `menu_categories` mc ON mc.id = mi.category_id WHERE mi.is_available = 1 AND mc.is_active = 1 ORDER BY mc.sort_order ASC, mi.sort_order ASC LIMIT :limit');
+    $stmt = $db->prepare("SELECT mi.*, mc.name_fa AS category_name_fa, mc.name_en AS category_name_en FROM `menu_items` mi JOIN `menu_categories` mc ON mc.id = mi.category_id WHERE mi.is_available = 1 AND mc.is_active = 1 AND COALESCE(mi.visible_website, 1) = 1 AND COALESCE(mi.availability_status, 'available') <> 'unavailable' AND COALESCE(mc.visible_website, 1) = 1 ORDER BY mc.sort_order ASC, mi.sort_order ASC LIMIT :limit");
     $stmt->bindValue(':limit', apiLimit(), PDO::PARAM_INT);
     $stmt->execute();
     apiRespond(['success' => true, 'data' => $stmt->fetchAll()]);

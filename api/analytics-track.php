@@ -107,12 +107,12 @@ function analyticsTrackDetectSourceLabel(array $source, array $payload): string 
 function analyticsTrackTargetAction(string $path): array {
     $path = strtolower($path);
     if (str_contains($path, 'prediction')) return ['prediction_submit', 'predictions'];
-    if (str_contains($path, 'survey')) return ['survey_start', 'surveys'];
-    if (str_contains($path, 'menu-item') || str_contains($path, 'item')) return ['menu_item_view', 'menu-items'];
-    if (str_contains($path, 'category') || str_contains($path, 'menu')) return ['category_view', 'categories'];
+    if (str_contains($path, 'survey')) return ['survey_start', 'dynamic_forms'];
+    if (str_contains($path, 'menu-item') || str_contains($path, 'item')) return ['menu_item_view', 'menu_items'];
+    if (str_contains($path, 'category') || str_contains($path, 'menu')) return ['category_view', 'menu_categories'];
     if (str_contains($path, 'match') || str_contains($path, 'campaign')) return ['match_view', 'matches'];
-    if (str_contains($path, 'banner')) return ['banner_interaction', 'banners'];
-    if (str_contains($path, 'crm')) return ['crm_link_entry', 'crm'];
+    if (str_contains($path, 'banner')) return ['banner_click', 'hero_banners'];
+    if (str_contains($path, 'crm')) return ['crm_link_entry', 'crm_customers'];
     return ['menu_view', 'home'];
 }
 
@@ -150,6 +150,7 @@ function analyticsTrackEnsurePathTable(PDO $db): void {
         KEY `idx_visitor_logs_session` (`session_id`),
         KEY `idx_visitor_logs_source` (`source_type`, `source_name`),
         KEY `idx_visitor_logs_action` (`target_action`, `is_converted`),
+        KEY `idx_visitor_logs_related` (`related_module`, `related_record_id`),
         KEY `idx_visitor_logs_created` (`created_at`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 }
@@ -273,14 +274,14 @@ try {
             ->execute(['next_page' => $pagePath, 'duration' => $duration, 'id' => $previous['id']]);
     }
     [$targetAction, $relatedModule] = analyticsTrackTargetAction($pagePath);
-    $isConverted = in_array($targetAction, ['prediction_submit','survey_submit','menu_item_view','banner_interaction','campaign_click'], true) ? 1 : 0;
+    $isConverted = in_array($targetAction, ['prediction_submit','survey_submit','menu_item_view','banner_click','campaign_click'], true) ? 1 : 0;
     $eventType = $previous ? 'page_view' : 'external_entry';
     if ($targetAction === 'prediction_submit') $eventType = 'prediction_submit';
     elseif ($targetAction === 'survey_start') $eventType = 'survey_view';
     elseif ($targetAction === 'menu_item_view') $eventType = 'menu_item_view';
     elseif ($targetAction === 'category_view') $eventType = 'category_view';
     elseif ($targetAction === 'match_view') $eventType = 'match_view';
-    elseif ($targetAction === 'banner_interaction') $eventType = 'banner_click';
+    elseif ($targetAction === 'banner_click') $eventType = 'banner_click';
     elseif ($targetAction === 'crm_link_entry') $eventType = 'crm_link_entry';
     $pathStmt = $db->prepare('INSERT INTO visitor_analytics_logs (session_id, source_type, source_name, campaign_type, entry_link, referrer_url, utm_source, utm_medium, utm_campaign, landing_page, current_page, related_module, event_type, target_action, device_type, browser, operating_system, ip_address, is_new_visitor, is_converted, created_at) VALUES (:session_id, :source_type, :source_name, :campaign_type, :entry_link, :referrer_url, :utm_source, :utm_medium, :utm_campaign, :landing_page, :current_page, :related_module, :event_type, :target_action, :device_type, :browser, :operating_system, :ip_address, :is_new_visitor, :is_converted, :created_at)');
     $pathStmt->execute([

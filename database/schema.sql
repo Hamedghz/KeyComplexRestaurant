@@ -1112,6 +1112,7 @@ CREATE TABLE IF NOT EXISTS `visitor_analytics_logs` (
   KEY `idx_visitor_logs_source` (`source_type`, `source_name`),
   KEY `idx_visitor_logs_pages` (`landing_page`(191), `current_page`(191), `next_page`(191)),
   KEY `idx_visitor_logs_action` (`target_action`, `is_converted`),
+  KEY `idx_visitor_logs_related` (`related_module`, `related_record_id`),
   KEY `idx_visitor_logs_created` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

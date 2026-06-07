@@ -282,7 +282,7 @@ try {
     $heroBanners = [];
 }
 try {
-    $categoryStmt = $db->prepare("SELECT * FROM menu_categories WHERE COALESCE(is_active, 1) = 1 ORDER BY sort_order ASC, name_fa ASC");
+    $categoryStmt = $db->prepare("SELECT * FROM menu_categories WHERE COALESCE(is_active, 1) = 1 AND COALESCE(visible_website, 1) = 1 ORDER BY sort_order ASC, name_fa ASC");
     $categoryStmt->execute();
     $menuCategories = $categoryStmt->fetchAll();
     $menuItemsByCategory = [];

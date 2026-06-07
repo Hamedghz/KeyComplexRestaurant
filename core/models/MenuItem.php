@@ -7,6 +7,27 @@ require_once __DIR__ . '/Model.php';
 
 class MenuItem extends Model {
     protected $table = 'menu_items';
+
+    private function hasColumn(string $column): bool {
+        try {
+            $stmt = $this->db->prepare('SHOW COLUMNS FROM menu_items LIKE :column_name');
+            $stmt->execute(['column_name' => $column]);
+            return (bool)$stmt->fetchColumn();
+        } catch (Throwable $e) {
+            error_log('Menu item column lookup failed: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    private function appendPublicVisibilityFilters(string $sql, string $alias = 'mi'): string {
+        if ($this->hasColumn('visible_website')) {
+            $sql .= " AND {$alias}.visible_website = 1";
+        }
+        if ($this->hasColumn('availability_status')) {
+            $sql .= " AND {$alias}.availability_status <> 'unavailable'";
+        }
+        return $sql;
+    }
     
     /**
      * Get menu items with category info
@@ -41,6 +62,10 @@ class MenuItem extends Model {
         if (isset($filters['is_available'])) {
             $sql .= " AND mi.is_available = :is_available";
             $params['is_available'] = $filters['is_available'];
+            if ((int)$filters['is_available'] === 1) {
+                $sql = $this->appendPublicVisibilityFilters($sql, 'mi');
+                $sql .= " AND COALESCE(mc.visible_website, 1) = 1 AND COALESCE(mc.is_active, 1) = 1";
+            }
         }
         
         if (isset($filters['is_featured'])) {
@@ -67,10 +92,11 @@ class MenuItem extends Model {
         $sql = "SELECT mi.*, mc.name_fa as category_name_fa
                 FROM menu_items mi
                 LEFT JOIN menu_categories mc ON mi.category_id = mc.id
-                WHERE mi.is_featured = 1 AND mi.is_available = 1
-                ORDER BY mi.sort_order ASC
-                LIMIT :limit";
+                WHERE mi.is_featured = 1 AND mi.is_available = 1";
         
+        $sql = $this->appendPublicVisibilityFilters($sql, 'mi') . " ORDER BY mi.sort_order ASC
+                LIMIT :limit";
+
         $stmt = $this->db->prepare($sql);
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->execute();
@@ -85,8 +111,9 @@ class MenuItem extends Model {
         
         if ($availableOnly) {
             $sql .= " AND is_available = 1";
+            $sql = $this->appendPublicVisibilityFilters($sql, 'menu_items');
         }
-        
+
         $sql .= " ORDER BY sort_order ASC, name_fa ASC";
         
         $stmt = $this->db->prepare($sql);
@@ -118,9 +145,10 @@ class MenuItem extends Model {
                 FROM menu_items mi
                 LEFT JOIN menu_categories mc ON mi.category_id = mc.id
                 WHERE (mi.name_fa LIKE :query OR mi.name_en LIKE :query OR mi.description_fa LIKE :query)
-                AND mi.is_available = 1
-                ORDER BY mi.is_featured DESC, mi.sort_order ASC";
+                AND mi.is_available = 1";
         
+        $sql = $this->appendPublicVisibilityFilters($sql, 'mi') . " ORDER BY mi.is_featured DESC, mi.sort_order ASC";
+
         $stmt = $this->db->prepare($sql);
         $stmt->execute(['query' => '%' . $query . '%']);
         return $stmt->fetchAll();
