@@ -7,7 +7,7 @@ if (!$config) {
     exit('Module not found.');
 }
 $currentAdmin = adminGuard($config['min_role'] ?? 'employee');
-$schemaMessages = ensureAdminSchema();
+ensureAdminSchema();
 $db = adminDb();
 $pageTitle = $config['title'];
 $message = '';
@@ -16,6 +16,10 @@ $error = '';
 try {
     adminEnsureModuleTables($config);
     $config = adminModuleNormalizeConfig($config);
+    if (empty($config['fields'])) {
+        $config['readonly_create'] = true;
+        safeAdminLog('Admin module has no editable fields after schema normalization (' . basename($_SERVER['PHP_SELF']) . ' -> ' . ($config['table'] ?? 'unknown') . ')');
+    }
     if (($_GET['export'] ?? '') === 'csv') {
         adminModuleExportCsv($config);
     }
@@ -26,6 +30,10 @@ try {
 
 $action = $_GET['action'] ?? 'list';
 if ($action === 'add' && !empty($config['readonly_create'])) {
+    $action = 'list';
+}
+if (in_array($action, ['add', 'edit'], true) && empty($config['fields'])) {
+    $error = 'فرم این صفحه با ستون‌های واقعی جدول همگام نیست.';
     $action = 'list';
 }
 $editRow = null;
@@ -42,6 +50,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
             $id = (int)($_POST['id'] ?? 0);
             if (!$id && !empty($config['readonly_create'])) {
                 throw new RuntimeException('ایجاد رکورد جدید برای این صفحه فعال نیست.');
+            }
+            if (empty($config['fields'])) {
+                throw new RuntimeException('فرم این صفحه با ستون‌های واقعی جدول همگام نیست.');
             }
             $current = $id ? (adminModuleFetchRow($config, $id) ?: []) : [];
             $data = adminModuleCollectData($config, $current, $currentAdmin);
@@ -149,5 +160,4 @@ include __DIR__ . '/includes/header.php';
     </div>
 <?php endif; ?>
 
-<div class="card mt-3"><div class="card-header"><h2>Schema</h2></div><div class="card-body"><p class="text-muted">این صفحه براساس جدول <?php echo h($config['table']); ?> و الگوی admin/settings.php ساخته شده است.</p><ul><?php foreach ($schemaMessages as $m): ?><li><?php echo h($m); ?></li><?php endforeach; ?></ul></div></div>
 <?php include __DIR__ . '/includes/footer.php'; ?>

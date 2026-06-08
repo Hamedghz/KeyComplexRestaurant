@@ -2,7 +2,7 @@
 require_once __DIR__ . '/../core/models/CrmCustomer.php';
 require_once __DIR__ . '/lib/admin_schema.php';
 $currentAdmin = adminGuard();
-$schemaMessages = ensureAdminSchema();
+ensureAdminSchema();
 $model = new CrmCustomer();
 $customer = $model->find((int)($_GET['id'] ?? 0));
 $pageTitle = 'پروفایل مشتری'; include __DIR__.'/includes/header.php';

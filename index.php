@@ -38,6 +38,31 @@ function normalizeTelLink($phone) {
     return preg_replace('/[^0-9+]/', '', (string)$phone);
 }
 
+function getActiveKeyStory(Setting $settingModel): array {
+    $fallback = [
+        'title' => $settingModel->get('about_title_fa', 'درباره مجموعه'),
+        'description' => $settingModel->get('about_content_fa', 'روایت طعم‌های اصیل، قهوه‌های منتخب و میزبانی گرم در فضایی لوکس و آرام.'),
+        'image' => $settingModel->get('about_image', ''),
+    ];
+
+    try {
+        $db = Database::getInstance()->getConnection();
+        $stmt = $db->query('SELECT title, description, image FROM key_story_settings WHERE active = 1 ORDER BY id ASC LIMIT 1');
+        $story = $stmt ? $stmt->fetch() : null;
+        if ($story) {
+            return [
+                'title' => $story['title'] ?: $fallback['title'],
+                'description' => $story['description'] ?: $fallback['description'],
+                'image' => $story['image'] ?: $fallback['image'],
+            ];
+        }
+    } catch (Throwable $e) {
+        error_log('[homepage] Key story lookup failed: ' . $e->getMessage());
+    }
+
+    return $fallback;
+}
+
 function getOpeningWindow($value) {
     if (is_array($value)) {
         $isClosed = !empty($value['closed']) || (isset($value['is_open']) && !$value['is_open']);
@@ -201,9 +226,10 @@ $ctaText = $settingModel->get('hero_cta_text_fa', 'سفارش آنلاین');
 $primaryColor = $settingModel->get('primary_color', '#004647');
 $accentColor = $settingModel->get('accent_color', '#D4AF37');
 $menuTitle = $settingModel->get('featured_menu_title_fa', 'منوی ویژه');
-$aboutTitle = $settingModel->get('about_title_fa', 'درباره مجموعه');
-$aboutContent = $settingModel->get('about_content_fa', 'روایت طعم‌های اصیل، قهوه‌های منتخب و میزبانی گرم در فضایی لوکس و آرام.');
-$aboutImage = normalizeAssetPath($settingModel->get('about_image', ''));
+$keyStory = getActiveKeyStory($settingModel);
+$aboutTitle = $keyStory['title'];
+$aboutContent = $keyStory['description'];
+$aboutImage = normalizeAssetPath($keyStory['image']);
 $addressFa = $settingModel->get('address_fa', 'آدرس مجموعه');
 $addressEn = $settingModel->get('address_en', 'Restaurant address');
 $phoneNumber = $settingModel->get('phone_number', '+98 21 1234 5678');

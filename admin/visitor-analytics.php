@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/lib/admin_schema.php';
 $currentAdmin = adminGuard('manager');
-$schemaMessages = ensureAdminSchema();
+ensureAdminSchema();
 ensureAdminVisitorAnalyticsSchema();
 $db = adminDb();
 $pageTitle = 'Visitor Path Analytics';
@@ -105,5 +105,4 @@ include __DIR__ . '/includes/header.php';
     <div class="card"><div class="card-header"><h2>Landing page performance report</h2></div><div class="card-body"><table class="table"><tr><th>Landing</th><th>Entries</th><th>Exit</th><th>Conversion</th></tr><?php foreach ($landings as $row): ?><tr><td><?php echo h($row['label']); ?></td><td><?php echo h($row['total']); ?></td><td><?php echo h($percent($row['exit_rate'])); ?></td><td><?php echo h($percent($row['conversion_rate'])); ?></td></tr><?php endforeach; ?></table></div></div>
 </div>
 <div class="card"><div class="card-header"><h2>User path / conversion funnel / weak landing pages report</h2></div><div class="card-body"><table class="table"><tr><th>Source</th><th>Landing</th><th>Next page</th><th>Target action</th><th>Entries</th><th>Conversion</th></tr><?php foreach ($paths as $row): ?><tr><td><?php echo h($row['source_type']); ?></td><td><?php echo h($row['landing_page']); ?></td><td><?php echo h($row['next_page']); ?></td><td><?php echo h($row['target_action']); ?></td><td><?php echo h($row['total']); ?></td><td><?php echo h($percent($row['conversion_rate'])); ?></td></tr><?php endforeach; ?></table></div></div>
-<div class="card mt-3"><div class="card-header"><h2>Connected modules</h2></div><div class="card-body"><p class="text-muted">This report connects visitor paths to banners, matches, predictions, categories, menu items, surveys, survey responses, and CRM through related_module / related_record_id and target_action values.</p><ul><?php foreach ($schemaMessages as $m): ?><li><?php echo h($m); ?></li><?php endforeach; ?></ul></div></div>
 <?php include __DIR__ . '/includes/footer.php'; ?>

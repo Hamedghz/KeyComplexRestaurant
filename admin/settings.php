@@ -2,7 +2,7 @@
 require_once __DIR__ . '/lib/admin_schema.php';
 require_once __DIR__ . '/../core/models/Setting.php';
 $currentAdmin = adminGuard('admin');
-$schemaMessages = ensureAdminSchema();
+ensureAdminSchema();
 $settingModel = new Setting();
 $db = adminDb();
 $pageTitle = 'تنظیمات سایت';
@@ -104,5 +104,4 @@ include __DIR__ . '/includes/header.php';
     <?php endforeach; ?>
     <button class="btn btn-success" type="submit">ذخیره تنظیمات</button>
 </form>
-<div class="card mt-3"><div class="card-header"><h2>Schema</h2></div><div class="card-body"><p class="text-muted">فرم‌ها براساس جدول settings و migrationهای لازم ساخته شده‌اند.</p><ul><?php foreach ($schemaMessages as $m): ?><li><?php echo h($m); ?></li><?php endforeach; ?></ul></div></div>
 <?php include __DIR__ . '/includes/footer.php'; ?>

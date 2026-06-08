@@ -258,26 +258,23 @@ function ensureAdminCanonicalTables(PDO $db, array $requestedTables = []): array
 
 function ensureAdminSchema(): array {
     $db = adminDb();
-    $changes = [];
     try {
         foreach (SchemaSynchronizer::sync($db, ROOT_PATH . '/database/schema.sql') as $syncChange) {
-            $changes[] = 'schema-sync: ' . $syncChange;
+            safeAdminLog('schema-sync: ' . $syncChange);
         }
     } catch (Throwable $e) {
-        $changes[] = 'schema-sync skipped (خطا: ' . $e->getMessage() . ')';
         safeAdminLog('Schema synchronizer skipped: ' . $e->getMessage());
     }
 
     foreach (ensureAdminCanonicalTables($db) as $repairChange) {
-        $changes[] = 'canonical-table-repair: ' . $repairChange;
+        safeAdminLog('Canonical table repair: ' . $repairChange);
     }
 
-    $run = function (string $sql, string $label) use ($db, &$changes) {
+    $run = function (string $sql, string $label) use ($db) {
         try {
             $db->exec($sql);
-            $changes[] = $label;
         } catch (Throwable $e) {
-            $changes[] = $label . ' (خطا: ' . $e->getMessage() . ')';
+            safeAdminLog($label . ' failed: ' . $e->getMessage());
         }
     };
 
@@ -293,7 +290,7 @@ function ensureAdminSchema(): array {
         UNIQUE KEY `uniq_admin_session_token` (`session_token`),
         KEY `idx_admin_sessions_admin` (`admin_id`),
         KEY `idx_admin_sessions_expires` (`expires_at`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول admin_sessions');
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table admin_sessions');
 
     $run("CREATE TABLE IF NOT EXISTS `activity_log` (
         `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -309,7 +306,7 @@ function ensureAdminSchema(): array {
         KEY `idx_activity_admin` (`admin_id`),
         KEY `idx_activity_action` (`action`),
         KEY `idx_activity_created` (`created_at`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول activity_log');
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table activity_log');
 
     if (adminTableExists('admins')) {
         if (!adminColumnExists('admins', 'department')) {
@@ -346,7 +343,7 @@ function ensureAdminSchema(): array {
         PRIMARY KEY (`id`),
         UNIQUE KEY `uniq_acquisition_title` (`title`),
         KEY `idx_acquisition_active_order` (`active`, `sort_order`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول acquisition_sources');
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table acquisition_sources');
 
     $sources = ['Instagram','Telegram','Google','Balad','Friend Referral','Walk-in','Website','Advertisement','Other'];
     foreach ($sources as $i => $source) {
@@ -354,7 +351,7 @@ function ensureAdminSchema(): array {
             $stmt = $db->prepare('INSERT INTO acquisition_sources (title, sort_order, active) VALUES (?, ?, 1) ON DUPLICATE KEY UPDATE title = title');
             $stmt->execute([$source, ($i + 1) * 10]);
         } catch (Throwable $e) {
-            $changes[] = 'منبع جذب پیش‌فرض ' . $source . ' (خطا: ' . $e->getMessage() . ')';
+            safeAdminLog('Default acquisition source failed for ' . $source . ': ' . $e->getMessage());
         }
     }
 
@@ -369,7 +366,7 @@ function ensureAdminSchema(): array {
         `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (`id`),
         KEY `idx_social_active_order` (`active`, `sort_order`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول social_links');
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table social_links');
 
     $socials = [
         ['Instagram', '📷', 'https://instagram.com/keyrestaurant', 10],
@@ -387,7 +384,7 @@ function ensureAdminSchema(): array {
             $stmt = $db->prepare('INSERT INTO social_links (title, icon, url, sort_order, active) SELECT ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM social_links WHERE title = ?)');
             $stmt->execute([$item[0], $item[1], $item[2], $item[3], $item[2] !== '' ? 1 : 0, $item[0]]);
         } catch (Throwable $e) {
-            $changes[] = 'شبکه اجتماعی پیش‌فرض ' . $item[0] . ' (خطا: ' . $e->getMessage() . ')';
+            safeAdminLog('Default social link failed for ' . $item[0] . ': ' . $e->getMessage());
         }
     }
 
@@ -409,7 +406,7 @@ function ensureAdminSchema(): array {
         KEY `idx_eval_employee_month` (`employee_id`, `period_month`),
         CONSTRAINT `fk_eval_evaluator` FOREIGN KEY (`evaluator_id`) REFERENCES `admins` (`id`) ON DELETE CASCADE,
         CONSTRAINT `fk_eval_employee` FOREIGN KEY (`employee_id`) REFERENCES `admins` (`id`) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول employee_evaluations');
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table employee_evaluations');
 
     $run("CREATE TABLE IF NOT EXISTS `employee_score_history` (
         `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -425,7 +422,7 @@ function ensureAdminSchema(): array {
         UNIQUE KEY `uniq_score_employee_month` (`employee_id`, `period_month`),
         KEY `idx_score_month_final` (`period_month`, `final_score`),
         CONSTRAINT `fk_score_employee` FOREIGN KEY (`employee_id`) REFERENCES `admins` (`id`) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول employee_score_history');
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table employee_score_history');
 
     $run("CREATE TABLE IF NOT EXISTS `employee_rewards` (
         `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -439,7 +436,7 @@ function ensureAdminSchema(): array {
         KEY `idx_rewards_employee_date` (`employee_id`, `reward_date`),
         CONSTRAINT `fk_rewards_employee` FOREIGN KEY (`employee_id`) REFERENCES `admins` (`id`) ON DELETE CASCADE,
         CONSTRAINT `fk_rewards_creator` FOREIGN KEY (`created_by`) REFERENCES `admins` (`id`) ON DELETE SET NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول employee_rewards');
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table employee_rewards');
 
     $run("CREATE TABLE IF NOT EXISTS `employee_warnings` (
         `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -454,7 +451,7 @@ function ensureAdminSchema(): array {
         KEY `idx_warnings_employee_date` (`employee_id`, `warning_date`),
         CONSTRAINT `fk_warnings_employee` FOREIGN KEY (`employee_id`) REFERENCES `admins` (`id`) ON DELETE CASCADE,
         CONSTRAINT `fk_warnings_creator` FOREIGN KEY (`created_by`) REFERENCES `admins` (`id`) ON DELETE SET NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول employee_warnings');
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table employee_warnings');
 
     $run("CREATE TABLE IF NOT EXISTS `employee_monthly_inputs` (
         `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -471,7 +468,7 @@ function ensureAdminSchema(): array {
         UNIQUE KEY `uniq_monthly_inputs` (`employee_id`, `period_month`),
         CONSTRAINT `fk_monthly_inputs_employee` FOREIGN KEY (`employee_id`) REFERENCES `admins` (`id`) ON DELETE CASCADE,
         CONSTRAINT `fk_monthly_inputs_creator` FOREIGN KEY (`created_by`) REFERENCES `admins` (`id`) ON DELETE SET NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول employee_monthly_inputs');
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table employee_monthly_inputs');
 
     $run("CREATE TABLE IF NOT EXISTS `employee_performance` (
         `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -489,7 +486,7 @@ function ensureAdminSchema(): array {
         KEY `idx_employee_performance_month_score` (`period_month`, `score`),
         CONSTRAINT `fk_employee_performance_admin` FOREIGN KEY (`admin_id`) REFERENCES `admins` (`id`) ON DELETE CASCADE,
         CONSTRAINT `fk_employee_performance_evaluator` FOREIGN KEY (`evaluated_by`) REFERENCES `admins` (`id`) ON DELETE SET NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول employee_performance');
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table employee_performance');
 
     if (adminTableExists('matches')) {
         ensureTableColumns('matches', [
@@ -564,7 +561,7 @@ function ensureAdminSchema(): array {
         KEY `idx_pool_mobile` (`mobile`),
         KEY `idx_pool_source` (`acquisition_source`),
         KEY `idx_pool_status` (`status`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول pool_leads');
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table pool_leads');
 
     $run("CREATE TABLE IF NOT EXISTS `traffic_logs` (
         `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -588,7 +585,7 @@ function ensureAdminSchema(): array {
         KEY `idx_traffic_session` (`session_id`),
         KEY `idx_traffic_date` (`created_at`),
         KEY `idx_traffic_country` (`country`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول traffic_logs');
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table traffic_logs');
 
     $run("CREATE TABLE IF NOT EXISTS `traffic_sources` (
         `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -601,7 +598,7 @@ function ensureAdminSchema(): array {
         UNIQUE KEY `uniq_source_date` (`source_name`, `date`),
         KEY `idx_source_type` (`source_type`),
         KEY `idx_source_date` (`date`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول traffic_sources');
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table traffic_sources');
 
     $run("CREATE TABLE IF NOT EXISTS `visitor_sessions` (
         `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -613,7 +610,7 @@ function ensureAdminSchema(): array {
         PRIMARY KEY (`id`),
         UNIQUE KEY `uniq_session` (`session_id`),
         KEY `idx_session_active` (`is_active`, `last_activity`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول visitor_sessions');
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table visitor_sessions');
 
     $run("CREATE TABLE IF NOT EXISTS `visitor_locations` (
         `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -625,7 +622,7 @@ function ensureAdminSchema(): array {
         PRIMARY KEY (`id`),
         UNIQUE KEY `uniq_location_date` (`country`, `city`, `date`),
         KEY `idx_location_date` (`date`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول visitor_locations');
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table visitor_locations');
 
     $run("CREATE TABLE IF NOT EXISTS `traffic_statistics` (
         `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -638,7 +635,7 @@ function ensureAdminSchema(): array {
         `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (`id`),
         UNIQUE KEY `uniq_stat_date` (`stat_date`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ایجاد/بررسی جدول traffic_statistics');
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table traffic_statistics');
 
     $settings = [
         ['site_description_fa', 'تجربه‌ای لوکس از غذا و نوشیدنی', 'text', 'general', 1],
@@ -661,11 +658,11 @@ function ensureAdminSchema(): array {
             $stmt = $db->prepare('INSERT INTO settings (setting_key, setting_value, setting_type, category, is_public) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE setting_key = setting_key');
             $stmt->execute($setting);
         } catch (Throwable $e) {
-            $changes[] = 'تنظیم پیش‌فرض ' . $setting[0] . ' (خطا: ' . $e->getMessage() . ')';
+            safeAdminLog('Default setting failed for ' . $setting[0] . ': ' . $e->getMessage());
         }
     }
 
-    return $changes;
+    return [];
 }
 
 function schemaColumns(string $table): array {
@@ -814,7 +811,7 @@ function adminModuleDefinitions(): array {
             'fields' => [
                 'category_id' => ['label'=>'دسته‌بندی','type'=>'category','required'=>true], 'name_fa' => ['label'=>'عنوان فارسی','type'=>'text','required'=>true], 'name_en' => ['label'=>'عنوان انگلیسی','type'=>'text','required'=>true], 'slug' => ['label'=>'اسلاگ','type'=>'text','required'=>true],
                 'description_fa' => ['label'=>'توضیح فارسی','type'=>'textarea'], 'description_en' => ['label'=>'توضیح انگلیسی','type'=>'textarea'], 'price' => ['label'=>'قیمت','type'=>'number','required'=>true], 'discount_price' => ['label'=>'قیمت تخفیف','type'=>'number'],
-                'image' => ['label'=>'تصویر','type'=>'image','folder'=>'menu'], 'gallery_images' => ['label'=>'گالری JSON','type'=>'textarea'], 'ingredients_fa' => ['label'=>'مواد اولیه فارسی','type'=>'textarea'], 'ingredients_en' => ['label'=>'مواد اولیه انگلیسی','type'=>'textarea'],
+                'image' => ['label'=>'تصویر','type'=>'image','folder'=>'menu'], 'gallery_images' => ['label'=>'گالری JSON','type'=>'json'], 'ingredients_fa' => ['label'=>'مواد اولیه فارسی','type'=>'textarea'], 'ingredients_en' => ['label'=>'مواد اولیه انگلیسی','type'=>'textarea'],
                 'calories' => ['label'=>'کالری','type'=>'number'], 'preparation_time' => ['label'=>'زمان آماده‌سازی','type'=>'number'],
                 'availability_status' => ['label'=>'وضعیت موجودی','type'=>'select','options'=>['available'=>'موجود','unavailable'=>'ناموجود','limited'=>'محدود']],
                 'visible_qr_menu' => ['label'=>'نمایش در QR Menu','type'=>'checkbox'], 'visible_website' => ['label'=>'نمایش در وب‌سایت','type'=>'checkbox'], 'visible_kiosk' => ['label'=>'نمایش در کیوسک','type'=>'checkbox'], 'visible_loyalty' => ['label'=>'نمایش در وفاداری','type'=>'checkbox'],
@@ -827,7 +824,7 @@ function adminModuleDefinitions(): array {
             'title' => 'فرم‌های نظرسنجی', 'min_role' => 'admin', 'table' => 'dynamic_forms', 'unique' => 'form_name', 'search' => ['form_name','form_title_fa'], 'filters' => ['is_active','branch_id'], 'date_column' => 'created_at',
             'fields' => [
                 'form_name' => ['label'=>'نام سیستمی','type'=>'text','required'=>true], 'form_title_fa' => ['label'=>'عنوان فارسی','type'=>'text','required'=>true], 'form_title_en' => ['label'=>'عنوان انگلیسی','type'=>'text'],
-                'form_description_fa' => ['label'=>'توضیح فارسی','type'=>'textarea'], 'form_description_en' => ['label'=>'توضیح انگلیسی','type'=>'textarea'], 'form_schema' => ['label'=>'Schema JSON','type'=>'textarea','default'=>'{"fields":[]}'],
+                'form_description_fa' => ['label'=>'توضیح فارسی','type'=>'textarea'], 'form_description_en' => ['label'=>'توضیح انگلیسی','type'=>'textarea'], 'form_schema' => ['label'=>'ساختار فرم JSON','type'=>'json','default'=>'{"fields":[]}'],
                 'start_date' => ['label'=>'شروع انتشار','type'=>'datetime'], 'end_date' => ['label'=>'پایان انتشار','type'=>'datetime'], 'publishing_channels' => ['label'=>'کانال‌های انتشار','type'=>'text'], 'branch_id' => ['label'=>'شعبه','type'=>'number'], 'survey_version' => ['label'=>'نسخه','type'=>'number'],
                 'is_active' => ['label'=>'فعال','type'=>'checkbox'], 'display_order' => ['label'=>'ترتیب','type'=>'number'],
             ],
@@ -1059,6 +1056,9 @@ function adminModuleCollectData(array $config, array $current = [], ?array $admi
         $type = $meta['type'];
         if ($type === 'image') {
             $data[$name] = adminModuleUploadImage($name, $meta['folder'] ?? 'admin', (string)($current[$name] ?? ''));
+            if (!empty($meta['required']) && empty($data[$name])) {
+                throw new RuntimeException('فیلد «' . ($meta['label'] ?? $name) . '» الزامی است.');
+            }
             continue;
         }
         if ($type === 'checkbox') {
@@ -1069,8 +1069,17 @@ function adminModuleCollectData(array $config, array $current = [], ?array $admi
         if ($type === 'mobile') $value = normalizeMobile($value);
         if ($type === 'date') $value = parsePersianDate($value, false);
         if ($type === 'datetime') $value = parsePersianDate($value, true);
+        if ($type === 'json' && $value !== null && trim((string)$value) !== '') {
+            json_decode((string)$value, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                throw new RuntimeException('فیلد «' . ($meta['label'] ?? $name) . '» باید JSON معتبر باشد.');
+            }
+        }
         if ($type === 'number' && $value === '') $value = null;
         $data[$name] = $value === '' ? null : $value;
+        if (!empty($meta['required']) && ($data[$name] === null || $data[$name] === '')) {
+            throw new RuntimeException('فیلد «' . ($meta['label'] ?? $name) . '» الزامی است.');
+        }
     }
     if ($config['table'] === 'dynamic_forms' && !$current && adminColumnExists('dynamic_forms', 'created_by')) {
         $data['created_by'] = $admin['id'] ?? null;
@@ -1209,7 +1218,7 @@ function adminModuleRenderField(string $name, array $meta, $value = null): void 
     if (in_array($type, ['date','datetime'], true) && $value) $value = formatJalaliDateTime($value, $type === 'datetime');
     echo '<div class="form-group"><label>' . h($meta['label']) . (!empty($meta['required']) ? ' *' : '') . '</label>';
     $required = !empty($meta['required']) ? 'required' : '';
-    if ($type === 'textarea') {
+    if ($type === 'textarea' || $type === 'json') {
         echo '<textarea class="form-control" name="' . h($name) . '" ' . $required . '>' . h($value ?? $meta['default'] ?? '') . '</textarea>';
     } elseif ($type === 'select') {
         echo '<select class="form-control" name="' . h($name) . '" ' . $required . '>';

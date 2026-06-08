@@ -3,50 +3,75 @@
  * Admin Survey Builder - Dynamic Form Creator
  */
 
-session_start();
-
-require_once __DIR__ . '/../core/bootstrap.php';
-require_once __DIR__ . '/../core/Auth.php';
+require_once __DIR__ . '/lib/admin_schema.php';
 require_once __DIR__ . '/../core/models/Survey.php';
 
-$auth = new Auth();
-
-if (!$auth->isLoggedIn()) {
-    header('Location: index.php');
-    exit;
-}
-
-$currentAdmin = $auth->getCurrentAdmin();
+$currentAdmin = adminGuard('admin');
+ensureAdminSchema();
+adminEnsureModuleTables(adminModuleDefinition('surveys'));
 $surveyModel = new Survey();
+$error = '';
 
-$formId = $_GET['id'] ?? null;
+$formId = isset($_GET['id']) && ctype_digit((string)$_GET['id']) ? (int)$_GET['id'] : null;
 $editMode = $formId !== null;
 $form = $editMode ? $surveyModel->getForm($formId) : null;
+if ($editMode && !$form) {
+    http_response_code(404);
+    exit('فرم نظرسنجی یافت نشد.');
+}
+
+function surveyBuilderDateTimeValue($value): string {
+    $value = trim((string)$value);
+    if ($value === '') return '';
+    $timestamp = strtotime($value);
+    return $timestamp ? date('Y-m-d\TH:i', $timestamp) : '';
+}
+
+function surveyBuilderDbDateTime($value): ?string {
+    $value = trim((string)$value);
+    if ($value === '') return null;
+    $timestamp = strtotime(str_replace('T', ' ', $value));
+    return $timestamp ? date('Y-m-d H:i:s', $timestamp) : null;
+}
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    requireValidCsrf();
+    $schema = json_decode($_POST['form_schema'] ?? '{"fields":[]}', true);
+    if (!is_array($schema) || !isset($schema['fields']) || !is_array($schema['fields'])) {
+        $error = 'ساختار فرم معتبر نیست.';
+    }
     $formData = [
-        'form_name' => $_POST['form_name'] ?? '',
-        'form_title_fa' => $_POST['form_title_fa'] ?? '',
-        'form_title_en' => $_POST['form_title_en'] ?? '',
-        'form_description_fa' => $_POST['form_description_fa'] ?? '',
-        'form_description_en' => $_POST['form_description_en'] ?? '',
-        'form_schema' => json_decode($_POST['form_schema'] ?? '{}', true),
+        'form_name' => trim((string)($_POST['form_name'] ?? '')),
+        'form_title_fa' => trim((string)($_POST['form_title_fa'] ?? '')),
+        'form_title_en' => trim((string)($_POST['form_title_en'] ?? '')),
+        'form_description_fa' => trim((string)($_POST['form_description_fa'] ?? '')),
+        'form_description_en' => trim((string)($_POST['form_description_en'] ?? '')),
+        'form_schema' => $schema,
         'is_active' => isset($_POST['is_active']) ? 1 : 0,
         'display_order' => (int)($_POST['display_order'] ?? 0),
-        'created_by' => $currentAdmin['id']
+        'start_date' => surveyBuilderDbDateTime($_POST['start_date'] ?? ''),
+        'end_date' => surveyBuilderDbDateTime($_POST['end_date'] ?? ''),
+        'publishing_channels' => trim((string)($_POST['publishing_channels'] ?? '')),
+        'branch_id' => ($_POST['branch_id'] ?? '') === '' ? null : (int)$_POST['branch_id'],
+        'survey_version' => max(1, (int)($_POST['survey_version'] ?? 1)),
     ];
-    
-    if ($editMode) {
-        $surveyModel->updateForm($formId, $formData);
-        $success = 'فرم با موفقیت به‌روزرسانی شد';
-    } else {
-        $surveyModel->createForm($formData);
-        $success = 'فرم با موفقیت ایجاد شد';
+
+    if ($formData['form_name'] === '' || $formData['form_title_fa'] === '') {
+        $error = 'نام سیستمی و عنوان فارسی فرم الزامی است.';
     }
-    
-    header('Location: surveys.php');
-    exit;
+
+    if ($error === '') {
+        if ($editMode) {
+            $surveyModel->updateForm($formId, $formData);
+        } else {
+            $formData['created_by'] = $currentAdmin['id'];
+            $surveyModel->createForm($formData);
+        }
+
+        header('Location: surveys.php?saved=1');
+        exit;
+    }
 }
 
 $pageTitle = $editMode ? 'ویرایش فرم نظرسنجی' : 'ایجاد فرم نظرسنجی';
@@ -236,34 +261,41 @@ include __DIR__ . '/includes/header.php';
 <div class="builder-container">
     <div class="form-editor">
         <h2><?php echo $pageTitle; ?></h2>
+        <?php if ($error): ?><div class="alert" style="background:#f8d7da;color:#721c24"><?php echo h($error); ?></div><?php endif; ?>
         
         <form method="POST" id="mainForm">
+            <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>">
             <div class="form-group">
                 <label>نام فرم (انگلیسی)</label>
                 <input type="text" name="form_name" class="form-control" 
-                       value="<?php echo htmlspecialchars($form['form_name'] ?? ''); ?>" required>
+                       value="<?php echo h($form['form_name'] ?? $_POST['form_name'] ?? ''); ?>" required>
             </div>
             
             <div class="form-group">
                 <label>عنوان فرم (فارسی)</label>
                 <input type="text" name="form_title_fa" class="form-control" 
-                       value="<?php echo htmlspecialchars($form['form_title_fa'] ?? ''); ?>" required>
+                       value="<?php echo h($form['form_title_fa'] ?? $_POST['form_title_fa'] ?? ''); ?>" required>
             </div>
             
             <div class="form-group">
                 <label>عنوان فرم (انگلیسی)</label>
                 <input type="text" name="form_title_en" class="form-control" 
-                       value="<?php echo htmlspecialchars($form['form_title_en'] ?? ''); ?>">
+                       value="<?php echo h($form['form_title_en'] ?? $_POST['form_title_en'] ?? ''); ?>">
             </div>
             
             <div class="form-group">
                 <label>توضیحات (فارسی)</label>
-                <textarea name="form_description_fa" class="form-control" rows="3"><?php echo htmlspecialchars($form['form_description_fa'] ?? ''); ?></textarea>
+                <textarea name="form_description_fa" class="form-control" rows="3"><?php echo h($form['form_description_fa'] ?? $_POST['form_description_fa'] ?? ''); ?></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>توضیحات (انگلیسی)</label>
+                <textarea name="form_description_en" class="form-control" rows="3"><?php echo h($form['form_description_en'] ?? $_POST['form_description_en'] ?? ''); ?></textarea>
             </div>
             
             <div class="form-group">
                 <label>
-                    <input type="checkbox" name="is_active" <?php echo ($form['is_active'] ?? 1) ? 'checked' : ''; ?>>
+                    <input type="checkbox" name="is_active" <?php echo ($form['is_active'] ?? (isset($_POST['is_active']) ? 1 : 1)) ? 'checked' : ''; ?>>
                     فرم فعال است
                 </label>
             </div>
@@ -271,7 +303,32 @@ include __DIR__ . '/includes/header.php';
             <div class="form-group">
                 <label>ترتیب نمایش</label>
                 <input type="number" name="display_order" class="form-control" 
-                       value="<?php echo htmlspecialchars($form['display_order'] ?? 0); ?>">
+                       value="<?php echo h($form['display_order'] ?? $_POST['display_order'] ?? 0); ?>">
+            </div>
+
+            <div class="form-group">
+                <label>شروع انتشار</label>
+                <input type="datetime-local" name="start_date" class="form-control" value="<?php echo h(surveyBuilderDateTimeValue($form['start_date'] ?? $_POST['start_date'] ?? '')); ?>">
+            </div>
+
+            <div class="form-group">
+                <label>پایان انتشار</label>
+                <input type="datetime-local" name="end_date" class="form-control" value="<?php echo h(surveyBuilderDateTimeValue($form['end_date'] ?? $_POST['end_date'] ?? '')); ?>">
+            </div>
+
+            <div class="form-group">
+                <label>کانال‌های انتشار</label>
+                <input type="text" name="publishing_channels" class="form-control" value="<?php echo h($form['publishing_channels'] ?? $_POST['publishing_channels'] ?? ''); ?>" placeholder="website, qr, sms">
+            </div>
+
+            <div class="form-group">
+                <label>شناسه شعبه</label>
+                <input type="number" name="branch_id" class="form-control" value="<?php echo h($form['branch_id'] ?? $_POST['branch_id'] ?? ''); ?>">
+            </div>
+
+            <div class="form-group">
+                <label>نسخه فرم</label>
+                <input type="number" min="1" name="survey_version" class="form-control" value="<?php echo h($form['survey_version'] ?? $_POST['survey_version'] ?? 1); ?>">
             </div>
             
             <h3 class="mt-3">فیلدهای فرم</h3>
