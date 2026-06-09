@@ -725,10 +725,11 @@ function adminAcquisitionSourceOptions(): array {
 }
 
 function adminModuleDefinitions(): array {
-    return [
+    $modules = [
         'matches' => [
             'title' => 'مدیریت مسابقات', 'add_label' => 'افزودن مسابقه', 'min_role' => 'manager', 'table' => 'matches',
             'search' => ['title','team_a','team_b','team_one_name','team_two_name','status','campaign_status'], 'filters' => ['status','campaign_status','is_active','active_for_prediction'], 'date_column' => 'match_date',
+            'join' => 'SELECT m.*, COALESCE(m.team_one_name, m.team_a) AS team_one_display, COALESCE(m.team_two_name, m.team_b) AS team_two_display, COALESCE(m.match_start_at, CONCAT(m.match_date, " ", m.kickoff_time)) AS match_start_display, COALESCE(m.prediction_start_at, m.prediction_open_at) AS prediction_start_display, COALESCE(m.prediction_end_at, m.prediction_close_at) AS prediction_end_display, COALESCE(m.final_team_one_score, m.final_score_team_a) AS final_score_one, COALESCE(m.final_team_two_score, m.final_score_team_b) AS final_score_two, (SELECT COUNT(*) FROM predictions p WHERE p.match_id = m.id) AS prediction_count, (SELECT COUNT(*) FROM predictions p WHERE p.match_id = m.id AND COALESCE(p.is_winner, p.is_correct_prediction, 0) = 1) AS winner_count FROM matches m', 'alias' => 'm', 'required_tables' => ['predictions'],
             'fields' => [
                 'title' => ['label'=>'عنوان','type'=>'text'], 'description' => ['label'=>'توضیحات','type'=>'textarea'], 'rules' => ['label'=>'قوانین','type'=>'textarea'], 'participation_conditions' => ['label'=>'شرایط مشارکت','type'=>'textarea'],
                 'team_a' => ['label'=>'تیم اول','type'=>'text','required'=>true], 'team_b' => ['label'=>'تیم دوم','type'=>'text','required'=>true], 'team_one_name' => ['label'=>'نام سازگار تیم اول','type'=>'text'], 'team_two_name' => ['label'=>'نام سازگار تیم دوم','type'=>'text'],
@@ -742,12 +743,13 @@ function adminModuleDefinitions(): array {
                 'campaign_target' => ['label'=>'هدف کمپین','type'=>'text'], 'reward_title' => ['label'=>'عنوان پاداش','type'=>'text'], 'points_reward' => ['label'=>'امتیاز پاداش','type'=>'number'], 'reward_points' => ['label'=>'امتیاز پاداش سازگار','type'=>'number'], 'reward_description' => ['label'=>'شرح پاداش','type'=>'textarea'],
                 'is_active' => ['label'=>'فعال','type'=>'checkbox'], 'active_for_prediction' => ['label'=>'فعال برای پیش‌بینی','type'=>'checkbox'],
             ],
-            'columns' => ['id','title','team_a','team_b','match_date','kickoff_time','prediction_open_at','prediction_close_at','status','is_active','active_for_prediction'],
+            'columns' => ['id','title','team_one_display','team_two_display','prediction_start_display','prediction_end_display','match_start_display','status','final_score_one','final_score_two','prediction_count','winner_count'],
+            'row_links' => [['label' => 'مشاهده پیش‌بینی‌ها', 'url' => 'predictions.php?match_id={id}', 'class' => 'btn-warning']],
         ],
         'predictions' => [
-            'title' => 'پیش‌بینی‌ها', 'add_label' => 'افزودن پیش‌بینی', 'min_role' => 'manager', 'table' => 'predictions',
-            'search' => ['customer_name','customer_last_name','mobile','customer_mobile'], 'filters' => ['match_id','status','is_winner'], 'date_column' => 'submitted_at',
-            'join' => 'SELECT p.*, CONCAT(COALESCE(m.title, ""), " ", COALESCE(m.team_a, m.team_one_name, ""), " - ", COALESCE(m.team_b, m.team_two_name, "")) AS match_title, CONCAT(COALESCE(p.predicted_score_team_a, p.predicted_team_one_score), " - ", COALESCE(p.predicted_score_team_b, p.predicted_team_two_score)) AS predicted_scores FROM predictions p LEFT JOIN matches m ON p.match_id = m.id', 'alias' => 'p', 'required_tables' => ['matches'],
+            'title' => 'پیش‌بینی‌ها', 'add_label' => 'افزودن پیش‌بینی', 'min_role' => 'manager', 'table' => 'predictions', 'allow_create' => false, 'allow_edit' => false,
+            'search' => ['customer_name','customer_last_name','mobile','customer_mobile'], 'filters' => ['match_id','status','is_winner','wants_reservation','customer_exists','crm_match'], 'date_column' => 'submitted_at',
+            'join' => 'SELECT p.*, CONCAT(COALESCE(m.title, ""), " ", COALESCE(m.team_one_name, m.team_a, ""), " - ", COALESCE(m.team_two_name, m.team_b, "")) AS match_title, COALESCE(m.team_one_name, m.team_a) AS prediction_team_one, COALESCE(m.team_two_name, m.team_b) AS prediction_team_two, CONCAT(COALESCE(p.predicted_score_team_a, p.predicted_team_one_score), " - ", COALESCE(p.predicted_score_team_b, p.predicted_team_two_score)) AS predicted_scores, COALESCE(m.final_team_one_score, m.final_score_team_a) AS final_score_one, COALESCE(m.final_team_two_score, m.final_score_team_b) AS final_score_two, COALESCE(p.customer_mobile, p.mobile) AS user_phone, CASE WHEN c.id IS NULL THEN "ناموجود" ELSE "موجود" END AS crm_status FROM predictions p LEFT JOIN matches m ON p.match_id = m.id LEFT JOIN crm_customers c ON c.mobile = COALESCE(p.customer_mobile, p.mobile)', 'alias' => 'p', 'required_tables' => ['matches','crm_customers'],
             'fields' => [
                 'customer_id' => ['label'=>'شناسه مشتری','type'=>'number'], 'customer_name' => ['label'=>'نام','type'=>'text','required'=>true], 'customer_last_name' => ['label'=>'نام خانوادگی','type'=>'text'], 'customer_mobile' => ['label'=>'موبایل مشتری','type'=>'mobile'], 'mobile' => ['label'=>'موبایل','type'=>'mobile'],
                 'match_id' => ['label'=>'مسابقه','type'=>'match','required'=>true], 'team_one_name' => ['label'=>'نام تیم اول','type'=>'text'], 'team_two_name' => ['label'=>'نام تیم دوم','type'=>'text'],
@@ -756,7 +758,7 @@ function adminModuleDefinitions(): array {
                 'crm_follow_up' => ['label'=>'پیگیری CRM','type'=>'checkbox'], 'wants_reservation' => ['label'=>'علاقه‌مند به رزرو','type'=>'checkbox'], 'reserve_table_interest' => ['label'=>'علاقه‌مند به رزرو سازگار','type'=>'checkbox'], 'source' => ['label'=>'منبع','type'=>'text'],
                 'crm_matched' => ['label'=>'تطبیق CRM','type'=>'checkbox'], 'customer_exists' => ['label'=>'مشتری موجود','type'=>'checkbox'], 'attended_match_time' => ['label'=>'حضور زمان مسابقه','type'=>'checkbox'], 'is_correct_prediction' => ['label'=>'پیش‌بینی صحیح','type'=>'checkbox'], 'crm_match' => ['label'=>'تطبیق CRM سازگار','type'=>'checkbox'], 'attended_match' => ['label'=>'حضور مسابقه','type'=>'checkbox'],
             ],
-            'columns' => ['id','customer_name','mobile','match_title','predicted_scores','status','is_winner','points_awarded','submitted_at'],
+            'columns' => ['id','match_title','prediction_team_one','prediction_team_two','predicted_scores','final_score_one','final_score_two','customer_name','customer_last_name','user_phone','wants_reservation','crm_status','is_winner','submitted_at'],
         ],
         'categories' => [
             'title' => 'دسته‌بندی‌های منو', 'add_label' => 'افزودن دسته‌بندی', 'min_role' => 'manager', 'table' => 'menu_categories', 'unique' => 'slug', 'search' => ['name_fa','name_en','slug'], 'filters' => ['visible_qr_menu','visible_website','visible_kiosk','is_active'], 'date_column' => 'created_at',
@@ -767,7 +769,7 @@ function adminModuleDefinitions(): array {
             ],
             'columns' => ['id','name_fa','name_en','slug','parent_id','visible_qr_menu','visible_website','visible_kiosk','sort_order','is_active'],
         ],
-        'menu-items' => [
+        'menu_items' => [
             'title' => 'آیتم‌های منو', 'add_label' => 'افزودن آیتم منو', 'min_role' => 'manager', 'table' => 'menu_items', 'unique' => 'slug', 'search' => ['name_fa','name_en','slug','description_fa'], 'filters' => ['category_id','availability_status','is_available','is_featured','visible_qr_menu','visible_website'], 'date_column' => 'created_at',
             'join' => 'SELECT mi.*, mc.name_fa AS category_title FROM menu_items mi LEFT JOIN menu_categories mc ON mi.category_id = mc.id', 'alias' => 'mi', 'required_tables' => ['menu_categories'],
             'fields' => [
@@ -787,16 +789,16 @@ function adminModuleDefinitions(): array {
             ],
             'columns' => ['id','form_name','form_title_fa','form_title_en','is_active','display_order','start_date','end_date','publishing_channels','branch_id','survey_version'],
         ],
-        'survey-responses' => [
-            'title' => 'پاسخ‌های نظرسنجی', 'add_label' => 'افزودن پاسخ', 'min_role' => 'manager', 'table' => 'survey_responses', 'search' => ['customer_name','customer_phone','customer_email'], 'filters' => ['form_id','branch_id','is_dissatisfied','crm_follow_up'], 'date_column' => 'submitted_at',
+        'survey_responses' => [
+            'title' => 'پاسخ‌های نظرسنجی', 'add_label' => 'افزودن پاسخ', 'min_role' => 'manager', 'table' => 'survey_responses', 'allow_create' => false, 'allow_edit' => false, 'search' => ['customer_name','customer_phone','customer_email'], 'filters' => ['form_id','branch_id','is_dissatisfied','crm_follow_up'], 'date_column' => 'submitted_at',
             'join' => 'SELECT sr.*, df.form_title_fa AS form_title FROM survey_responses sr LEFT JOIN dynamic_forms df ON sr.form_id = df.id', 'alias' => 'sr', 'required_tables' => ['dynamic_forms'],
             'fields' => [
                 'form_id' => ['label'=>'فرم','type'=>'survey_form','required'=>true], 'order_id' => ['label'=>'شناسه سفارش','type'=>'number'], 'user_id' => ['label'=>'شناسه کاربر','type'=>'number'], 'response_data' => ['label'=>'داده پاسخ JSON','type'=>'json','default'=>'{}'],
                 'customer_name' => ['label'=>'نام مشتری','type'=>'text'], 'customer_phone' => ['label'=>'تلفن مشتری','type'=>'mobile'], 'customer_email' => ['label'=>'ایمیل مشتری','type'=>'text'], 'branch_id' => ['label'=>'شعبه','type'=>'number'], 'satisfaction_score' => ['label'=>'امتیاز رضایت','type'=>'number'], 'is_dissatisfied' => ['label'=>'ناراضی','type'=>'checkbox'], 'crm_follow_up' => ['label'=>'پیگیری CRM','type'=>'checkbox'],
             ],
-            'columns' => ['id','form_title','customer_name','customer_phone','customer_email','branch_id','satisfaction_score','is_dissatisfied','crm_follow_up','submitted_at'],
+            'columns' => ['id','form_title','customer_name','customer_phone','customer_email','branch_id','satisfaction_score','response_data','is_dissatisfied','crm_follow_up','submitted_at'],
         ],
-        'crm' => [
+        'crm_customers' => [
             'title' => 'CRM مشتریان', 'add_label' => 'افزودن مشتری', 'min_role' => 'manager', 'table' => 'crm_customers', 'unique' => 'mobile', 'search' => ['full_name','mobile','tags','acquisition_source'], 'filters' => ['acquisition_source','customer_status','attended_match_event'], 'date_column' => 'created_at',
             'fields' => [
                 'user_id' => ['label'=>'شناسه کاربر','type'=>'number'], 'full_name' => ['label'=>'نام کامل','type'=>'text','required'=>true], 'mobile' => ['label'=>'موبایل','type'=>'mobile','required'=>true], 'birth_date' => ['label'=>'تولد','type'=>'date'], 'first_purchase_date' => ['label'=>'اولین خرید','type'=>'date'],
@@ -815,6 +817,14 @@ function adminModuleDefinitions(): array {
             'columns' => ['id','title','subtitle','display_location','match_id','menu_item_id','category_id','display_order','active_status','start_date','end_date'],
         ],
     ];
+
+    // Backward-compatible aliases for legacy URLs/bookmarks. Canonical module
+    // keys use underscores and match the database-facing module registry names.
+    $modules['menu-items'] = $modules['menu_items'];
+    $modules['survey-responses'] = $modules['survey_responses'];
+    $modules['crm'] = $modules['crm_customers'];
+
+    return $modules;
 }
 
 function adminModuleDefinition(string $key): ?array {
@@ -889,8 +899,8 @@ function adminModuleSoftDeleteColumn(string $table): ?array {
     return null;
 }
 
-function adminModuleConfigError(string $table): string {
-    return 'Module form config is empty for ' . $table;
+function adminModuleConfigError(string $moduleKey, string $table = 'unknown'): string {
+    return 'Module form config is empty for ' . $moduleKey . ' (table: ' . $table . '). Fix adminModuleDefinitions()[\'' . $moduleKey . '\'][\'fields\'] (form config) in admin/lib/admin_schema.php.';
 }
 
 function adminModuleOptionalColumns(): array {
@@ -1036,6 +1046,23 @@ function adminModuleNormalizeConfig(array $config): array {
     return $config;
 }
 
+
+
+function adminModuleCanCreate(array $config): bool {
+    return ($config['allow_create'] ?? true) !== false;
+}
+
+function adminModuleCanEdit(array $config): bool {
+    return ($config['allow_edit'] ?? true) !== false;
+}
+
+function adminModuleCanDelete(array $config): bool {
+    return ($config['allow_delete'] ?? true) !== false;
+}
+
+function adminModuleShowsInlineForm(array $config): bool {
+    return adminModuleCanCreate($config) && (($config['inline_form'] ?? true) !== false);
+}
 
 function adminModuleUploadImage(string $field, string $folder, string $current = ''): string {
     if (empty($_FILES[$field]['name']) || ($_FILES[$field]['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
@@ -1457,8 +1484,16 @@ function adminModuleWriteActivity(?array $admin, string $action, array $config, 
 function adminRenderModulePage(string $moduleKey): void {
     $config = adminModuleDefinition($moduleKey);
     if (!$config) {
-        http_response_code(404);
-        exit('Module not found.');
+        $currentAdmin = adminGuard('admin');
+        $pageTitle = 'خطای پیکربندی ماژول';
+        $pagePath = $_SERVER['SCRIPT_NAME'] ?? ($_SERVER['PHP_SELF'] ?? 'unknown');
+        $message = 'Admin module config is missing for ' . $moduleKey . '. Fix adminModuleDefinitions()[\'' . $moduleKey . '\'] in admin/lib/admin_schema.php.';
+        safeAdminLog('Admin module config missing: module=' . $moduleKey . ' table=unknown page=' . $pagePath);
+        http_response_code(500);
+        include __DIR__ . '/../includes/header.php';
+        echo '<div class="alert" style="background:#f8d7da;color:#721c24">آماده‌سازی صفحه انجام نشد: ' . h($message) . '</div>';
+        include __DIR__ . '/../includes/footer.php';
+        return;
     }
 
     $currentAdmin = adminGuard($config['min_role'] ?? 'employee');
@@ -1473,16 +1508,24 @@ function adminRenderModulePage(string $moduleKey): void {
         adminEnsureModuleTables($config);
         $config = adminModuleNormalizeConfig($config);
         if (empty($config['fields'])) {
-            throw new RuntimeException(adminModuleConfigError($config['table'] ?? 'unknown'));
+            throw new RuntimeException(adminModuleConfigError($moduleKey, $config['table'] ?? 'unknown'));
         }
         if (($_GET['export'] ?? '') === 'csv') adminModuleExportCsv($config);
     } catch (Throwable $e) {
         $error = 'آماده‌سازی صفحه انجام نشد: ' . $e->getMessage();
-        safeAdminLog('Admin module bootstrap failed (' . $moduleKey . '): ' . $e->getMessage());
+        safeAdminLog('Admin module bootstrap failed: module=' . $moduleKey . ' table=' . ($config['table'] ?? 'unknown') . ' page=' . ($_SERVER['SCRIPT_NAME'] ?? ($_SERVER['PHP_SELF'] ?? 'unknown')) . ' error=' . $e->getMessage());
         $action = 'list';
     }
 
     if (!in_array($action, ['list', 'add', 'edit'], true)) $action = 'list';
+    if ($action === 'add' && !adminModuleCanCreate($config)) {
+        $error = 'این صفحه گزارشی است و فرم افزودن ندارد.';
+        $action = 'list';
+    }
+    if ($action === 'edit' && !adminModuleCanEdit($config)) {
+        $error = 'این صفحه گزارشی است و فرم ویرایش ندارد.';
+        $action = 'list';
+    }
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
         $crudAction = $_POST['crud_action'] ?? '';
@@ -1490,11 +1533,14 @@ function adminRenderModulePage(string $moduleKey): void {
         try {
             requireValidCsrf();
             if ($crudAction === 'delete') {
+                if (!adminModuleCanDelete($config)) throw new RuntimeException('حذف برای این صفحه مجاز نیست.');
                 $deleteMode = adminModuleDelete($config, $postedId);
                 adminModuleWriteActivity($currentAdmin, $deleteMode === 'deactivated' ? 'deactivate' : 'delete', $config, $postedId);
                 redirectTo(basename($_SERVER['PHP_SELF']) . ($deleteMode === 'deactivated' ? '?deactivated=1' : '?deleted=1'));
             }
             if ($crudAction === 'save') {
+                if ($postedId > 0 && !adminModuleCanEdit($config)) throw new RuntimeException('ویرایش برای این صفحه مجاز نیست.');
+                if ($postedId <= 0 && !adminModuleCanCreate($config)) throw new RuntimeException('افزودن برای این صفحه مجاز نیست.');
                 $current = $postedId ? (adminModuleFetchRow($config, $postedId) ?: []) : [];
                 $data = adminModuleCollectData($config, $current, $currentAdmin);
                 $data = adminModulePrepareData($config, $data, $current);
@@ -1544,7 +1590,7 @@ function adminRenderModulePage(string $moduleKey): void {
     <?php if ($message): ?><div class="alert alert-info"><?php echo h($message); ?></div><?php endif; ?>
     <?php if ($error): ?><div class="alert" style="background:#f8d7da;color:#721c24"><?php echo h($error); ?></div><?php endif; ?>
 
-    <?php if (in_array($action, ['add', 'edit'], true)): ?>
+    <?php if (in_array($action, ['add', 'edit'], true) && (($action === 'add' && adminModuleCanCreate($config)) || ($action === 'edit' && adminModuleCanEdit($config)))): ?>
         <form method="post" enctype="multipart/form-data">
             <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>">
             <input type="hidden" name="crud_action" value="save">
@@ -1561,10 +1607,26 @@ function adminRenderModulePage(string $moduleKey): void {
             <a class="btn" href="<?php echo h(basename($_SERVER['PHP_SELF'])); ?>">بازگشت</a>
         </form>
     <?php else: ?>
+        <?php if (!$error && !empty($config['fields']) && adminModuleShowsInlineForm($config)): ?>
+            <form method="post" enctype="multipart/form-data" class="admin-module-inline-form">
+                <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>">
+                <input type="hidden" name="crud_action" value="save">
+                <input type="hidden" name="id" value="0">
+                <div class="card">
+                    <div class="card-header"><h2><?php echo h($config['add_label'] ?? ('افزودن ' . $config['title'])); ?></h2></div>
+                    <div class="card-body">
+                        <?php foreach ($config['fields'] as $field => $meta): ?>
+                            <?php adminModuleRenderField($field, $meta, $meta['default'] ?? null); ?>
+                        <?php endforeach; ?>
+                        <button class="btn btn-success" type="submit">ذخیره</button>
+                    </div>
+                </div>
+            </form>
+        <?php endif; ?>
         <div class="card">
             <div class="card-header">
                 <h2><?php echo h($config['title']); ?></h2>
-                <div><a class="btn btn-primary" href="?action=add"><?php echo h($config['add_label'] ?? 'افزودن'); ?></a> <a class="btn" href="?<?php echo h(http_build_query(array_merge($_GET, ['export' => 'csv']))); ?>">خروجی CSV</a></div>
+                <div><?php if (adminModuleCanCreate($config) && !adminModuleShowsInlineForm($config)): ?><a class="btn btn-primary" href="?action=add"><?php echo h($config['add_label'] ?? 'افزودن'); ?></a> <?php endif; ?><a class="btn" href="?<?php echo h(http_build_query(array_merge($_GET, ['export' => 'csv']))); ?>">خروجی CSV</a></div>
             </div>
             <div class="card-body">
                 <form class="admin-filter" method="get">
@@ -1584,23 +1646,31 @@ function adminRenderModulePage(string $moduleKey): void {
                 </form>
                 <div class="table-responsive">
                     <table class="table table-striped">
-                        <thead><tr><?php foreach ($config['columns'] as $column): ?><th><a href="?<?php echo h(http_build_query(array_merge($_GET, ['sort' => $column, 'order' => (($_GET['sort'] ?? '') === $column && ($_GET['order'] ?? 'desc') === 'desc') ? 'asc' : 'desc']))); ?>"><?php echo h(adminModuleLabel($config, $column)); ?></a></th><?php endforeach; ?><th>عملیات</th></tr></thead>
+                        <thead><tr><?php foreach ($config['columns'] as $column): ?><th><a href="?<?php echo h(http_build_query(array_merge($_GET, ['sort' => $column, 'order' => (($_GET['sort'] ?? '') === $column && ($_GET['order'] ?? 'desc') === 'desc') ? 'asc' : 'desc']))); ?>"><?php echo h(adminModuleLabel($config, $column)); ?></a></th><?php endforeach; ?><?php if (adminModuleCanEdit($config) || adminModuleCanDelete($config) || !empty($config['row_links'])): ?><th>عملیات</th><?php endif; ?></tr></thead>
                         <tbody>
                         <?php foreach ($data['rows'] as $row): ?>
                             <tr>
                                 <?php foreach ($config['columns'] as $column): ?><td><?php echo h(adminModuleFormatValue($column, $row[$column] ?? '')); ?></td><?php endforeach; ?>
-                                <td>
-                                    <a class="btn btn-sm btn-info" href="?action=edit&id=<?php echo h($row['id']); ?>">ویرایش</a>
-                                    <form method="post" style="display:inline">
-                                        <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>">
-                                        <input type="hidden" name="crud_action" value="delete">
-                                        <input type="hidden" name="id" value="<?php echo h($row['id']); ?>">
-                                        <button class="btn btn-sm btn-danger" type="submit" onclick="return confirm('آیا مطمئنید؟')">حذف</button>
-                                    </form>
-                                </td>
+                                <?php if (adminModuleCanEdit($config) || adminModuleCanDelete($config) || !empty($config['row_links'])): ?>
+                                    <td>
+                                        <?php foreach (($config['row_links'] ?? []) as $rowLink): ?>
+                                            <?php $rowLinkUrl = str_replace('{id}', rawurlencode((string)($row['id'] ?? '')), (string)($rowLink['url'] ?? '#')); ?>
+                                            <a class="btn btn-sm <?php echo h($rowLink['class'] ?? 'btn-primary'); ?>" href="<?php echo h($rowLinkUrl); ?>"><?php echo h($rowLink['label'] ?? 'مشاهده'); ?></a>
+                                        <?php endforeach; ?>
+                                        <?php if (adminModuleCanEdit($config)): ?><a class="btn btn-sm btn-info" href="?action=edit&id=<?php echo h($row['id']); ?>">ویرایش</a><?php endif; ?>
+                                        <?php if (adminModuleCanDelete($config)): ?>
+                                            <form method="post" style="display:inline">
+                                                <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>">
+                                                <input type="hidden" name="crud_action" value="delete">
+                                                <input type="hidden" name="id" value="<?php echo h($row['id']); ?>">
+                                                <button class="btn btn-sm btn-danger" type="submit" onclick="return confirm('آیا مطمئنید؟')">حذف</button>
+                                            </form>
+                                        <?php endif; ?>
+                                    </td>
+                                <?php endif; ?>
                             </tr>
                         <?php endforeach; ?>
-                        <?php if (!$data['rows']): ?><tr><td colspan="<?php echo count($config['columns']) + 1; ?>" class="text-center text-muted">رکوردی یافت نشد.</td></tr><?php endif; ?>
+                        <?php if (!$data['rows']): ?><tr><td colspan="<?php echo count($config['columns']) + ((adminModuleCanEdit($config) || adminModuleCanDelete($config) || !empty($config['row_links'])) ? 1 : 0); ?>" class="text-center text-muted">رکوردی یافت نشد.</td></tr><?php endif; ?>
                         </tbody>
                     </table>
                 </div>

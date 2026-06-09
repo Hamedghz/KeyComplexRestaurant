@@ -52,7 +52,7 @@ class Prediction extends Model {
         $now = date('Y-m-d H:i:s');
         $predictionStart = $match['prediction_start_at'] ?? $match['prediction_open_at'] ?? null;
         $predictionEnd = $match['prediction_end_at'] ?? $match['prediction_close_at'] ?? null;
-        if (empty($match['is_active']) || empty($match['active_for_prediction']) || in_array((string)($match['status'] ?? 'active'), ['inactive', 'archived', 'cancelled'], true) || $predictionStart > $now || $predictionEnd < $now) {
+        if (empty($match['is_active']) || empty($match['active_for_prediction']) || (string)($match['status'] ?? 'active') !== 'active' || $predictionStart > $now || $predictionEnd < $now) {
             throw new RuntimeException('مهلت ثبت پیش‌بینی برای این مسابقه فعال نیست.');
         }
 

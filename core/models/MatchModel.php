@@ -23,7 +23,7 @@ class MatchModel extends Model {
                 FROM matches
                 WHERE is_active = 1
                   AND active_for_prediction = 1
-                  AND status NOT IN ('inactive', 'archived', 'cancelled')
+                  AND status = 'active'
                   AND prediction_open_at <= NOW()
                   AND prediction_close_at >= NOW()
                 ORDER BY match_date ASC, kickoff_time ASC
@@ -43,7 +43,7 @@ class MatchModel extends Model {
             FROM matches
             WHERE COALESCE(is_active, 1) = 1
               AND COALESCE(active_for_prediction, 1) = 1
-              AND COALESCE(status, 'active') NOT IN ('inactive', 'archived', 'cancelled')
+              AND COALESCE(status, 'active') = 'active'
               AND COALESCE(prediction_start_at, prediction_open_at) <= NOW()
               AND COALESCE(prediction_end_at, prediction_close_at) >= NOW()
             ORDER BY COALESCE(match_start_at, CONCAT(match_date, ' ', kickoff_time)) ASC, id ASC
