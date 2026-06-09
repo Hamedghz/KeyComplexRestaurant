@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/lib/admin_schema.php';
 $currentAdmin = adminGuard('manager');
+ensureAdminSchema();
 $db = adminDb();
 $pageTitle = 'مدیریت لیدهای استخر';
 $error = '';
@@ -12,14 +13,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     
     if ($_POST['action'] === 'update_status') {
         $id = (int)$_POST['id'];
-        $status = $_POST['status'];
+        $status = (string)($_POST['status'] ?? '');
+        $allowedStatuses = ['new', 'contacted', 'converted', 'rejected'];
         
         try {
+            if (!in_array($status, $allowedStatuses, true)) {
+                throw new RuntimeException('وضعیت انتخاب‌شده معتبر نیست.');
+            }
             $stmt = $db->prepare("UPDATE pool_leads SET status = ? WHERE id = ?");
             $stmt->execute([$status, $id]);
             $success = 'وضعیت با موفقیت به‌روزرسانی شد.';
         } catch (Throwable $e) {
-            $error = 'خطا در به‌روزرسانی: ' . $e->getMessage();
+            safeAdminLog('Pool lead status update failed: ' . $e->getMessage());
+            $error = 'به‌روزرسانی وضعیت انجام نشد. جزئیات خطا در لاگ سیستم ثبت شد.';
         }
     } elseif ($_POST['action'] === 'delete') {
         $id = (int)$_POST['id'];
@@ -29,7 +35,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $stmt->execute([$id]);
             $success = 'لید با موفقیت حذف شد.';
         } catch (Throwable $e) {
-            $error = 'خطا در حذف: ' . $e->getMessage();
+            safeAdminLog('Pool lead delete failed: ' . $e->getMessage());
+            $error = 'حذف لید انجام نشد. جزئیات خطا در لاگ سیستم ثبت شد.';
         }
     } elseif ($_POST['action'] === 'add_note') {
         $id = (int)$_POST['id'];
@@ -40,7 +47,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $stmt->execute([$notes, $id]);
             $success = 'یادداشت با موفقیت ذخیره شد.';
         } catch (Throwable $e) {
-            $error = 'خطا در ذخیره یادداشت: ' . $e->getMessage();
+            safeAdminLog('Pool lead note update failed: ' . $e->getMessage());
+            $error = 'ذخیره یادداشت انجام نشد. جزئیات خطا در لاگ سیستم ثبت شد.';
         }
     }
 }
@@ -265,7 +273,7 @@ include __DIR__ . '/includes/header.php';
                             <td class="notes-cell" title="<?php echo h($lead['notes']); ?>"><?php echo h($lead['notes'] ?: '-'); ?></td>
                             <td><?php echo h(date('Y-m-d H:i', strtotime($lead['created_at']))); ?></td>
                             <td class="action-buttons">
-                                <button class="btn btn-sm btn-info" onclick="editNote(<?php echo h($lead['id']); ?>, '<?php echo h(addslashes($lead['notes'] ?? '')); ?>')">📝</button>
+                                <button class="btn btn-sm btn-info" onclick="editNote(<?php echo h($lead['id']); ?>, <?php echo h(json_encode((string)($lead['notes'] ?? ''), JSON_UNESCAPED_UNICODE)); ?>)">📝</button>
                                 <form method="post" style="display: inline;" onsubmit="return confirm('آیا مطمئن هستید؟');">
                                     <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>">
                                     <input type="hidden" name="action" value="delete">

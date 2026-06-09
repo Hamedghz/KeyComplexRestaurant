@@ -861,6 +861,38 @@ function adminModuleExistingColumnNames(string $table): array {
     return array_map(static fn($row) => $row['Field'], schemaColumns($table));
 }
 
+
+function adminModuleColumnMeta(string $table, string $column): ?array {
+    foreach (schemaColumns($table) as $row) {
+        if (($row['Field'] ?? '') === $column) {
+            return $row;
+        }
+    }
+    return null;
+}
+
+function adminModuleSoftDeleteColumn(string $table): ?array {
+    foreach (['is_active', 'active', 'active_status', 'is_available'] as $column) {
+        if (adminColumnExists($table, $column)) {
+            return [$column, 0];
+        }
+    }
+
+    $status = adminModuleColumnMeta($table, 'status');
+    $type = strtolower((string)($status['Type'] ?? ''));
+    if ($type !== '') {
+        if (preg_match("/'inactive'/", $type)) return ['status', 'inactive'];
+        if (preg_match("/'archived'/", $type)) return ['status', 'archived'];
+        if (preg_match("/'deleted'/", $type)) return ['status', 'deleted'];
+    }
+
+    return null;
+}
+
+function adminModuleConfigError(string $table): string {
+    return 'Module form config is empty for ' . $table;
+}
+
 function adminModuleOptionalColumns(): array {
     return [
         'matches' => [
@@ -1045,10 +1077,14 @@ function adminModuleCollectData(array $config, array $current = [], ?array $admi
         if ($type === 'date') $value = parsePersianDate($value, false);
         if ($type === 'datetime') $value = parsePersianDate($value, true);
         if ($type === 'json' && $value !== null && trim((string)$value) !== '') {
-            json_decode((string)$value, true);
+            $decodedJson = json_decode((string)$value, true);
             if (json_last_error() !== JSON_ERROR_NONE) {
                 throw new RuntimeException('فیلد «' . ($meta['label'] ?? $name) . '» باید JSON معتبر باشد.');
             }
+            $value = json_encode($decodedJson, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
+        if ($type === 'number' && $value !== null && $value !== '' && !is_numeric($value)) {
+            throw new RuntimeException('فیلد «' . ($meta['label'] ?? $name) . '» باید عددی باشد.');
         }
         if ($type === 'number' && $value === '') $value = null;
         $data[$name] = $value === '' ? null : $value;
@@ -1201,8 +1237,17 @@ function adminModuleSave(array $config, array $data, int $id = 0): int {
     return (int)$db->lastInsertId();
 }
 
-function adminModuleDelete(array $config, int $id): void {
-    adminDb()->prepare('DELETE FROM `' . str_replace('`', '``', $config['table']) . '` WHERE id = ?')->execute([$id]);
+function adminModuleDelete(array $config, int $id): string {
+    $table = $config['table'];
+    $softDelete = adminModuleSoftDeleteColumn($table);
+    if ($softDelete !== null) {
+        [$column, $value] = $softDelete;
+        adminDb()->prepare('UPDATE `' . str_replace('`', '``', $table) . '` SET `' . str_replace('`', '``', $column) . '` = :value WHERE id = :id')->execute(['value' => $value, 'id' => $id]);
+        return 'deactivated';
+    }
+
+    adminDb()->prepare('DELETE FROM `' . str_replace('`', '``', $table) . '` WHERE id = ?')->execute([$id]);
+    return 'deleted';
 }
 
 function adminModuleFetchRow(array $config, int $id): ?array {
@@ -1229,8 +1274,18 @@ function adminModuleRows(array $config, int $perPage = 20): array {
     }
     $dateColumn = $config['date_column'] ?? null;
     if ($dateColumn && adminColumnExists($config['table'], $dateColumn)) {
-        if (!empty($_GET['date_from'])) { $where[] = $prefix . '`' . $dateColumn . '` >= :date_from'; $params['date_from'] = parsePersianDate($_GET['date_from'], false) . ' 00:00:00'; }
-        if (!empty($_GET['date_to'])) { $where[] = $prefix . '`' . $dateColumn . '` <= :date_to'; $params['date_to'] = parsePersianDate($_GET['date_to'], false) . ' 23:59:59'; }
+        $dateMeta = adminModuleColumnMeta($config['table'], $dateColumn);
+        $isDateOnly = strtolower((string)($dateMeta['Type'] ?? '')) === 'date';
+        if (!empty($_GET['date_from'])) {
+            $where[] = $prefix . '`' . str_replace('`', '``', $dateColumn) . '` >= :date_from';
+            $parsedFrom = parsePersianDate($_GET['date_from'], false);
+            $params['date_from'] = $isDateOnly ? $parsedFrom : $parsedFrom . ' 00:00:00';
+        }
+        if (!empty($_GET['date_to'])) {
+            $where[] = $prefix . '`' . str_replace('`', '``', $dateColumn) . '` <= :date_to';
+            $parsedTo = parsePersianDate($_GET['date_to'], false);
+            $params['date_to'] = $isDateOnly ? $parsedTo : $parsedTo . ' 23:59:59';
+        }
     }
     $whereSql = implode(' AND ', $where);
     $sort = (string)($_GET['sort'] ?? '');
@@ -1418,7 +1473,7 @@ function adminRenderModulePage(string $moduleKey): void {
         adminEnsureModuleTables($config);
         $config = adminModuleNormalizeConfig($config);
         if (empty($config['fields'])) {
-            throw new RuntimeException('پیکربندی فرم برای جدول «' . ($config['table'] ?? '') . '» خالی است یا با ستون‌های دیتابیس هم‌خوانی ندارد.');
+            throw new RuntimeException(adminModuleConfigError($config['table'] ?? 'unknown'));
         }
         if (($_GET['export'] ?? '') === 'csv') adminModuleExportCsv($config);
     } catch (Throwable $e) {
@@ -1435,9 +1490,9 @@ function adminRenderModulePage(string $moduleKey): void {
         try {
             requireValidCsrf();
             if ($crudAction === 'delete') {
-                adminModuleDelete($config, $postedId);
-                adminModuleWriteActivity($currentAdmin, 'delete', $config, $postedId);
-                redirectTo(basename($_SERVER['PHP_SELF']) . '?deleted=1');
+                $deleteMode = adminModuleDelete($config, $postedId);
+                adminModuleWriteActivity($currentAdmin, $deleteMode === 'deactivated' ? 'deactivate' : 'delete', $config, $postedId);
+                redirectTo(basename($_SERVER['PHP_SELF']) . ($deleteMode === 'deactivated' ? '?deactivated=1' : '?deleted=1'));
             }
             if ($crudAction === 'save') {
                 $current = $postedId ? (adminModuleFetchRow($config, $postedId) ?: []) : [];
@@ -1485,6 +1540,7 @@ function adminRenderModulePage(string $moduleKey): void {
     ?>
     <?php if (!empty($_GET['saved'])): ?><div class="alert alert-info">تغییرات ذخیره شد.</div><?php endif; ?>
     <?php if (!empty($_GET['deleted'])): ?><div class="alert alert-info">رکورد حذف شد.</div><?php endif; ?>
+    <?php if (!empty($_GET['deactivated'])): ?><div class="alert alert-info">رکورد غیرفعال شد.</div><?php endif; ?>
     <?php if ($message): ?><div class="alert alert-info"><?php echo h($message); ?></div><?php endif; ?>
     <?php if ($error): ?><div class="alert" style="background:#f8d7da;color:#721c24"><?php echo h($error); ?></div><?php endif; ?>
 
@@ -1550,8 +1606,8 @@ function adminRenderModulePage(string $moduleKey): void {
                 </div>
                 <?php $pages = max(1, (int)ceil($data['total'] / $data['perPage'])); ?>
                 <p class="text-muted">صفحه <?php echo h($data['page']); ?> از <?php echo h($pages); ?> (کل: <?php echo h($data['total']); ?> رکورد)</p>
-                <?php if ($data['page'] > 1): ?><a class="btn" href="?page=1">اول</a> <a class="btn" href="?page=<?php echo h($data['page'] - 1); ?>">قبلی</a><?php endif; ?>
-                <?php if ($data['page'] < $pages): ?><a class="btn" href="?page=<?php echo h($data['page'] + 1); ?>">بعدی</a> <a class="btn" href="?page=<?php echo h($pages); ?>">آخر</a><?php endif; ?>
+                <?php if ($data['page'] > 1): ?><a class="btn" href="?<?php echo h(http_build_query(array_merge($_GET, ['page' => 1]))); ?>">اول</a> <a class="btn" href="?<?php echo h(http_build_query(array_merge($_GET, ['page' => $data['page'] - 1]))); ?>">قبلی</a><?php endif; ?>
+                <?php if ($data['page'] < $pages): ?><a class="btn" href="?<?php echo h(http_build_query(array_merge($_GET, ['page' => $data['page'] + 1]))); ?>">بعدی</a> <a class="btn" href="?<?php echo h(http_build_query(array_merge($_GET, ['page' => $pages]))); ?>">آخر</a><?php endif; ?>
             </div>
         </div>
     <?php endif; ?>

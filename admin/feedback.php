@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/lib/admin_schema.php';
 $currentAdmin = adminGuard('manager');
+ensureAdminSchema();
 $db = adminDb();
 $pageTitle = 'بازخوردها';
 $error = '';
@@ -18,7 +19,7 @@ try {
         foreach (loadFeedbackRows($db) as $r) echo '<tr><td>'.h($r['source']).'</td><td>'.h($r['customer_name']).'</td><td>'.h($r['customer_phone']).'</td><td>'.h($r['customer_email']).'</td><td>'.h($r['rating']).'</td><td>'.h($r['review_text']).'</td><td>'.h($r['created_at']).'</td></tr>';
         echo '</table></body></html>'; exit;
     }
-} catch (Throwable $e) { $error = $e->getMessage(); }
+} catch (Throwable $e) { safeAdminLog('Feedback admin failed: ' . $e->getMessage()); $error = 'عملیات بازخورد انجام نشد. جزئیات خطا در لاگ سیستم ثبت شد.'; }
 function loadFeedbackRows(PDO $db): array {
     $q = trim((string)($_GET['q'] ?? '')); $source = $_GET['source'] ?? ''; $rows = [];
     if ($source === '' || $source === 'feedback') {
