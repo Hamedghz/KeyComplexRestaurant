@@ -14,8 +14,8 @@ try {
         $action = $_POST['action'] ?? 'save';
         $id = (int)($_POST['id'] ?? 0);
         if ($action === 'delete') {
-            $db->prepare('DELETE FROM social_links WHERE id = ?')->execute([$id]);
-            redirectTo('social-links.php?deleted=1');
+            $db->prepare('UPDATE social_links SET active = 0 WHERE id = ?')->execute([$id]);
+            redirectTo('social-links.php?deactivated=1');
         }
         $data = [
             'title' => trim((string)$_POST['title']),
@@ -37,6 +37,16 @@ try {
     }
 } catch (Throwable $e) {
     $error = $e->getMessage();
+    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && (($_POST['action'] ?? 'save') !== 'delete')) {
+        $edit = [
+            'id' => (int)($_POST['id'] ?? 0),
+            'title' => trim((string)($_POST['title'] ?? '')),
+            'icon' => trim((string)($_POST['icon'] ?? '')),
+            'url' => trim((string)($_POST['url'] ?? '')),
+            'sort_order' => (int)($_POST['sort_order'] ?? 0),
+            'active' => isset($_POST['active']) ? 1 : 0,
+        ];
+    }
 }
 
 if (($_GET['action'] ?? '') === 'edit') {
@@ -47,6 +57,7 @@ if (($_GET['action'] ?? '') === 'edit') {
 $links = $db->query('SELECT * FROM social_links ORDER BY sort_order ASC, id ASC')->fetchAll();
 include __DIR__ . '/includes/header.php';
 ?>
+<?php if (!empty($_GET['deactivated'])): ?><div class="alert alert-info">لینک اجتماعی غیرفعال شد.</div><?php endif; ?>
 <?php if ($error): ?><div class="alert" style="background:#f8d7da;color:#721c24"><?php echo h($error); ?></div><?php endif; ?>
 <div class="card"><div class="card-header"><h2><?php echo $edit ? 'ویرایش شبکه' : 'افزودن شبکه اجتماعی'; ?></h2></div><div class="card-body">
 <form method="post" class="admin-filter">

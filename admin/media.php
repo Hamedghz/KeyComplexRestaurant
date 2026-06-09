@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/lib/admin_schema.php';
 $currentAdmin = adminGuard('manager');
+ensureAdminSchema();
 $db = adminDb();
 $pageTitle = 'کتابخانه رسانه';
 $error = '';
@@ -31,5 +32,6 @@ include __DIR__ . '/includes/header.php';
 <div class="card"><div class="card-header"><h2>آپلود رسانه</h2></div><div class="card-body"><form method="post" enctype="multipart/form-data" class="admin-filter"><input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>"><input class="form-control" type="file" name="media_file" accept="image/*" required><input class="form-control" name="alt_text_fa" placeholder="Alt فارسی"><input class="form-control" name="alt_text_en" placeholder="Alt English"><select class="form-control" name="category"><?php foreach($categories as $c): ?><option><?php echo h($c); ?></option><?php endforeach; ?></select><button class="btn btn-success">Upload + Compress</button></form><p class="text-muted">در صورت وجود پشتیبانی GD/Imagick در سرور، فشرده‌سازی می‌تواند به pipeline آپلود متصل شود؛ مسیر و metadata در جدول media ذخیره می‌شود.</p></div></div>
 <div class="card"><div class="card-header"><h2>رسانه‌ها</h2></div><div class="card-body"><form class="admin-filter"><input class="form-control" name="q" value="<?php echo h($q); ?>" placeholder="جستجو"><button class="btn btn-primary">جستجو</button></form><div class="menu-grid">
 <?php foreach($items as $m): ?><div class="card"><div class="card-body"><img src="../<?php echo h($m['file_path']); ?>" alt="<?php echo h($m['alt_text_fa']); ?>" style="width:100%;max-height:180px;object-fit:cover;border-radius:8px"><p><?php echo h($m['original_name']); ?></p><small><?php echo h($m['category'].' / '.$m['file_size'].' bytes'); ?></small><form method="post"><input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>"><input type="hidden" name="id" value="<?php echo h($m['id']); ?>"><input class="form-control" name="alt_text_fa" value="<?php echo h($m['alt_text_fa']); ?>"><input class="form-control" name="alt_text_en" value="<?php echo h($m['alt_text_en']); ?>"><select class="form-control" name="category"><?php foreach($categories as $c): ?><option <?php echo $m['category']===$c?'selected':''; ?>><?php echo h($c); ?></option><?php endforeach; ?></select><button class="btn btn-sm btn-primary" name="media_action" value="edit">ذخیره</button><button class="btn btn-sm btn-danger" name="media_action" value="delete" onclick="return confirm('حذف شود؟')">حذف</button></form></div></div><?php endforeach; ?>
+<?php if (!$items): ?><p class="text-muted">رسانه‌ای یافت نشد.</p><?php endif; ?>
 </div></div></div>
 <?php include __DIR__ . '/includes/footer.php'; ?>
