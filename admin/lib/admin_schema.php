@@ -726,118 +726,93 @@ function adminAcquisitionSourceOptions(): array {
 
 function adminModuleDefinitions(): array {
     return [
-        'crm' => [
-            'title' => 'CRM مشتریان', 'min_role' => 'manager', 'table' => 'crm_customers', 'unique' => 'mobile',
-            'search' => ['full_name','mobile','tags','acquisition_source'], 'filters' => ['acquisition_source','customer_status','attended_match_event'], 'date_column' => 'created_at',
+        'matches' => [
+            'title' => 'مدیریت مسابقات', 'add_label' => 'افزودن مسابقه', 'min_role' => 'manager', 'table' => 'matches',
+            'search' => ['title','team_a','team_b','team_one_name','team_two_name','status','campaign_status'], 'filters' => ['status','campaign_status','is_active','active_for_prediction'], 'date_column' => 'match_date',
             'fields' => [
-                'full_name' => ['label'=>'نام کامل','type'=>'text','required'=>true],
-                'mobile' => ['label'=>'موبایل','type'=>'mobile','required'=>true],
-                'birth_date' => ['label'=>'تولد','type'=>'date'],
-                'first_purchase_date' => ['label'=>'اولین خرید','type'=>'date'],
-                'total_orders' => ['label'=>'تعداد سفارش','type'=>'number'],
-                'total_purchase_volume' => ['label'=>'حجم خرید','type'=>'number'],
-                'reminder_date' => ['label'=>'یادآوری','type'=>'date'],
-                'acquisition_source' => ['label'=>'منبع جذب','type'=>'select','options'=>adminAcquisitionSourceOptions()],
-                'notes' => ['label'=>'یادداشت','type'=>'textarea'],
-                'surveys_completed_count' => ['label'=>'تعداد نظرسنجی','type'=>'number'],
-                'last_visit_date' => ['label'=>'آخرین مراجعه','type'=>'date'],
-                'tags' => ['label'=>'برچسب‌ها','type'=>'text'],
-                'customer_status' => ['label'=>'وضعیت مشتری','type'=>'select','options'=>['new_customer'=>'مشتری جدید','loyal_customer'=>'وفادار','vip'=>'VIP','dissatisfied_customer'=>'ناراضی','churn_risk'=>'ریسک ریزش']],
-                'points_balance' => ['label'=>'امتیازها','type'=>'number'],
-                'rewards_notes' => ['label'=>'یادداشت پاداش‌ها','type'=>'textarea'],
-                'follow_up_notes' => ['label'=>'یادداشت پیگیری اپراتور','type'=>'textarea'],
-                'attended_match_event' => ['label'=>'حضور در رویداد مسابقه','type'=>'checkbox'],
+                'title' => ['label'=>'عنوان','type'=>'text'], 'description' => ['label'=>'توضیحات','type'=>'textarea'], 'rules' => ['label'=>'قوانین','type'=>'textarea'], 'participation_conditions' => ['label'=>'شرایط مشارکت','type'=>'textarea'],
+                'team_a' => ['label'=>'تیم اول','type'=>'text','required'=>true], 'team_b' => ['label'=>'تیم دوم','type'=>'text','required'=>true], 'team_one_name' => ['label'=>'نام سازگار تیم اول','type'=>'text'], 'team_two_name' => ['label'=>'نام سازگار تیم دوم','type'=>'text'],
+                'team_one_logo' => ['label'=>'لوگوی تیم اول','type'=>'image','folder'=>'matches'], 'team_two_logo' => ['label'=>'لوگوی تیم دوم','type'=>'image','folder'=>'matches'],
+                'match_date' => ['label'=>'تاریخ مسابقه','type'=>'date','required'=>true], 'kickoff_time' => ['label'=>'ساعت شروع','type'=>'time','required'=>true], 'broadcast_time' => ['label'=>'ساعت پخش','type'=>'time'],
+                'prediction_open_at' => ['label'=>'شروع پیش‌بینی','type'=>'datetime','required'=>true], 'prediction_close_at' => ['label'=>'پایان پیش‌بینی','type'=>'datetime','required'=>true], 'prediction_start_at' => ['label'=>'شروع پیش‌بینی سازگار','type'=>'datetime'], 'prediction_end_at' => ['label'=>'پایان پیش‌بینی سازگار','type'=>'datetime'],
+                'match_start_at' => ['label'=>'شروع مسابقه سازگار','type'=>'datetime'], 'match_end_at' => ['label'=>'پایان مسابقه','type'=>'datetime'], 'start_date' => ['label'=>'شروع کمپین','type'=>'datetime'], 'end_date' => ['label'=>'پایان کمپین','type'=>'datetime'],
+                'status' => ['label'=>'وضعیت','type'=>'select','options'=>['active'=>'فعال','inactive'=>'غیرفعال','archived'=>'آرشیو','scheduled'=>'برنامه‌ریزی شده','live'=>'زنده','finished'=>'تمام شده','cancelled'=>'لغو شده']],
+                'campaign_status' => ['label'=>'وضعیت کمپین','type'=>'select','options'=>['active'=>'فعال','inactive'=>'غیرفعال','archived'=>'آرشیو']],
+                'final_score_team_a' => ['label'=>'نتیجه تیم اول','type'=>'number'], 'final_score_team_b' => ['label'=>'نتیجه تیم دوم','type'=>'number'], 'final_team_one_score' => ['label'=>'نتیجه سازگار تیم اول','type'=>'number'], 'final_team_two_score' => ['label'=>'نتیجه سازگار تیم دوم','type'=>'number'], 'final_result_status' => ['label'=>'وضعیت نتیجه','type'=>'text'], 'match_finished' => ['label'=>'مسابقه تمام شده','type'=>'checkbox'],
+                'campaign_target' => ['label'=>'هدف کمپین','type'=>'text'], 'reward_title' => ['label'=>'عنوان پاداش','type'=>'text'], 'points_reward' => ['label'=>'امتیاز پاداش','type'=>'number'], 'reward_points' => ['label'=>'امتیاز پاداش سازگار','type'=>'number'], 'reward_description' => ['label'=>'شرح پاداش','type'=>'textarea'],
+                'is_active' => ['label'=>'فعال','type'=>'checkbox'], 'active_for_prediction' => ['label'=>'فعال برای پیش‌بینی','type'=>'checkbox'],
+            ],
+            'columns' => ['id','title','team_a','team_b','match_date','kickoff_time','prediction_open_at','prediction_close_at','status','is_active','active_for_prediction'],
+        ],
+        'predictions' => [
+            'title' => 'پیش‌بینی‌ها', 'add_label' => 'افزودن پیش‌بینی', 'min_role' => 'manager', 'table' => 'predictions',
+            'search' => ['customer_name','customer_last_name','mobile','customer_mobile'], 'filters' => ['match_id','status','is_winner'], 'date_column' => 'submitted_at',
+            'join' => 'SELECT p.*, CONCAT(COALESCE(m.title, ""), " ", COALESCE(m.team_a, m.team_one_name, ""), " - ", COALESCE(m.team_b, m.team_two_name, "")) AS match_title, CONCAT(COALESCE(p.predicted_score_team_a, p.predicted_team_one_score), " - ", COALESCE(p.predicted_score_team_b, p.predicted_team_two_score)) AS predicted_scores FROM predictions p LEFT JOIN matches m ON p.match_id = m.id', 'alias' => 'p', 'required_tables' => ['matches'],
+            'fields' => [
+                'customer_id' => ['label'=>'شناسه مشتری','type'=>'number'], 'customer_name' => ['label'=>'نام','type'=>'text','required'=>true], 'customer_last_name' => ['label'=>'نام خانوادگی','type'=>'text'], 'customer_mobile' => ['label'=>'موبایل مشتری','type'=>'mobile'], 'mobile' => ['label'=>'موبایل','type'=>'mobile'],
+                'match_id' => ['label'=>'مسابقه','type'=>'match','required'=>true], 'team_one_name' => ['label'=>'نام تیم اول','type'=>'text'], 'team_two_name' => ['label'=>'نام تیم دوم','type'=>'text'],
+                'predicted_team_one_score' => ['label'=>'پیش‌بینی تیم اول','type'=>'number'], 'predicted_team_two_score' => ['label'=>'پیش‌بینی تیم دوم','type'=>'number'], 'predicted_score_team_a' => ['label'=>'گل تیم اول','type'=>'number'], 'predicted_score_team_b' => ['label'=>'گل تیم دوم','type'=>'number'],
+                'prediction_content' => ['label'=>'محتوای پیش‌بینی','type'=>'textarea'], 'status' => ['label'=>'وضعیت','type'=>'select','options'=>['pending'=>'در انتظار','approved'=>'تایید','rejected'=>'رد']], 'is_winner' => ['label'=>'برنده','type'=>'checkbox'], 'points_awarded' => ['label'=>'امتیاز اعطا شده','type'=>'number'],
+                'crm_follow_up' => ['label'=>'پیگیری CRM','type'=>'checkbox'], 'wants_reservation' => ['label'=>'علاقه‌مند به رزرو','type'=>'checkbox'], 'reserve_table_interest' => ['label'=>'علاقه‌مند به رزرو سازگار','type'=>'checkbox'], 'source' => ['label'=>'منبع','type'=>'text'],
+                'crm_matched' => ['label'=>'تطبیق CRM','type'=>'checkbox'], 'customer_exists' => ['label'=>'مشتری موجود','type'=>'checkbox'], 'attended_match_time' => ['label'=>'حضور زمان مسابقه','type'=>'checkbox'], 'is_correct_prediction' => ['label'=>'پیش‌بینی صحیح','type'=>'checkbox'], 'crm_match' => ['label'=>'تطبیق CRM سازگار','type'=>'checkbox'], 'attended_match' => ['label'=>'حضور مسابقه','type'=>'checkbox'],
+            ],
+            'columns' => ['id','customer_name','mobile','match_title','predicted_scores','status','is_winner','points_awarded','submitted_at'],
+        ],
+        'categories' => [
+            'title' => 'دسته‌بندی‌های منو', 'add_label' => 'افزودن دسته‌بندی', 'min_role' => 'manager', 'table' => 'menu_categories', 'unique' => 'slug', 'search' => ['name_fa','name_en','slug'], 'filters' => ['visible_qr_menu','visible_website','visible_kiosk','is_active'], 'date_column' => 'created_at',
+            'fields' => [
+                'name_fa' => ['label'=>'نام فارسی','type'=>'text','required'=>true], 'name_en' => ['label'=>'نام انگلیسی','type'=>'text','required'=>true], 'slug' => ['label'=>'اسلاگ','type'=>'text'], 'description_fa' => ['label'=>'توضیح فارسی','type'=>'textarea'], 'description_en' => ['label'=>'توضیح انگلیسی','type'=>'textarea'],
+                'icon' => ['label'=>'آیکن','type'=>'text'], 'image' => ['label'=>'تصویر','type'=>'image','folder'=>'menu'], 'parent_id' => ['label'=>'دسته والد','type'=>'category'], 'sepid_id' => ['label'=>'شناسه Sepid','type'=>'text'],
+                'visible_qr_menu' => ['label'=>'نمایش در QR','type'=>'checkbox'], 'visible_website' => ['label'=>'نمایش وب‌سایت','type'=>'checkbox'], 'visible_kiosk' => ['label'=>'نمایش کیوسک','type'=>'checkbox'], 'sort_order' => ['label'=>'ترتیب','type'=>'number'], 'is_active' => ['label'=>'فعال','type'=>'checkbox'],
+            ],
+            'columns' => ['id','name_fa','name_en','slug','parent_id','visible_qr_menu','visible_website','visible_kiosk','sort_order','is_active'],
+        ],
+        'menu-items' => [
+            'title' => 'آیتم‌های منو', 'add_label' => 'افزودن آیتم منو', 'min_role' => 'manager', 'table' => 'menu_items', 'unique' => 'slug', 'search' => ['name_fa','name_en','slug','description_fa'], 'filters' => ['category_id','availability_status','is_available','is_featured','visible_qr_menu','visible_website'], 'date_column' => 'created_at',
+            'join' => 'SELECT mi.*, mc.name_fa AS category_title FROM menu_items mi LEFT JOIN menu_categories mc ON mi.category_id = mc.id', 'alias' => 'mi', 'required_tables' => ['menu_categories'],
+            'fields' => [
+                'category_id' => ['label'=>'دسته‌بندی','type'=>'category','required'=>true], 'name_fa' => ['label'=>'نام فارسی','type'=>'text','required'=>true], 'name_en' => ['label'=>'نام انگلیسی','type'=>'text','required'=>true], 'slug' => ['label'=>'اسلاگ','type'=>'text'], 'description_fa' => ['label'=>'توضیح فارسی','type'=>'textarea'], 'description_en' => ['label'=>'توضیح انگلیسی','type'=>'textarea'],
+                'price' => ['label'=>'قیمت','type'=>'number','required'=>true], 'discount_price' => ['label'=>'قیمت تخفیف','type'=>'number'], 'image' => ['label'=>'تصویر','type'=>'image','folder'=>'menu'], 'gallery_images' => ['label'=>'گالری تصاویر JSON','type'=>'json'], 'ingredients_fa' => ['label'=>'مواد اولیه فارسی','type'=>'textarea'], 'ingredients_en' => ['label'=>'مواد اولیه انگلیسی','type'=>'textarea'],
+                'calories' => ['label'=>'کالری','type'=>'number'], 'preparation_time' => ['label'=>'زمان آماده‌سازی','type'=>'number'], 'availability_status' => ['label'=>'وضعیت موجودی','type'=>'select','options'=>['available'=>'موجود','unavailable'=>'ناموجود','limited'=>'محدود']],
+                'visible_qr_menu' => ['label'=>'نمایش در QR','type'=>'checkbox'], 'visible_website' => ['label'=>'نمایش وب‌سایت','type'=>'checkbox'], 'visible_kiosk' => ['label'=>'نمایش کیوسک','type'=>'checkbox'], 'visible_loyalty' => ['label'=>'نمایش وفاداری','type'=>'checkbox'], 'campaign_price' => ['label'=>'قیمت کمپین','type'=>'number'], 'promo_text' => ['label'=>'متن تبلیغ','type'=>'text'], 'promo_image' => ['label'=>'تصویر تبلیغ','type'=>'image','folder'=>'menu'], 'sepid_id' => ['label'=>'شناسه Sepid','type'=>'text'],
+                'is_available' => ['label'=>'موجود','type'=>'checkbox'], 'is_featured' => ['label'=>'ویژه','type'=>'checkbox'], 'is_vegetarian' => ['label'=>'گیاهی','type'=>'checkbox'], 'is_spicy' => ['label'=>'تند','type'=>'checkbox'], 'sort_order' => ['label'=>'ترتیب','type'=>'number'],
+            ],
+            'columns' => ['id','category_title','name_fa','name_en','slug','price','discount_price','availability_status','is_available','is_featured','sort_order'],
+        ],
+        'surveys' => [
+            'title' => 'فرم‌های نظرسنجی', 'add_label' => 'افزودن فرم', 'min_role' => 'admin', 'table' => 'dynamic_forms', 'unique' => 'form_name', 'search' => ['form_name','form_title_fa','form_title_en'], 'filters' => ['is_active','branch_id'], 'date_column' => 'created_at',
+            'fields' => [
+                'form_name' => ['label'=>'نام سیستمی','type'=>'text','required'=>true], 'form_title_fa' => ['label'=>'عنوان فارسی','type'=>'text','required'=>true], 'form_title_en' => ['label'=>'عنوان انگلیسی','type'=>'text'], 'form_description_fa' => ['label'=>'توضیح فارسی','type'=>'textarea'], 'form_description_en' => ['label'=>'توضیح انگلیسی','type'=>'textarea'],
+                'form_schema' => ['label'=>'ساختار فرم JSON','type'=>'json','required'=>true,'default'=>'{"fields":[]}'], 'is_active' => ['label'=>'فعال','type'=>'checkbox'], 'display_order' => ['label'=>'ترتیب','type'=>'number'], 'start_date' => ['label'=>'شروع انتشار','type'=>'datetime'], 'end_date' => ['label'=>'پایان انتشار','type'=>'datetime'], 'publishing_channels' => ['label'=>'کانال‌های انتشار','type'=>'text'], 'branch_id' => ['label'=>'شعبه','type'=>'number'], 'survey_version' => ['label'=>'نسخه','type'=>'number'],
+            ],
+            'columns' => ['id','form_name','form_title_fa','form_title_en','is_active','display_order','start_date','end_date','publishing_channels','branch_id','survey_version'],
+        ],
+        'survey-responses' => [
+            'title' => 'پاسخ‌های نظرسنجی', 'add_label' => 'افزودن پاسخ', 'min_role' => 'manager', 'table' => 'survey_responses', 'search' => ['customer_name','customer_phone','customer_email'], 'filters' => ['form_id','branch_id','is_dissatisfied','crm_follow_up'], 'date_column' => 'submitted_at',
+            'join' => 'SELECT sr.*, df.form_title_fa AS form_title FROM survey_responses sr LEFT JOIN dynamic_forms df ON sr.form_id = df.id', 'alias' => 'sr', 'required_tables' => ['dynamic_forms'],
+            'fields' => [
+                'form_id' => ['label'=>'فرم','type'=>'survey_form','required'=>true], 'order_id' => ['label'=>'شناسه سفارش','type'=>'number'], 'user_id' => ['label'=>'شناسه کاربر','type'=>'number'], 'response_data' => ['label'=>'داده پاسخ JSON','type'=>'json','default'=>'{}'],
+                'customer_name' => ['label'=>'نام مشتری','type'=>'text'], 'customer_phone' => ['label'=>'تلفن مشتری','type'=>'mobile'], 'customer_email' => ['label'=>'ایمیل مشتری','type'=>'text'], 'branch_id' => ['label'=>'شعبه','type'=>'number'], 'satisfaction_score' => ['label'=>'امتیاز رضایت','type'=>'number'], 'is_dissatisfied' => ['label'=>'ناراضی','type'=>'checkbox'], 'crm_follow_up' => ['label'=>'پیگیری CRM','type'=>'checkbox'],
+            ],
+            'columns' => ['id','form_title','customer_name','customer_phone','customer_email','branch_id','satisfaction_score','is_dissatisfied','crm_follow_up','submitted_at'],
+        ],
+        'crm' => [
+            'title' => 'CRM مشتریان', 'add_label' => 'افزودن مشتری', 'min_role' => 'manager', 'table' => 'crm_customers', 'unique' => 'mobile', 'search' => ['full_name','mobile','tags','acquisition_source'], 'filters' => ['acquisition_source','customer_status','attended_match_event'], 'date_column' => 'created_at',
+            'fields' => [
+                'user_id' => ['label'=>'شناسه کاربر','type'=>'number'], 'full_name' => ['label'=>'نام کامل','type'=>'text','required'=>true], 'mobile' => ['label'=>'موبایل','type'=>'mobile','required'=>true], 'birth_date' => ['label'=>'تولد','type'=>'date'], 'first_purchase_date' => ['label'=>'اولین خرید','type'=>'date'],
+                'total_orders' => ['label'=>'تعداد سفارش','type'=>'number'], 'total_purchase_volume' => ['label'=>'حجم خرید','type'=>'number'], 'reminder_date' => ['label'=>'یادآوری','type'=>'date'], 'acquisition_source' => ['label'=>'منبع جذب','type'=>'select','options'=>adminAcquisitionSourceOptions()], 'notes' => ['label'=>'یادداشت','type'=>'textarea'], 'surveys_completed_count' => ['label'=>'تعداد نظرسنجی','type'=>'number'], 'last_visit_date' => ['label'=>'آخرین مراجعه','type'=>'date'], 'tags' => ['label'=>'برچسب‌ها','type'=>'text'], 'attended_match_event' => ['label'=>'حضور در رویداد مسابقه','type'=>'checkbox'],
+                'customer_status' => ['label'=>'وضعیت مشتری','type'=>'select','options'=>['new_customer'=>'مشتری جدید','loyal_customer'=>'وفادار','vip'=>'VIP','dissatisfied_customer'=>'ناراضی','churn_risk'=>'ریسک ریزش']], 'points_balance' => ['label'=>'امتیازها','type'=>'number'], 'rewards_notes' => ['label'=>'یادداشت پاداش‌ها','type'=>'textarea'], 'follow_up_notes' => ['label'=>'یادداشت پیگیری','type'=>'textarea'],
             ],
             'columns' => ['id','full_name','mobile','customer_status','points_balance','total_orders','total_purchase_volume','acquisition_source','attended_match_event','tags','created_at'],
         ],
-        'matches' => [
-            'title' => 'مدیریت مسابقات', 'min_role' => 'manager', 'table' => 'matches', 'search' => ['title','team_a','team_b','team_one_name','team_two_name','status','campaign_target'], 'filters' => ['status','is_active','active_for_prediction','match_finished'], 'date_column' => 'match_start_at',
-            'join' => 'SELECT m.*, COALESCE(m.team_one_name, m.team_a) AS team_one_display, COALESCE(m.team_two_name, m.team_b) AS team_two_display, COALESCE(m.match_start_at, CONCAT(m.match_date, " ", m.kickoff_time)) AS match_start_display, COALESCE(m.prediction_start_at, m.prediction_open_at) AS prediction_start_display, COALESCE(m.prediction_end_at, m.prediction_close_at) AS prediction_end_display, COALESCE(m.points_reward, m.reward_points, 0) AS points_reward_display, (SELECT COUNT(*) FROM predictions p WHERE p.match_id = m.id) AS prediction_count, (SELECT COUNT(*) FROM predictions p WHERE p.match_id = m.id AND COALESCE(p.is_winner, p.is_correct_prediction, 0) = 1) AS winner_count FROM matches m', 'alias' => 'm', 'required_tables' => ['predictions'],
-            'fields' => [
-                'title' => ['label'=>'عنوان کمپین/مسابقه','type'=>'text'], 'description' => ['label'=>'توضیح','type'=>'textarea'], 'rules' => ['label'=>'قوانین','type'=>'textarea'], 'participation_conditions' => ['label'=>'شرایط مشارکت','type'=>'textarea'],
-                'team_a' => ['label'=>'نام تیم اول','type'=>'text','required'=>true], 'team_b' => ['label'=>'نام تیم دوم','type'=>'text','required'=>true],
-                'team_one_logo' => ['label'=>'لوگو/تصویر تیم اول','type'=>'image','folder'=>'matches'], 'team_two_logo' => ['label'=>'لوگو/تصویر تیم دوم','type'=>'image','folder'=>'matches'],
-                'match_start_at' => ['label'=>'زمان شروع مسابقه','type'=>'datetime','required'=>true], 'match_end_at' => ['label'=>'زمان پایان مسابقه','type'=>'datetime'],
-                'prediction_start_at' => ['label'=>'شروع پیش‌بینی','type'=>'datetime','required'=>true], 'prediction_end_at' => ['label'=>'پایان پیش‌بینی','type'=>'datetime','required'=>true],
-                'match_date' => ['label'=>'تاریخ مسابقه','type'=>'date'], 'kickoff_time' => ['label'=>'ساعت شروع','type'=>'time'], 'broadcast_time' => ['label'=>'ساعت پخش','type'=>'time'],
-                'prediction_open_at' => ['label'=>'شروع پیش‌بینی قدیمی','type'=>'datetime'], 'prediction_close_at' => ['label'=>'پایان پیش‌بینی قدیمی','type'=>'datetime'],
-                'status' => ['label'=>'وضعیت مسابقه','type'=>'select','options'=>['active'=>'فعال','inactive'=>'غیرفعال','archived'=>'آرشیو','scheduled'=>'برنامه‌ریزی شده','live'=>'زنده','finished'=>'تمام شده','cancelled'=>'لغو شده']],
-                'campaign_status' => ['label'=>'وضعیت کمپین','type'=>'select','options'=>['active'=>'فعال','inactive'=>'غیرفعال','archived'=>'آرشیو']],
-                'start_date' => ['label'=>'شروع کمپین','type'=>'datetime'], 'end_date' => ['label'=>'پایان کمپین','type'=>'datetime'],
-                'participant_count' => ['label'=>'تعداد مشارکت','type'=>'number'], 'banner_id' => ['label'=>'بنر مرتبط','type'=>'banner'], 'menu_item_id' => ['label'=>'آیتم منو مرتبط','type'=>'menu_item'], 'campaign_target' => ['label'=>'هدف کمپین','type'=>'text'],
-                'reward_title' => ['label'=>'عنوان پاداش','type'=>'text'], 'points_reward' => ['label'=>'امتیاز پاداش','type'=>'number'], 'reward_points' => ['label'=>'امتیاز پاداش قدیمی','type'=>'number'], 'reward_description' => ['label'=>'شرح پاداش','type'=>'textarea'],
-                'is_active' => ['label'=>'فعال','type'=>'checkbox'], 'active_for_prediction' => ['label'=>'فعال برای پیش‌بینی','type'=>'checkbox'],
-                'final_team_one_score' => ['label'=>'نتیجه نهایی تیم اول','type'=>'number'], 'final_team_two_score' => ['label'=>'نتیجه نهایی تیم دوم','type'=>'number'], 'final_result_status' => ['label'=>'وضعیت نتیجه','type'=>'select','options'=>['pending'=>'در انتظار','entered'=>'ثبت شده','evaluated'=>'ارزیابی شده']],
-                'final_score_team_a' => ['label'=>'نتیجه نهایی تیم اول قدیمی','type'=>'number'], 'final_score_team_b' => ['label'=>'نتیجه نهایی تیم دوم قدیمی','type'=>'number'], 'match_finished' => ['label'=>'مسابقه تمام شده','type'=>'checkbox'],
-            ],
-            'columns' => ['id','title','team_one_display','team_two_display','match_start_display','prediction_start_display','prediction_end_display','status','points_reward_display','prediction_count','winner_count','match_finished','created_at'],
-        ],
-        'predictions' => [
-            'title' => 'پیش‌بینی‌ها', 'min_role' => 'manager', 'table' => 'predictions', 'readonly_create' => true, 'search' => ['customer_name','customer_last_name','mobile','customer_mobile'], 'filters' => ['match_id','status','is_winner','wants_reservation','customer_exists','crm_match'], 'date_column' => 'submitted_at',
-            'fields' => [
-                'customer_name' => ['label'=>'نام','type'=>'text','required'=>true], 'mobile' => ['label'=>'موبایل','type'=>'mobile','required'=>true], 'match_id' => ['label'=>'مسابقه','type'=>'match','required'=>true],
-                'prediction_content' => ['label'=>'محتوای پیش‌بینی','type'=>'textarea'],
-                'predicted_score_team_a' => ['label'=>'گل تیم اول','type'=>'number','required'=>true], 'predicted_score_team_b' => ['label'=>'گل تیم دوم','type'=>'number','required'=>true],
-                'status' => ['label'=>'وضعیت','type'=>'select','options'=>['pending'=>'در انتظار','approved'=>'تایید','rejected'=>'رد']], 'is_winner' => ['label'=>'برنده','type'=>'checkbox'], 'points_awarded' => ['label'=>'امتیاز اعطا شده','type'=>'number'], 'wants_reservation' => ['label'=>'علاقه‌مند به رزرو','type'=>'checkbox'], 'crm_follow_up' => ['label'=>'ارسال به CRM','type'=>'checkbox'],
-                'crm_match' => ['label'=>'تطابق CRM','type'=>'checkbox'], 'crm_matched' => ['label'=>'تطابق CRM قدیمی','type'=>'checkbox'], 'customer_exists' => ['label'=>'مشتری موجود','type'=>'checkbox'], 'is_correct_prediction' => ['label'=>'پیش‌بینی صحیح','type'=>'checkbox'],
-            ],
-            'join' => 'SELECT p.*, CONCAT(COALESCE(m.team_one_name, m.team_a), " - ", COALESCE(m.team_two_name, m.team_b)) AS match_title, COALESCE(p.team_one_name, m.team_one_name, m.team_a) AS prediction_team_one, COALESCE(p.team_two_name, m.team_two_name, m.team_b) AS prediction_team_two, COALESCE(p.predicted_team_one_score, p.predicted_score_team_a) AS prediction_score_one, COALESCE(p.predicted_team_two_score, p.predicted_score_team_b) AS prediction_score_two, COALESCE(m.final_team_one_score, m.final_score_team_a) AS final_score_one, COALESCE(m.final_team_two_score, m.final_score_team_b) AS final_score_two, CASE WHEN c.id IS NULL THEN "missing" ELSE "exists" END AS crm_status FROM predictions p LEFT JOIN matches m ON p.match_id = m.id LEFT JOIN crm_customers c ON c.mobile = COALESCE(p.customer_mobile, p.mobile)', 'alias' => 'p', 'required_tables' => ['matches','crm_customers'],
-            'columns' => ['id','match_title','prediction_team_one','prediction_team_two','prediction_score_one','prediction_score_two','final_score_one','final_score_two','customer_name','customer_last_name','customer_mobile','wants_reservation','is_winner','crm_status','submitted_at'],
-        ],
         'banners' => [
-            'title' => 'بنرهای اصلی', 'min_role' => 'manager', 'table' => 'hero_banners', 'search' => ['title','subtitle'], 'filters' => ['display_location','active_status'], 'date_column' => 'created_at',
+            'title' => 'بنرهای صفحه اصلی', 'add_label' => 'افزودن بنر', 'min_role' => 'manager', 'table' => 'hero_banners', 'search' => ['title','subtitle','display_location'], 'filters' => ['display_location','active_status','match_id','menu_item_id','category_id'], 'date_column' => 'created_at',
             'fields' => [
-                'title' => ['label'=>'عنوان','type'=>'text','required'=>true], 'subtitle' => ['label'=>'زیرعنوان','type'=>'text'], 'description' => ['label'=>'توضیح','type'=>'textarea'],
-                'button_text' => ['label'=>'متن دکمه','type'=>'text'], 'button_link' => ['label'=>'لینک دکمه','type'=>'text'], 'image' => ['label'=>'تصویر','type'=>'image','folder'=>'banners'], 'mobile_image' => ['label'=>'تصویر موبایل','type'=>'image','folder'=>'banners'],
-                'display_location' => ['label'=>'محل نمایش','type'=>'select','options'=>['homepage'=>'Homepage','menu_page'=>'Menu page','campaigns_page'=>'Campaigns','qr_menu'=>'QR Menu','customer_panel'=>'Customer panel']],
-                'match_id' => ['label'=>'کمپین/مسابقه مرتبط','type'=>'match'], 'menu_item_id' => ['label'=>'آیتم منو مرتبط','type'=>'menu_item'], 'category_id' => ['label'=>'دسته مرتبط','type'=>'category'], 'loyalty_campaign' => ['label'=>'کمپین وفاداری','type'=>'text'],
-                'display_order' => ['label'=>'ترتیب','type'=>'number'], 'active_status' => ['label'=>'فعال','type'=>'checkbox'], 'start_date' => ['label'=>'شروع','type'=>'datetime'], 'end_date' => ['label'=>'پایان','type'=>'datetime'],
+                'title' => ['label'=>'عنوان','type'=>'text','required'=>true], 'subtitle' => ['label'=>'زیرعنوان','type'=>'text'], 'description' => ['label'=>'توضیحات','type'=>'textarea'], 'button_text' => ['label'=>'متن دکمه','type'=>'text'], 'button_link' => ['label'=>'لینک دکمه','type'=>'text'],
+                'image' => ['label'=>'تصویر','type'=>'image','folder'=>'hero'], 'mobile_image' => ['label'=>'تصویر موبایل','type'=>'image','folder'=>'hero'], 'display_location' => ['label'=>'محل نمایش','type'=>'select','options'=>['homepage'=>'صفحه اصلی','menu_page'=>'صفحه منو','campaigns_page'=>'صفحه کمپین‌ها','qr_menu'=>'منوی QR','customer_panel'=>'پنل مشتری']],
+                'match_id' => ['label'=>'مسابقه','type'=>'match'], 'menu_item_id' => ['label'=>'آیتم منو','type'=>'menu_item'], 'category_id' => ['label'=>'دسته‌بندی','type'=>'category'], 'loyalty_campaign' => ['label'=>'کمپین وفاداری','type'=>'text'], 'display_order' => ['label'=>'ترتیب','type'=>'number'], 'active_status' => ['label'=>'فعال','type'=>'checkbox'], 'start_date' => ['label'=>'شروع نمایش','type'=>'datetime'], 'end_date' => ['label'=>'پایان نمایش','type'=>'datetime'],
             ],
-            'columns' => ['id','title','display_location','display_order','active_status','start_date','end_date','created_at'],
-        ],
-        'categories' => [
-            'title' => 'فیلترها و دسته‌بندی منو', 'min_role' => 'manager', 'table' => 'menu_categories', 'unique' => 'slug', 'search' => ['name_fa','name_en','slug'], 'filters' => ['is_active','visible_qr_menu','visible_website','visible_kiosk'], 'date_column' => 'created_at',
-            'fields' => [
-                'name_fa' => ['label'=>'نام فارسی','type'=>'text','required'=>true], 'name_en' => ['label'=>'نام انگلیسی','type'=>'text','required'=>true], 'slug' => ['label'=>'اسلاگ','type'=>'text','required'=>true],
-                'description_fa' => ['label'=>'توضیح فارسی','type'=>'textarea'], 'description_en' => ['label'=>'توضیح انگلیسی','type'=>'textarea'], 'icon' => ['label'=>'آیکن','type'=>'text'], 'image' => ['label'=>'تصویر','type'=>'image','folder'=>'categories'], 'parent_id' => ['label'=>'دسته والد','type'=>'category'], 'sepid_id' => ['label'=>'شناسه Sepid','type'=>'text'],
-                'visible_qr_menu' => ['label'=>'نمایش در QR Menu','type'=>'checkbox'], 'visible_website' => ['label'=>'نمایش در وب‌سایت','type'=>'checkbox'], 'visible_kiosk' => ['label'=>'نمایش در کیوسک','type'=>'checkbox'],
-                'sort_order' => ['label'=>'ترتیب','type'=>'number'], 'is_active' => ['label'=>'فعال','type'=>'checkbox'],
-            ],
-            'columns' => ['id','name_fa','slug','icon','sort_order','visible_qr_menu','visible_website','visible_kiosk','is_active','created_at'],
-        ],
-        'menu-items' => [
-            'title' => 'آیتم‌های منو', 'min_role' => 'manager', 'table' => 'menu_items', 'unique' => 'slug', 'search' => ['name_fa','name_en','slug','description_fa'], 'filters' => ['category_id','availability_status','is_available','is_featured','visible_qr_menu','visible_website'], 'date_column' => 'created_at',
-            'join' => 'SELECT mi.*, mc.name_fa AS category_title FROM menu_items mi LEFT JOIN menu_categories mc ON mi.category_id = mc.id', 'alias' => 'mi', 'required_tables' => ['menu_categories'],
-            'fields' => [
-                'category_id' => ['label'=>'دسته‌بندی','type'=>'category','required'=>true], 'name_fa' => ['label'=>'عنوان فارسی','type'=>'text','required'=>true], 'name_en' => ['label'=>'عنوان انگلیسی','type'=>'text','required'=>true], 'slug' => ['label'=>'اسلاگ','type'=>'text','required'=>true],
-                'description_fa' => ['label'=>'توضیح فارسی','type'=>'textarea'], 'description_en' => ['label'=>'توضیح انگلیسی','type'=>'textarea'], 'price' => ['label'=>'قیمت','type'=>'number','required'=>true], 'discount_price' => ['label'=>'قیمت تخفیف','type'=>'number'],
-                'image' => ['label'=>'تصویر','type'=>'image','folder'=>'menu'], 'gallery_images' => ['label'=>'گالری JSON','type'=>'json'], 'ingredients_fa' => ['label'=>'مواد اولیه فارسی','type'=>'textarea'], 'ingredients_en' => ['label'=>'مواد اولیه انگلیسی','type'=>'textarea'],
-                'calories' => ['label'=>'کالری','type'=>'number'], 'preparation_time' => ['label'=>'زمان آماده‌سازی','type'=>'number'],
-                'availability_status' => ['label'=>'وضعیت موجودی','type'=>'select','options'=>['available'=>'موجود','unavailable'=>'ناموجود','limited'=>'محدود']],
-                'visible_qr_menu' => ['label'=>'نمایش در QR Menu','type'=>'checkbox'], 'visible_website' => ['label'=>'نمایش در وب‌سایت','type'=>'checkbox'], 'visible_kiosk' => ['label'=>'نمایش در کیوسک','type'=>'checkbox'], 'visible_loyalty' => ['label'=>'نمایش در وفاداری','type'=>'checkbox'],
-                'campaign_price' => ['label'=>'قیمت کمپین','type'=>'number'], 'promo_text' => ['label'=>'متن تبلیغاتی','type'=>'text'], 'promo_image' => ['label'=>'تصویر تبلیغاتی','type'=>'image','folder'=>'menu'], 'sepid_id' => ['label'=>'شناسه Sepid','type'=>'text'],
-                'is_available' => ['label'=>'فعال','type'=>'checkbox'], 'is_featured' => ['label'=>'ویژه','type'=>'checkbox'], 'is_vegetarian' => ['label'=>'گیاهی','type'=>'checkbox'], 'is_spicy' => ['label'=>'تند','type'=>'checkbox'], 'sort_order' => ['label'=>'ترتیب','type'=>'number'],
-            ],
-            'columns' => ['id','category_title','name_fa','price','campaign_price','availability_status','visible_qr_menu','visible_website','is_featured','sort_order'],
-        ],
-        'surveys' => [
-            'title' => 'فرم‌های نظرسنجی', 'min_role' => 'admin', 'table' => 'dynamic_forms', 'unique' => 'form_name', 'search' => ['form_name','form_title_fa'], 'filters' => ['is_active','branch_id'], 'date_column' => 'created_at',
-            'fields' => [
-                'form_name' => ['label'=>'نام سیستمی','type'=>'text','required'=>true], 'form_title_fa' => ['label'=>'عنوان فارسی','type'=>'text','required'=>true], 'form_title_en' => ['label'=>'عنوان انگلیسی','type'=>'text'],
-                'form_description_fa' => ['label'=>'توضیح فارسی','type'=>'textarea'], 'form_description_en' => ['label'=>'توضیح انگلیسی','type'=>'textarea'], 'form_schema' => ['label'=>'ساختار فرم JSON','type'=>'json','default'=>'{"fields":[]}'],
-                'start_date' => ['label'=>'شروع انتشار','type'=>'datetime'], 'end_date' => ['label'=>'پایان انتشار','type'=>'datetime'], 'publishing_channels' => ['label'=>'کانال‌های انتشار','type'=>'text'], 'branch_id' => ['label'=>'شعبه','type'=>'number'], 'survey_version' => ['label'=>'نسخه','type'=>'number'],
-                'is_active' => ['label'=>'فعال','type'=>'checkbox'], 'display_order' => ['label'=>'ترتیب','type'=>'number'],
-            ],
-            'columns' => ['id','form_name','form_title_fa','is_active','publishing_channels','branch_id','survey_version','display_order','created_at'],
-        ],
-        'survey-responses' => [
-            'title' => 'پاسخ‌های نظرسنجی', 'min_role' => 'manager', 'table' => 'survey_responses', 'readonly_create' => true, 'search' => ['customer_name','customer_phone','customer_email'], 'filters' => ['form_id','branch_id','is_dissatisfied','crm_follow_up'], 'date_column' => 'submitted_at',
-            'join' => 'SELECT sr.*, df.form_title_fa AS form_title, u.phone AS user_phone, u.full_name AS user_full_name, o.order_number, o.total AS order_total FROM survey_responses sr LEFT JOIN dynamic_forms df ON sr.form_id = df.id LEFT JOIN users u ON sr.user_id = u.id LEFT JOIN orders o ON sr.order_id = o.id', 'alias' => 'sr', 'required_tables' => ['dynamic_forms','users','orders'],
-            'fields' => [
-                'form_id' => ['label'=>'فرم','type'=>'survey_form','required'=>true], 'customer_name' => ['label'=>'نام مشتری','type'=>'text'], 'customer_phone' => ['label'=>'موبایل','type'=>'mobile'], 'customer_email' => ['label'=>'ایمیل','type'=>'text'], 'response_data' => ['label'=>'داده پاسخ JSON','type'=>'textarea','default'=>'{}'],
-                'branch_id' => ['label'=>'شعبه','type'=>'number'], 'satisfaction_score' => ['label'=>'امتیاز رضایت','type'=>'number'], 'is_dissatisfied' => ['label'=>'مشتری ناراضی','type'=>'checkbox'], 'crm_follow_up' => ['label'=>'پیگیری CRM','type'=>'checkbox'],
-            ],
-            'columns' => ['id','form_title','customer_name','customer_phone','user_phone','order_number','satisfaction_score','is_dissatisfied','crm_follow_up','submitted_at'],
+            'columns' => ['id','title','subtitle','display_location','match_id','menu_item_id','category_id','display_order','active_status','start_date','end_date'],
         ],
     ];
 }
@@ -1022,7 +997,7 @@ function adminOptionRows(string $type): array {
 function adminModuleNormalizeConfig(array $config): array {
     $allowed = adminModuleExistingColumnNames($config['table']);
     $config['fields'] = array_filter($config['fields'], static fn($field) => in_array($field, $allowed, true), ARRAY_FILTER_USE_KEY);
-    $virtualColumns = ['match_title','category_title','form_title','prediction_count','winner_count','prediction_team_one','prediction_team_two','prediction_score_one','prediction_score_two','final_score_one','final_score_two','crm_status','team_one_display','team_two_display','match_start_display','prediction_start_display','prediction_end_display','points_reward_display','user_phone','user_full_name','order_number','order_total'];
+    $virtualColumns = ['match_title','category_title','form_title','prediction_count','winner_count','prediction_team_one','prediction_team_two','prediction_score_one','prediction_score_two','final_score_one','final_score_two','crm_status','team_one_display','team_two_display','match_start_display','prediction_start_display','prediction_end_display','points_reward_display','user_phone','user_full_name','order_number','order_total','predicted_scores'];
     $config['columns'] = array_values(array_filter($config['columns'], static fn($col) => in_array($col, $allowed, true) || in_array($col, $virtualColumns, true)));
     $config['filters'] = array_values(array_filter($config['filters'] ?? [], static fn($col) => in_array($col, $allowed, true)));
     $config['search'] = array_values(array_filter($config['search'] ?? [], static fn($col) => in_array($col, $allowed, true)));
@@ -1087,68 +1062,125 @@ function adminModuleCollectData(array $config, array $current = [], ?array $admi
     return $data;
 }
 
+function adminSlugFromText($value): string {
+    $slug = strtolower(trim((string)$value));
+    $slug = preg_replace('/[^a-z0-9]+/i', '-', $slug) ?: '';
+    return trim($slug, '-') ?: ('item-' . date('YmdHis'));
+}
+
+function adminDateTimeIsValid($value, bool $dateOnly = false): bool {
+    if ($value === null || $value === '') return true;
+    $format = $dateOnly ? 'Y-m-d' : 'Y-m-d H:i:s';
+    $dt = DateTime::createFromFormat($format, (string)$value);
+    return $dt && $dt->format($format) === (string)$value;
+}
+
+function adminTimeIsValid($value): bool {
+    if ($value === null || $value === '') return true;
+    return (bool)preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/', (string)$value);
+}
+
+function adminAssertExists(string $table, int $id, string $label): void {
+    if ($id <= 0) throw new RuntimeException('فیلد «' . $label . '» الزامی است.');
+    $stmt = adminDb()->prepare('SELECT id FROM `' . str_replace('`', '``', $table) . '` WHERE id = ? LIMIT 1');
+    $stmt->execute([$id]);
+    if (!$stmt->fetchColumn()) throw new RuntimeException('مقدار انتخاب‌شده برای «' . $label . '» معتبر نیست.');
+}
+
+function adminAssertUnique(string $table, string $column, $value, int $id, string $message): void {
+    if ($value === null || $value === '') return;
+    $stmt = adminDb()->prepare('SELECT id FROM `' . str_replace('`', '``', $table) . '` WHERE `' . str_replace('`', '``', $column) . '` = :value AND id <> :id LIMIT 1');
+    $stmt->execute(['value' => $value, 'id' => $id]);
+    if ($stmt->fetchColumn()) throw new RuntimeException($message);
+}
+
+function adminValidateJsonString($value, string $label): void {
+    if ($value === null || trim((string)$value) === '') return;
+    json_decode((string)$value, true);
+    if (json_last_error() !== JSON_ERROR_NONE) throw new RuntimeException('فیلد «' . $label . '» باید JSON معتبر باشد.');
+}
+
 function adminModulePrepareData(array $config, array $data, array $current = []): array {
-    if (($config['table'] ?? '') === 'matches') {
-        $teamOne = $data['team_a'] ?? $data['team_one_name'] ?? $current['team_a'] ?? $current['team_one_name'] ?? null;
-        $teamTwo = $data['team_b'] ?? $data['team_two_name'] ?? $current['team_b'] ?? $current['team_two_name'] ?? null;
-        if ($teamOne !== null) {
-            if (array_key_exists('team_a', $data) || adminColumnExists('matches', 'team_a')) $data['team_a'] = $teamOne;
-            if (adminColumnExists('matches', 'team_one_name')) $data['team_one_name'] = $teamOne;
-        }
-        if ($teamTwo !== null) {
-            if (array_key_exists('team_b', $data) || adminColumnExists('matches', 'team_b')) $data['team_b'] = $teamTwo;
-            if (adminColumnExists('matches', 'team_two_name')) $data['team_two_name'] = $teamTwo;
-        }
+    $table = $config['table'] ?? '';
+    $id = (int)($current['id'] ?? 0);
 
-        if (!empty($data['match_start_at'])) {
-            $timestamp = strtotime((string)$data['match_start_at']);
-            if ($timestamp) {
-                if (adminColumnExists('matches', 'match_date')) $data['match_date'] = date('Y-m-d', $timestamp);
-                if (adminColumnExists('matches', 'kickoff_time')) $data['kickoff_time'] = date('H:i:s', $timestamp);
-                if (adminColumnExists('matches', 'broadcast_time') && empty($data['broadcast_time'])) $data['broadcast_time'] = date('H:i:s', $timestamp);
-            }
-        } elseif (!empty($data['match_date']) && !empty($data['kickoff_time']) && adminColumnExists('matches', 'match_start_at')) {
-            $data['match_start_at'] = trim((string)$data['match_date'] . ' ' . (string)$data['kickoff_time']);
+    if ($table === 'matches') {
+        if (empty($data['team_one_name']) && !empty($data['team_a'])) $data['team_one_name'] = $data['team_a'];
+        if (empty($data['team_two_name']) && !empty($data['team_b'])) $data['team_two_name'] = $data['team_b'];
+        if (empty($data['match_start_at']) && !empty($data['match_date']) && !empty($data['kickoff_time'])) $data['match_start_at'] = trim((string)$data['match_date'] . ' ' . (string)$data['kickoff_time']);
+        if (empty($data['prediction_start_at']) && !empty($data['prediction_open_at'])) $data['prediction_start_at'] = $data['prediction_open_at'];
+        if (empty($data['prediction_end_at']) && !empty($data['prediction_close_at'])) $data['prediction_end_at'] = $data['prediction_close_at'];
+        foreach ([['final_team_one_score','final_score_team_a'], ['final_team_two_score','final_score_team_b'], ['points_reward','reward_points']] as [$a,$b]) {
+            $value = $data[$a] ?? $data[$b] ?? null;
+            if ($value !== null && $value !== '') { $data[$a] = $value; $data[$b] = $value; }
         }
+        if (!adminDateTimeIsValid($data['match_date'] ?? null, true)) throw new RuntimeException('تاریخ مسابقه معتبر نیست.');
+        if (!adminTimeIsValid($data['kickoff_time'] ?? null)) throw new RuntimeException('ساعت شروع مسابقه معتبر نیست.');
+        if (!empty($data['prediction_open_at']) && !empty($data['prediction_close_at']) && strtotime($data['prediction_close_at']) <= strtotime($data['prediction_open_at'])) throw new RuntimeException('پایان پیش‌بینی باید بعد از شروع پیش‌بینی باشد.');
+    }
 
-        foreach ([['prediction_start_at', 'prediction_open_at'], ['prediction_end_at', 'prediction_close_at'], ['final_team_one_score', 'final_score_team_a'], ['final_team_two_score', 'final_score_team_b'], ['points_reward', 'reward_points']] as [$preferred, $legacy]) {
-            $value = $data[$preferred] ?? $data[$legacy] ?? $current[$preferred] ?? $current[$legacy] ?? null;
-            if ($value !== null && $value !== '') {
-                if (adminColumnExists('matches', $preferred)) $data[$preferred] = $value;
-                if (adminColumnExists('matches', $legacy)) $data[$legacy] = $value;
-            }
+    if ($table === 'predictions') {
+        $mobile = $data['mobile'] ?: ($data['customer_mobile'] ?? null);
+        if ($mobile) { $data['mobile'] = normalizeMobile($mobile); $data['customer_mobile'] = normalizeMobile($mobile); }
+        foreach ([['predicted_team_one_score','predicted_score_team_a'], ['predicted_team_two_score','predicted_score_team_b'], ['wants_reservation','reserve_table_interest'], ['crm_match','crm_matched']] as [$a,$b]) {
+            $value = $data[$a] ?? $data[$b] ?? null;
+            if ($value !== null && $value !== '') { $data[$a] = $value; $data[$b] = $value; }
         }
-
-        $status = (string)($data['status'] ?? $current['status'] ?? 'active');
-        if (adminColumnExists('matches', 'is_active')) {
-            $data['is_active'] = in_array($status, ['active', 'scheduled', 'live'], true) ? 1 : (isset($data['is_active']) ? (int)$data['is_active'] : 0);
+        if (!empty($data['match_id'])) {
+            adminAssertExists('matches', (int)$data['match_id'], 'مسابقه');
+            $stmt = adminDb()->prepare('SELECT team_a, team_b, team_one_name, team_two_name FROM matches WHERE id = ? LIMIT 1');
+            $stmt->execute([(int)$data['match_id']]);
+            $match = $stmt->fetch() ?: [];
+            if (empty($data['team_one_name'])) $data['team_one_name'] = $match['team_one_name'] ?: ($match['team_a'] ?? null);
+            if (empty($data['team_two_name'])) $data['team_two_name'] = $match['team_two_name'] ?: ($match['team_b'] ?? null);
         }
-        if (adminColumnExists('matches', 'active_for_prediction')) {
-            $data['active_for_prediction'] = in_array($status, ['active', 'scheduled', 'live'], true) ? 1 : (isset($data['active_for_prediction']) ? (int)$data['active_for_prediction'] : 0);
-        }
-        if (($data['final_team_one_score'] ?? $data['final_score_team_a'] ?? null) !== null && ($data['final_team_two_score'] ?? $data['final_score_team_b'] ?? null) !== null) {
-            if (adminColumnExists('matches', 'match_finished')) $data['match_finished'] = 1;
-            if (adminColumnExists('matches', 'final_result_status')) $data['final_result_status'] = 'entered';
+        if (empty($data['mobile'])) throw new RuntimeException('فیلد «موبایل» الزامی است.');
+        if (($data['predicted_score_team_a'] ?? null) === null || ($data['predicted_score_team_a'] ?? '') === '') throw new RuntimeException('فیلد «گل تیم اول» الزامی است.');
+        if (($data['predicted_score_team_b'] ?? null) === null || ($data['predicted_score_team_b'] ?? '') === '') throw new RuntimeException('فیلد «گل تیم دوم» الزامی است.');
+        if (!empty($data['mobile']) && !empty($data['match_id'])) {
+            $stmt = adminDb()->prepare('SELECT id FROM predictions WHERE mobile = :mobile AND match_id = :match_id AND id <> :id LIMIT 1');
+            $stmt->execute(['mobile'=>$data['mobile'], 'match_id'=>(int)$data['match_id'], 'id'=>$id]);
+            if ($stmt->fetchColumn()) throw new RuntimeException('برای این موبایل و مسابقه قبلاً پیش‌بینی ثبت شده است.');
         }
     }
 
-    if (($config['table'] ?? '') === 'predictions') {
-        $mobile = $data['customer_mobile'] ?? $data['mobile'] ?? $current['customer_mobile'] ?? $current['mobile'] ?? null;
-        if ($mobile !== null) {
-            $mobile = normalizeMobile($mobile);
-            if (adminColumnExists('predictions', 'mobile')) $data['mobile'] = $mobile;
-            if (adminColumnExists('predictions', 'customer_mobile')) $data['customer_mobile'] = $mobile;
-        }
-        foreach ([['predicted_team_one_score', 'predicted_score_team_a'], ['predicted_team_two_score', 'predicted_score_team_b'], ['wants_reservation', 'reserve_table_interest'], ['crm_match', 'crm_matched']] as [$preferred, $legacy]) {
-            $value = $data[$preferred] ?? $data[$legacy] ?? $current[$preferred] ?? $current[$legacy] ?? null;
-            if ($value !== null && $value !== '') {
-                if (adminColumnExists('predictions', $preferred)) $data[$preferred] = $value;
-                if (adminColumnExists('predictions', $legacy)) $data[$legacy] = $value;
-            }
-        }
+    if ($table === 'menu_categories') {
+        if (empty($data['slug'])) $data['slug'] = adminSlugFromText($data['name_en'] ?? '');
+        adminAssertUnique('menu_categories', 'slug', $data['slug'] ?? null, $id, 'این اسلاگ قبلاً برای دسته‌بندی دیگری ثبت شده است.');
+        if (!empty($data['parent_id']) && (int)$data['parent_id'] === $id) throw new RuntimeException('دسته‌بندی والد نمی‌تواند خود رکورد باشد.');
     }
 
-    $allowed = adminModuleExistingColumnNames($config['table']);
+    if ($table === 'menu_items') {
+        if (empty($data['slug'])) $data['slug'] = adminSlugFromText($data['name_en'] ?? '');
+        adminAssertUnique('menu_items', 'slug', $data['slug'] ?? null, $id, 'این اسلاگ قبلاً برای آیتم دیگری ثبت شده است.');
+        adminAssertExists('menu_categories', (int)($data['category_id'] ?? 0), 'دسته‌بندی');
+        adminValidateJsonString($data['gallery_images'] ?? null, 'گالری تصاویر JSON');
+    }
+
+    if ($table === 'dynamic_forms') {
+        if (empty($data['form_schema'])) $data['form_schema'] = '{"fields":[]}';
+        adminValidateJsonString($data['form_schema'], 'ساختار فرم JSON');
+        if (!empty($data['start_date']) && !empty($data['end_date']) && strtotime($data['end_date']) <= strtotime($data['start_date'])) throw new RuntimeException('تاریخ پایان فرم باید بعد از تاریخ شروع باشد.');
+    }
+
+    if ($table === 'survey_responses') {
+        adminAssertExists('dynamic_forms', (int)($data['form_id'] ?? 0), 'فرم');
+        if (empty($data['response_data'])) $data['response_data'] = '{}';
+        adminValidateJsonString($data['response_data'], 'داده پاسخ JSON');
+    }
+
+    if ($table === 'crm_customers') {
+        foreach (['total_orders','total_purchase_volume','surveys_completed_count','points_balance'] as $column) if ($data[$column] === null || $data[$column] === '') $data[$column] = 0;
+        adminAssertUnique('crm_customers', 'mobile', $data['mobile'] ?? null, $id, 'این شماره موبایل قبلاً در CRM ثبت شده است.');
+    }
+
+    if ($table === 'hero_banners') {
+        if (!empty($data['start_date']) && !empty($data['end_date']) && strtotime($data['end_date']) <= strtotime($data['start_date'])) throw new RuntimeException('تاریخ پایان بنر باید بعد از تاریخ شروع باشد.');
+    }
+
+    if (!empty($config['unique'])) adminAssertUnique($table, $config['unique'], $data[$config['unique']] ?? null, $id, 'مقدار «' . adminModuleLabel($config, $config['unique']) . '» تکراری است.');
+
+    $allowed = adminModuleExistingColumnNames($table);
     return array_intersect_key($data, array_flip($allowed));
 }
 
@@ -1347,4 +1379,182 @@ function ensureAdminVisitorAnalyticsSchema(): void {
 
 function adminVisitorAnalyticsSources(): array {
     return ['Instagram','Telegram','WhatsApp','SMS','Google Search','Google Maps','QR Code','CRM Campaign Link','Referral Website','Paid Ads','Direct Entry','Unknown'];
+}
+
+function adminModuleWriteActivity(?array $admin, string $action, array $config, int $entityId): void {
+    if (!adminTableExists('activity_log')) return;
+    try {
+        $stmt = adminDb()->prepare('INSERT INTO activity_log (admin_id, action, entity_type, entity_id, description, ip_address, user_agent) VALUES (:admin_id, :action, :entity_type, :entity_id, :description, :ip_address, :user_agent)');
+        $stmt->execute([
+            'admin_id' => $admin['id'] ?? null,
+            'action' => $action,
+            'entity_type' => $config['table'] ?? '',
+            'entity_id' => $entityId,
+            'description' => ($config['title'] ?? '') . ' #' . $entityId,
+            'ip_address' => $_SERVER['REMOTE_ADDR'] ?? null,
+            'user_agent' => substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255),
+        ]);
+    } catch (Throwable $e) {
+        safeAdminLog('Activity log failed: ' . $e->getMessage());
+    }
+}
+
+function adminRenderModulePage(string $moduleKey): void {
+    $config = adminModuleDefinition($moduleKey);
+    if (!$config) {
+        http_response_code(404);
+        exit('Module not found.');
+    }
+
+    $currentAdmin = adminGuard($config['min_role'] ?? 'employee');
+    ensureAdminSchema();
+    $pageTitle = $config['title'];
+    $message = '';
+    $error = '';
+    $action = $_GET['action'] ?? 'list';
+    $editRow = null;
+
+    try {
+        adminEnsureModuleTables($config);
+        $config = adminModuleNormalizeConfig($config);
+        if (empty($config['fields'])) {
+            throw new RuntimeException('پیکربندی فرم برای جدول «' . ($config['table'] ?? '') . '» خالی است یا با ستون‌های دیتابیس هم‌خوانی ندارد.');
+        }
+        if (($_GET['export'] ?? '') === 'csv') adminModuleExportCsv($config);
+    } catch (Throwable $e) {
+        $error = 'آماده‌سازی صفحه انجام نشد: ' . $e->getMessage();
+        safeAdminLog('Admin module bootstrap failed (' . $moduleKey . '): ' . $e->getMessage());
+        $action = 'list';
+    }
+
+    if (!in_array($action, ['list', 'add', 'edit'], true)) $action = 'list';
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
+        $crudAction = $_POST['crud_action'] ?? '';
+        $postedId = (int)($_POST['id'] ?? 0);
+        try {
+            requireValidCsrf();
+            if ($crudAction === 'delete') {
+                adminModuleDelete($config, $postedId);
+                adminModuleWriteActivity($currentAdmin, 'delete', $config, $postedId);
+                redirectTo(basename($_SERVER['PHP_SELF']) . '?deleted=1');
+            }
+            if ($crudAction === 'save') {
+                $current = $postedId ? (adminModuleFetchRow($config, $postedId) ?: []) : [];
+                $data = adminModuleCollectData($config, $current, $currentAdmin);
+                $data = adminModulePrepareData($config, $data, $current);
+                $savedId = adminModuleSave($config, $data, $postedId);
+                if (($config['table'] ?? '') === 'matches') adminRecalculatePredictionsForMatch($savedId);
+                adminModuleWriteActivity($currentAdmin, $postedId ? 'update' : 'create', $config, $savedId);
+                redirectTo(basename($_SERVER['PHP_SELF']) . '?saved=1');
+            }
+        } catch (Throwable $e) {
+            $error = $e->getMessage();
+            if ($crudAction === 'save') {
+                $action = $postedId ? 'edit' : 'add';
+                $editRow = $postedId ? (adminModuleFetchRow($config, $postedId) ?: []) : [];
+                foreach ($config['fields'] as $field => $meta) {
+                    if (($meta['type'] ?? '') === 'checkbox') {
+                        $editRow[$field] = isset($_POST[$field]) ? 1 : 0;
+                    } elseif (isset($_POST[$field])) {
+                        $editRow[$field] = $_POST[$field];
+                    }
+                }
+                if ($postedId) $editRow['id'] = $postedId;
+            }
+        }
+    }
+
+    if ($action === 'edit' && !$editRow && !$error) {
+        $editRow = adminModuleFetchRow($config, (int)($_GET['id'] ?? 0));
+        if (!$editRow) {
+            $error = 'رکورد مورد نظر یافت نشد.';
+            $action = 'list';
+        }
+    }
+
+    try {
+        $data = ($action === 'list') ? adminModuleRows($config) : ['rows'=>[], 'page'=>1, 'perPage'=>20, 'total'=>0];
+    } catch (Throwable $e) {
+        $data = ['rows'=>[], 'page'=>1, 'perPage'=>20, 'total'=>0];
+        $error = 'داده‌ها قابل نمایش نیستند. جزئیات خطا در لاگ سیستم ثبت شد.';
+        safeAdminLog('Admin module rows failed (' . $moduleKey . '): ' . $e->getMessage());
+    }
+
+    include __DIR__ . '/../includes/header.php';
+    ?>
+    <?php if (!empty($_GET['saved'])): ?><div class="alert alert-info">تغییرات ذخیره شد.</div><?php endif; ?>
+    <?php if (!empty($_GET['deleted'])): ?><div class="alert alert-info">رکورد حذف شد.</div><?php endif; ?>
+    <?php if ($message): ?><div class="alert alert-info"><?php echo h($message); ?></div><?php endif; ?>
+    <?php if ($error): ?><div class="alert" style="background:#f8d7da;color:#721c24"><?php echo h($error); ?></div><?php endif; ?>
+
+    <?php if (in_array($action, ['add', 'edit'], true)): ?>
+        <form method="post" enctype="multipart/form-data">
+            <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>">
+            <input type="hidden" name="crud_action" value="save">
+            <input type="hidden" name="id" value="<?php echo h($editRow['id'] ?? 0); ?>">
+            <div class="card">
+                <div class="card-header"><h2><?php echo h($action === 'edit' ? 'ویرایش ' . $config['title'] : ($config['add_label'] ?? ('افزودن ' . $config['title']))); ?></h2></div>
+                <div class="card-body">
+                    <?php foreach ($config['fields'] as $field => $meta): ?>
+                        <?php adminModuleRenderField($field, $meta, $editRow[$field] ?? null); ?>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <button class="btn btn-success" type="submit">ذخیره</button>
+            <a class="btn" href="<?php echo h(basename($_SERVER['PHP_SELF'])); ?>">بازگشت</a>
+        </form>
+    <?php else: ?>
+        <div class="card">
+            <div class="card-header">
+                <h2><?php echo h($config['title']); ?></h2>
+                <div><a class="btn btn-primary" href="?action=add"><?php echo h($config['add_label'] ?? 'افزودن'); ?></a> <a class="btn" href="?<?php echo h(http_build_query(array_merge($_GET, ['export' => 'csv']))); ?>">خروجی CSV</a></div>
+            </div>
+            <div class="card-body">
+                <form class="admin-filter" method="get">
+                    <input class="form-control" name="q" placeholder="جستجو" value="<?php echo h($_GET['q'] ?? ''); ?>">
+                    <input class="form-control" name="date_from" placeholder="از تاریخ" value="<?php echo h($_GET['date_from'] ?? ''); ?>">
+                    <input class="form-control" name="date_to" placeholder="تا تاریخ" value="<?php echo h($_GET['date_to'] ?? ''); ?>">
+                    <?php foreach (($config['filters'] ?? []) as $filter): $field = $config['fields'][$filter] ?? ['label' => adminModuleLabel($config, $filter), 'type' => 'checkbox']; $value = $_GET[$filter] ?? ''; ?>
+                        <?php if (($field['type'] ?? '') === 'select'): ?>
+                            <select class="form-control" name="<?php echo h($filter); ?>"><option value=""><?php echo h($field['label']); ?></option><?php foreach (($field['options'] ?? []) as $key => $label): ?><option value="<?php echo h($key); ?>" <?php echo (string)$value === (string)$key ? 'selected' : ''; ?>><?php echo h($label); ?></option><?php endforeach; ?></select>
+                        <?php elseif (in_array(($field['type'] ?? ''), ['category','match','survey_form','banner','menu_item'], true)): ?>
+                            <select class="form-control" name="<?php echo h($filter); ?>"><option value=""><?php echo h($field['label']); ?></option><?php foreach (adminOptionRows($field['type']) as $option): ?><option value="<?php echo h($option['id']); ?>" <?php echo (string)$value === (string)$option['id'] ? 'selected' : ''; ?>><?php echo h($option['title']); ?></option><?php endforeach; ?></select>
+                        <?php else: ?>
+                            <select class="form-control" name="<?php echo h($filter); ?>"><option value=""><?php echo h(adminModuleLabel($config, $filter)); ?></option><option value="1" <?php echo (string)$value === '1' ? 'selected' : ''; ?>>بله</option><option value="0" <?php echo (string)$value === '0' ? 'selected' : ''; ?>>خیر</option></select>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                    <button class="btn btn-primary" type="submit">فیلتر</button>
+                </form>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead><tr><?php foreach ($config['columns'] as $column): ?><th><a href="?<?php echo h(http_build_query(array_merge($_GET, ['sort' => $column, 'order' => (($_GET['sort'] ?? '') === $column && ($_GET['order'] ?? 'desc') === 'desc') ? 'asc' : 'desc']))); ?>"><?php echo h(adminModuleLabel($config, $column)); ?></a></th><?php endforeach; ?><th>عملیات</th></tr></thead>
+                        <tbody>
+                        <?php foreach ($data['rows'] as $row): ?>
+                            <tr>
+                                <?php foreach ($config['columns'] as $column): ?><td><?php echo h(adminModuleFormatValue($column, $row[$column] ?? '')); ?></td><?php endforeach; ?>
+                                <td>
+                                    <a class="btn btn-sm btn-info" href="?action=edit&id=<?php echo h($row['id']); ?>">ویرایش</a>
+                                    <form method="post" style="display:inline">
+                                        <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>">
+                                        <input type="hidden" name="crud_action" value="delete">
+                                        <input type="hidden" name="id" value="<?php echo h($row['id']); ?>">
+                                        <button class="btn btn-sm btn-danger" type="submit" onclick="return confirm('آیا مطمئنید؟')">حذف</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                        <?php if (!$data['rows']): ?><tr><td colspan="<?php echo count($config['columns']) + 1; ?>" class="text-center text-muted">رکوردی یافت نشد.</td></tr><?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <?php $pages = max(1, (int)ceil($data['total'] / $data['perPage'])); ?>
+                <p class="text-muted">صفحه <?php echo h($data['page']); ?> از <?php echo h($pages); ?> (کل: <?php echo h($data['total']); ?> رکورد)</p>
+                <?php if ($data['page'] > 1): ?><a class="btn" href="?page=1">اول</a> <a class="btn" href="?page=<?php echo h($data['page'] - 1); ?>">قبلی</a><?php endif; ?>
+                <?php if ($data['page'] < $pages): ?><a class="btn" href="?page=<?php echo h($data['page'] + 1); ?>">بعدی</a> <a class="btn" href="?page=<?php echo h($pages); ?>">آخر</a><?php endif; ?>
+            </div>
+        </div>
+    <?php endif; ?>
+    <?php include __DIR__ . '/../includes/footer.php'; ?>
+    <?php
 }
