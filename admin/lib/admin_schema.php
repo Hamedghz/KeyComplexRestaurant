@@ -84,6 +84,89 @@ function ensureTableColumns(string $table, array $columns): void {
     }
 }
 
+function adminMatchesColumnDefinitions(): array {
+    return [
+        'title' => 'varchar(200) DEFAULT NULL',
+        'description' => 'text DEFAULT NULL',
+        'rules' => 'text DEFAULT NULL',
+        'participation_conditions' => 'text DEFAULT NULL',
+        'team_a' => 'varchar(120) DEFAULT NULL',
+        'team_b' => 'varchar(120) DEFAULT NULL',
+        'team_one_name' => 'varchar(120) DEFAULT NULL',
+        'team_two_name' => 'varchar(120) DEFAULT NULL',
+        'team_one_logo' => 'varchar(255) DEFAULT NULL',
+        'team_two_logo' => 'varchar(255) DEFAULT NULL',
+        'match_date' => 'date DEFAULT NULL',
+        'kickoff_time' => 'time DEFAULT NULL',
+        'broadcast_time' => 'time DEFAULT NULL',
+        'final_score_team_a' => 'int(11) DEFAULT NULL',
+        'final_score_team_b' => 'int(11) DEFAULT NULL',
+        'final_team_one_score' => 'int(11) DEFAULT NULL',
+        'final_team_two_score' => 'int(11) DEFAULT NULL',
+        'final_result_status' => 'varchar(50) DEFAULT NULL',
+        'match_finished' => 'tinyint(1) NOT NULL DEFAULT 0',
+        'prediction_open_at' => 'datetime DEFAULT NULL',
+        'prediction_close_at' => 'datetime DEFAULT NULL',
+        'prediction_start_at' => 'datetime DEFAULT NULL',
+        'prediction_end_at' => 'datetime DEFAULT NULL',
+        'match_start_at' => 'datetime DEFAULT NULL',
+        'match_end_at' => 'datetime DEFAULT NULL',
+        'start_date' => 'datetime DEFAULT NULL',
+        'end_date' => 'datetime DEFAULT NULL',
+        'status' => "varchar(50) NOT NULL DEFAULT 'active'",
+        'campaign_status' => "varchar(50) NOT NULL DEFAULT 'active'",
+        'participant_count' => 'int(11) NOT NULL DEFAULT 0',
+        'banner_id' => 'int(11) UNSIGNED DEFAULT NULL',
+        'menu_item_id' => 'int(11) UNSIGNED DEFAULT NULL',
+        'campaign_target' => 'varchar(150) DEFAULT NULL',
+        'reward_title' => 'varchar(200) DEFAULT NULL',
+        'points_reward' => 'int(11) NOT NULL DEFAULT 0',
+        'reward_points' => 'int(11) NOT NULL DEFAULT 0',
+        'reward_description' => 'text DEFAULT NULL',
+        'is_active' => 'tinyint(1) NOT NULL DEFAULT 1',
+        'active_for_prediction' => 'tinyint(1) NOT NULL DEFAULT 1',
+        'created_at' => 'timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_at' => 'timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
+    ];
+}
+
+function adminEnsureMatchesSchema(): void {
+    $db = adminDb();
+    if (!adminTableExists('matches')) {
+        ensureAdminCanonicalTables($db, ['matches']);
+    }
+    if (!adminTableExists('matches')) {
+        safeAdminLog('Matches schema repair incomplete. Missing table: matches');
+        return;
+    }
+
+    ensureTableColumns('matches', adminMatchesColumnDefinitions());
+
+    foreach ([
+        'idx_matches_date' => '(`match_date`)',
+        'idx_matches_status' => '(`status`)',
+        'idx_matches_prediction_start' => '(`prediction_start_at`)',
+        'idx_matches_prediction_end' => '(`prediction_end_at`)',
+        'idx_matches_match_start' => '(`match_start_at`)',
+        'idx_matches_finished' => '(`match_finished`)',
+        'idx_matches_active_status' => '(`is_active`, `active_for_prediction`, `status`)',
+    ] as $index => $columns) {
+        if (!adminIndexExists('matches', $index)) {
+            try {
+                $db->exec("ALTER TABLE `matches` ADD INDEX `{$index}` {$columns}");
+            } catch (Throwable $e) {
+                safeAdminLog("Matches schema index repair failed for {$index}: " . $e->getMessage());
+            }
+        }
+    }
+
+    $existing = adminModuleExistingColumnNames('matches');
+    $missing = array_values(array_diff(array_keys(adminMatchesColumnDefinitions()), $existing));
+    if ($missing) {
+        safeAdminLog('Matches schema repair incomplete. Missing columns: ' . implode(', ', $missing));
+    }
+}
+
 
 function adminCanonicalSchemaFiles(): array {
     $schema = ROOT_PATH . '/database/schema.sql';
@@ -494,35 +577,7 @@ function ensureAdminSchema(): array {
         CONSTRAINT `fk_employee_performance_evaluator` FOREIGN KEY (`evaluated_by`) REFERENCES `admins` (`id`) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table employee_performance');
 
-    if (adminTableExists('matches')) {
-        ensureTableColumns('matches', [
-            'team_one_name' => 'varchar(120) DEFAULT NULL',
-            'team_two_name' => 'varchar(120) DEFAULT NULL',
-            'team_one_logo' => 'varchar(255) DEFAULT NULL',
-            'team_two_logo' => 'varchar(255) DEFAULT NULL',
-            'prediction_start_at' => 'datetime DEFAULT NULL',
-            'prediction_end_at' => 'datetime DEFAULT NULL',
-            'match_start_at' => 'datetime DEFAULT NULL',
-            'match_end_at' => 'datetime DEFAULT NULL',
-            'final_score_team_a' => 'int(11) DEFAULT NULL',
-            'final_score_team_b' => 'int(11) DEFAULT NULL',
-            'final_team_one_score' => 'int(11) DEFAULT NULL',
-            'final_team_two_score' => 'int(11) DEFAULT NULL',
-            'final_result_status' => 'varchar(50) DEFAULT NULL',
-            'match_finished' => 'tinyint(1) NOT NULL DEFAULT 0',
-            'reward_title' => 'varchar(200) DEFAULT NULL',
-            'points_reward' => 'int(11) NOT NULL DEFAULT 0',
-        ]);
-        $run("ALTER TABLE `matches` MODIFY `status` enum('active','inactive','archived','scheduled','live','finished','cancelled') NOT NULL DEFAULT 'active'", 'همگام‌سازی وضعیت مسابقه');
-        if (!adminIndexExists('matches', 'idx_matches_finished')) {
-            $run("ALTER TABLE `matches` ADD INDEX `idx_matches_finished` (`match_finished`)", 'ایندکس پایان مسابقه');
-        }
-        foreach (['idx_matches_status' => '(`status`)', 'idx_matches_prediction_start' => '(`prediction_start_at`)', 'idx_matches_prediction_end' => '(`prediction_end_at`)', 'idx_matches_match_start' => '(`match_start_at`)'] as $index => $columns) {
-            if (!adminIndexExists('matches', $index)) {
-                $run("ALTER TABLE `matches` ADD INDEX `{$index}` {$columns}", 'ایندکس ' . $index);
-            }
-        }
-    }
+    adminEnsureMatchesSchema();
 
     if (adminTableExists('predictions')) {
         ensureTableColumns('predictions', [
@@ -910,20 +965,31 @@ function adminModuleOptionalColumns(): array {
             'description' => "text DEFAULT NULL",
             'rules' => "text DEFAULT NULL",
             'participation_conditions' => "text DEFAULT NULL",
+            'team_a' => "varchar(120) DEFAULT NULL",
+            'team_b' => "varchar(120) DEFAULT NULL",
             'team_one_name' => "varchar(120) DEFAULT NULL",
             'team_two_name' => "varchar(120) DEFAULT NULL",
             'team_one_logo' => "varchar(255) DEFAULT NULL",
             'team_two_logo' => "varchar(255) DEFAULT NULL",
+            'match_date' => "date DEFAULT NULL",
+            'kickoff_time' => "time DEFAULT NULL",
+            'broadcast_time' => "time DEFAULT NULL",
+            'final_score_team_a' => "int(11) DEFAULT NULL",
+            'final_score_team_b' => "int(11) DEFAULT NULL",
             'final_team_one_score' => "int(11) DEFAULT NULL",
             'final_team_two_score' => "int(11) DEFAULT NULL",
             'final_result_status' => "varchar(50) DEFAULT NULL",
+            'match_finished' => "tinyint(1) NOT NULL DEFAULT 0",
+            'prediction_open_at' => "datetime DEFAULT NULL",
+            'prediction_close_at' => "datetime DEFAULT NULL",
             'prediction_start_at' => "datetime DEFAULT NULL",
             'prediction_end_at' => "datetime DEFAULT NULL",
             'match_start_at' => "datetime DEFAULT NULL",
             'match_end_at' => "datetime DEFAULT NULL",
             'start_date' => "datetime DEFAULT NULL",
             'end_date' => "datetime DEFAULT NULL",
-            'campaign_status' => "enum('active','inactive','archived') NOT NULL DEFAULT 'active'",
+            'status' => "varchar(50) NOT NULL DEFAULT 'active'",
+            'campaign_status' => "varchar(50) NOT NULL DEFAULT 'active'",
             'participant_count' => "int(11) NOT NULL DEFAULT 0",
             'banner_id' => "int(11) UNSIGNED DEFAULT NULL",
             'menu_item_id' => "int(11) UNSIGNED DEFAULT NULL",
@@ -932,6 +998,10 @@ function adminModuleOptionalColumns(): array {
             'points_reward' => "int(11) NOT NULL DEFAULT 0",
             'reward_points' => "int(11) NOT NULL DEFAULT 0",
             'reward_description' => "text DEFAULT NULL",
+            'is_active' => "tinyint(1) NOT NULL DEFAULT 1",
+            'active_for_prediction' => "tinyint(1) NOT NULL DEFAULT 1",
+            'created_at' => "timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP",
+            'updated_at' => "timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
         ],
         'predictions' => [
             'customer_id' => "int(11) UNSIGNED DEFAULT NULL",
@@ -1017,11 +1087,18 @@ function adminEnsureModuleOptionalColumns(string $table): void {
 }
 
 function adminEnsureModuleTables(array $config): void {
+    if (($config['table'] ?? '') === 'matches') {
+        adminEnsureMatchesSchema();
+    }
+
     $missing = [];
     foreach (adminModuleRequiredTables($config) as $table) {
         if (!adminTableExists($table)) $missing[] = $table;
     }
     if ($missing) ensureAdminCanonicalTables(adminDb(), $missing);
+    if (($config['table'] ?? '') === 'matches') {
+        adminEnsureMatchesSchema();
+    }
     foreach (adminModuleRequiredTables($config) as $table) {
         adminEnsureModuleOptionalColumns($table);
     }
