@@ -907,6 +907,7 @@ CREATE TABLE IF NOT EXISTS `pool_leads` (
     `id` INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
     `full_name` VARCHAR(255) NOT NULL,
     `mobile` VARCHAR(20) NOT NULL,
+    `pool_name` VARCHAR(100) DEFAULT NULL,
     `acquisition_source` VARCHAR(100) NULL,
     `notes` TEXT NULL,
     `status` ENUM('new', 'contacted', 'converted', 'rejected') NOT NULL DEFAULT 'new',
@@ -914,6 +915,7 @@ CREATE TABLE IF NOT EXISTS `pool_leads` (
     `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `idx_pool_mobile` (`mobile`),
+    KEY `idx_pool_leads_pool_name` (`pool_name`),
     KEY `idx_pool_source` (`acquisition_source`),
     KEY `idx_pool_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -921,9 +923,9 @@ CREATE TABLE IF NOT EXISTS `pool_leads` (
 CREATE TABLE IF NOT EXISTS `traffic_logs` (
     `id` BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
     `session_id` VARCHAR(64) NOT NULL,
-    `ip_address` VARCHAR(45) NOT NULL,
-    `country` VARCHAR(100) NULL,
-    `city` VARCHAR(100) NULL,
+    `ip_address` VARCHAR(64) NULL,
+    `country` VARCHAR(100) DEFAULT 'Unknown',
+    `city` VARCHAR(100) DEFAULT 'Unknown',
     `isp` VARCHAR(255) NULL,
     `referrer` VARCHAR(500) NULL,
     `landing_page` VARCHAR(500) NULL,
@@ -947,7 +949,7 @@ CREATE TABLE IF NOT EXISTS `traffic_logs` (
 CREATE TABLE IF NOT EXISTS `traffic_sources` (
     `id` INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
     `source_name` VARCHAR(100) NOT NULL,
-    `source_type` ENUM('direct', 'organic', 'social', 'referral', 'campaign') NOT NULL,
+    `source_type` VARCHAR(50) NOT NULL DEFAULT 'unknown',
     `visits_count` INT NOT NULL DEFAULT 0,
     `date` DATE NOT NULL,
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -960,10 +962,15 @@ CREATE TABLE IF NOT EXISTS `traffic_sources` (
 CREATE TABLE IF NOT EXISTS `visitor_sessions` (
     `id` BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
     `session_id` VARCHAR(64) NOT NULL,
-    `ip_address` VARCHAR(45) NOT NULL,
+    `ip_address` VARCHAR(64) NULL,
     `started_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `last_activity` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+    `current_page` VARCHAR(500) NULL,
+    `source_name` VARCHAR(150) NULL,
+    `device_type` VARCHAR(50) NULL,
+    `browser` VARCHAR(100) NULL,
+    `os` VARCHAR(100) NULL,
     PRIMARY KEY (`id`),
     UNIQUE KEY `uniq_session` (`session_id`),
     KEY `idx_session_active` (`is_active`, `last_activity`)
@@ -971,8 +978,8 @@ CREATE TABLE IF NOT EXISTS `visitor_sessions` (
 
 CREATE TABLE IF NOT EXISTS `visitor_locations` (
     `id` INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-    `country` VARCHAR(100) NOT NULL,
-    `city` VARCHAR(100) NULL,
+    `country` VARCHAR(100) NOT NULL DEFAULT 'Unknown',
+    `city` VARCHAR(100) NOT NULL DEFAULT 'Unknown',
     `visits_count` INT NOT NULL DEFAULT 0,
     `date` DATE NOT NULL,
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1016,8 +1023,8 @@ CREATE TABLE IF NOT EXISTS `analytics_visitors` (
   `browser` varchar(100) DEFAULT NULL,
   `os` varchar(100) DEFAULT NULL,
   `device_type` varchar(50) DEFAULT NULL,
-  `country` varchar(100) DEFAULT NULL,
-  `city` varchar(100) DEFAULT NULL,
+  `country` varchar(100) DEFAULT 'Unknown',
+  `city` varchar(100) DEFAULT 'Unknown',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),

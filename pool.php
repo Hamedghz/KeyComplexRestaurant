@@ -9,7 +9,12 @@ require_once __DIR__ . '/core/bootstrap.php';
 $pageTitle = 'فرم استخر ';
 $message = '';
 $status = '';
-$formData = ['full_name' => '', 'mobile' => '', 'acquisition_source' => ''];
+$poolOptions = [
+    'استخر هامون',
+    'استخر دهکده المپیک',
+    'استخر خانه شنا',
+];
+$formData = ['full_name' => '', 'mobile' => '', 'pool_name' => '', 'acquisition_source' => ''];
 
 // Get acquisition sources
 try {
@@ -30,6 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $formData['full_name'] = trim((string)($_POST['full_name'] ?? ''));
     $formData['mobile'] = trim((string)($_POST['mobile'] ?? ''));
+    $formData['pool_name'] = trim((string)($_POST['pool_name'] ?? ''));
     $formData['acquisition_source'] = trim((string)($_POST['acquisition_source'] ?? ''));
 
     $submittedToken = (string)($_POST[CSRF_TOKEN_NAME] ?? '');
@@ -46,21 +52,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (!preg_match('/^09\d{9}$/', $formData['mobile'])) {
         $status = 'error';
         $message = 'شماره موبایل باید با 09 شروع شده و 11 رقم باشد.';
+    } elseif (!in_array($formData['pool_name'], $poolOptions, true)) {
+        $status = 'error';
+        $message = 'لطفاً استخر موردنظر را انتخاب کنید.';
     } else {
         try {
             $stmt = $db->prepare("
-                INSERT INTO pool_leads (full_name, mobile, acquisition_source, status)
-                VALUES (:full_name, :mobile, :acquisition_source, 'new')
+                INSERT INTO pool_leads (full_name, mobile, pool_name, acquisition_source, status)
+                VALUES (:full_name, :mobile, :pool_name, :acquisition_source, 'new')
             ");
             $stmt->execute([
                 'full_name' => $formData['full_name'],
                 'mobile' => $formData['mobile'],
+                'pool_name' => $formData['pool_name'],
                 'acquisition_source' => $formData['acquisition_source'] ?: null,
             ]);
 
             $status = 'success';
             $message = 'اطلاعات شما با موفقیت ثبت شد. به زودی با شما تماس خواهیم گرفت.';
-            $formData = ['full_name' => '', 'mobile' => '', 'acquisition_source' => ''];
+            $formData = ['full_name' => '', 'mobile' => '', 'pool_name' => '', 'acquisition_source' => ''];
         } catch (PDOException $e) {
             if ($e->getCode() === '23000') {
                 $status = 'error';
@@ -182,6 +192,32 @@ $csrfToken = generateCSRFToken();
             box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.1);
         }
 
+        .radio-group {
+            display: grid;
+            gap: 10px;
+        }
+
+        .radio-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 13px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            background: #fff;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .radio-option input {
+            width: auto;
+        }
+
+        .radio-option:has(input:checked) {
+            border-color: var(--accent);
+            background: rgba(212, 175, 55, 0.08);
+        }
+
         .btn {
             width: 100%;
             padding: 18px;
@@ -248,6 +284,18 @@ $csrfToken = generateCSRFToken();
             </div>
 
             <div class="form-group">
+                <label class="form-label">انتخاب استخر *</label>
+                <div class="radio-group">
+                    <?php foreach ($poolOptions as $poolOption): ?>
+                        <label class="radio-option">
+                            <input type="radio" name="pool_name" value="<?php echo htmlspecialchars($poolOption); ?>" <?php echo $formData['pool_name'] === $poolOption ? 'checked' : ''; ?> required>
+                            <span><?php echo htmlspecialchars($poolOption); ?></span>
+                        </label>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+
+            <div class="form-group">
                 <label class="form-label" for="acquisition_source">از کجا ما را شناختید؟</label>
                 <select id="acquisition_source" name="acquisition_source" class="form-control">
                     <option value="">انتخاب کنید...</option>
@@ -267,5 +315,6 @@ $csrfToken = generateCSRFToken();
             <a href="/">← بازگشت به صفحه اصلی</a>
         </div>
     </div>
+    <script src="/assets/js/analytics-tracker.js" defer></script>
 </body>
 </html>

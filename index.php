@@ -34,6 +34,44 @@ function normalizeAssetPath($path) {
     return '/' . ltrim($path, '/');
 }
 
+function homeColumnExists(PDO $db, string $table, string $column): bool {
+    try {
+        $stmt = $db->prepare('SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name AND COLUMN_NAME = :column_name');
+        $stmt->execute(['table_name' => $table, 'column_name' => $column]);
+        return (int)$stmt->fetchColumn() > 0;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function homeBannerImageSrc($value): string {
+    $path = trim((string)$value);
+
+    if ($path === '') {
+        return '';
+    }
+
+    if (preg_match('/^https?:\/\//i', $path)) {
+        return normalizeAssetPath($path);
+    }
+
+    if (str_starts_with($path, 'uploads/')) {
+        $relativePath = ltrim($path, '/');
+        return is_file(PUBLIC_PATH . '/' . $relativePath) ? normalizeAssetPath($relativePath) : '';
+    }
+
+    $fileName = ltrim($path, '/');
+    $candidateFolders = ['hero', 'banners'];
+
+    foreach ($candidateFolders as $folder) {
+        if (is_file(UPLOAD_PATH . '/' . $folder . '/' . $fileName)) {
+            return '/uploads/' . $folder . '/' . $fileName;
+        }
+    }
+
+    return '';
+}
+
 function normalizeTelLink($phone) {
     return preg_replace('/[^0-9+]/', '', (string)$phone);
 }
@@ -211,18 +249,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_name'] ?? '') === 'ne
 }
 
 // Get settings
-$siteName = $settingModel->get('site_name_fa', 'KEY رستوران و کافه');
+$legacyHeroTitle = $settingModel->get('hero_title_fa', 'KEY رستوران و کافه');
+$legacyHeroSubtitle = $settingModel->get('hero_subtitle_fa', 'تجربه‌ای بی‌نظیر از غذا و نوشیدنی');
+$siteName = trim((string)$settingModel->get('site_name_fa', '')) ?: $legacyHeroTitle;
 $siteNameEn = $settingModel->get('site_name_en', 'KEY Restaurant & Coffeehouse');
-$heroTitle = $settingModel->get('hero_title_fa', 'KEY رستوران و کافه');
-$heroSubtitle = $settingModel->get('hero_subtitle_fa', 'تجربه‌ای بی‌نظیر از غذا و نوشیدنی');
-$lotusLogoImage = normalizeAssetPath($settingModel->get('lotus_logo_image', ''));
-$lotusTitle = $settingModel->get('lotus_title_fa', $heroTitle);
-$lotusSubtitle = $settingModel->get('lotus_subtitle_fa', $heroSubtitle);
-$lotusDescription = $settingModel->get('lotus_description_fa', '');
-$lotusCtaText = $settingModel->get('lotus_cta_text_fa', '');
-$lotusCtaLink = $settingModel->get('lotus_cta_link', '#menu');
-$lotusActive = (bool)$settingModel->get('lotus_active', true);
-$ctaText = $settingModel->get('hero_cta_text_fa', 'سفارش آنلاین');
+$siteDescription = trim((string)$settingModel->get('site_description_fa', '')) ?: $legacyHeroSubtitle;
+$brandLogoImage = normalizeAssetPath($settingModel->get('lotus_logo_image', ''));
+$ctaText = trim((string)$settingModel->get('hero_cta_text_fa', '')) ?: 'مشاهده منو';
 $primaryColor = $settingModel->get('primary_color', '#004647');
 $accentColor = $settingModel->get('accent_color', '#D4AF37');
 $menuTitle = $settingModel->get('featured_menu_title_fa', 'منوی ویژه');
@@ -301,7 +334,11 @@ try {
     $socialLinks = [];
 }
 try {
-    $heroStmt = $db->prepare("SELECT * FROM hero_banners WHERE active_status = 1 AND (start_date IS NULL OR start_date <= NOW()) AND (end_date IS NULL OR end_date >= NOW()) ORDER BY display_order ASC, id DESC");
+    $heroWhere = 'active_status = 1 AND (start_date IS NULL OR start_date <= NOW()) AND (end_date IS NULL OR end_date >= NOW())';
+    if (homeColumnExists($db, 'hero_banners', 'display_location')) {
+        $heroWhere .= " AND (display_location = 'homepage' OR display_location IS NULL OR display_location = '')";
+    }
+    $heroStmt = $db->prepare("SELECT * FROM hero_banners WHERE {$heroWhere} ORDER BY display_order ASC, id DESC");
     $heroStmt->execute();
     $heroBanners = $heroStmt->fetchAll();
 } catch (Throwable $e) {
@@ -327,7 +364,7 @@ $featuredItems = $menuModel->getFeatured(6);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <?php echo renderSeoMeta($siteName, $heroSubtitle, assetUrl('assets/images/home-preview.svg'), BASE_URL . '/', 'رستوران, کافه, KEY, منو, سفارش غذا'); ?>
+    <?php echo renderSeoMeta($siteName, $siteDescription, assetUrl('assets/images/home-preview.svg'), BASE_URL . '/', 'رستوران, کافه, KEY, منو, سفارش غذا'); ?>
     <?php echo localFontPreloadLinks(); ?>
     <link rel="preload" href="<?php echo homeEscape(assetUrl('assets/images/home-preview.svg')); ?>" as="image" type="image/svg+xml">
     <style>
@@ -467,52 +504,6 @@ $featuredItems = $menuModel->getFeatured(6);
             pointer-events: auto;
         }
         
-        .logo-container {
-            margin-bottom: 40px;
-            animation: fadeInDown 1s ease-out;
-        }
-        
-        .lotus-logo {
-            width: 120px;
-            height: 120px;
-            margin: 0 auto 20px;
-            object-fit: contain;
-        }
-
-        .lotus-admin-copy {
-            max-width: 620px;
-            margin: 0 auto 24px;
-            color: rgba(255,255,255,.82);
-            line-height: 1.9;
-        }
-        
-        .lotus-petal {
-            fill: var(--accent);
-            opacity: 0;
-            animation: petalBloom 0.6s ease-out forwards;
-        }
-        
-        .lotus-petal:nth-child(1) { animation-delay: 0.1s; }
-        .lotus-petal:nth-child(2) { animation-delay: 0.2s; }
-        .lotus-petal:nth-child(3) { animation-delay: 0.3s; }
-        .lotus-petal:nth-child(4) { animation-delay: 0.4s; }
-        .lotus-petal:nth-child(5) { animation-delay: 0.5s; }
-        .lotus-petal:nth-child(6) { animation-delay: 0.6s; }
-        .lotus-petal:nth-child(7) { animation-delay: 0.7s; }
-        .lotus-petal:nth-child(8) { animation-delay: 0.8s; }
-        .lotus-petal:nth-child(9) { animation-delay: 0.9s; }
-        
-        @keyframes petalBloom {
-            from {
-                opacity: 0;
-                transform: scale(0) rotate(-45deg);
-            }
-            to {
-                opacity: 1;
-                transform: scale(1) rotate(0deg);
-            }
-        }
-        
         @keyframes fadeInDown {
             from {
                 opacity: 0;
@@ -525,18 +516,22 @@ $featuredItems = $menuModel->getFeatured(6);
         }
         
         .hero-title {
-            font-size: clamp(48px, 7vw, 72px);
+            font-size: clamp(34px, 4.8vw, 60px);
             font-weight: 700;
             color: var(--white);
-            margin-bottom: 20px;
+            max-width: min(900px, 92vw);
+            margin: 0 auto 18px;
+            line-height: 1.25;
             text-shadow: 0 4px 20px rgba(0,0,0,0.5);
             animation: fadeInUp 1s ease-out 0.5s both;
         }
         
         .hero-subtitle {
-            font-size: clamp(36px, 5vw, 56px);
+            font-size: clamp(18px, 2.2vw, 28px);
             color: var(--accent);
-            margin-bottom: 40px;
+            max-width: min(760px, 90vw);
+            margin: 0 auto 32px;
+            line-height: 1.75;
             animation: fadeInUp 1s ease-out 0.7s both;
         }
         
@@ -1098,7 +1093,7 @@ $featuredItems = $menuModel->getFeatured(6);
         .hero-banner-art { width:100%; min-height:100vh; height:100%; object-fit: cover; object-position:center; background-position:center; background-size:cover; display:block; border-radius:0; margin:0; box-shadow:none; }
         .hero-banner-copy { position:relative; z-index:14; min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:86px 20px 20px; pointer-events:auto; }
         .hero-banner-copy::before { content:''; position:absolute; inset:0; z-index:-1; background:linear-gradient(180deg, rgba(0,70,71,.25), rgba(0,0,0,.68)); }
-        .hero-banner-description { max-width: 680px; margin: 1rem auto; color: rgba(255,255,255,0.88); line-height: 1.9; }
+        .hero-banner-description { max-width: 760px; margin: 1rem auto 1.75rem; color: rgba(255,255,255,0.88); line-height: 1.9; font-size: clamp(15px, 1.4vw, 18px); }
         .hero-banner-dots { display:flex; gap:8px; justify-content:center; margin-top:18px; }
         .hero-banner-dots button { width:10px; height:10px; border-radius:50%; border:0; background:rgba(255,255,255,.45); cursor:pointer; }
         .hero-banner-dots button.active { background: var(--accent); }
@@ -1158,8 +1153,8 @@ $featuredItems = $menuModel->getFeatured(6);
     <header class="top-header">
         <div class="top-header-inner">
             <a class="brand-mark" href="#hero-section">
-                <?php if ($lotusLogoImage !== ''): ?>
-                    <img src="<?php echo homeEscape($lotusLogoImage); ?>" alt="<?php echo homeEscape($siteName); ?>">
+                <?php if ($brandLogoImage !== ''): ?>
+                    <img src="<?php echo homeEscape($brandLogoImage); ?>" alt="<?php echo homeEscape($siteName); ?>">
                 <?php else: ?>
                     <img src="<?php echo homeEscape(assetUrl('assets/images/home-preview.svg')); ?>" alt="<?php echo homeEscape($siteName); ?>">
                 <?php endif; ?>
@@ -1184,38 +1179,40 @@ $featuredItems = $menuModel->getFeatured(6);
         <?php if (!empty($heroBanners)): ?>
             <div class="hero-banner-slider" data-hero-slider>
                 <?php foreach ($heroBanners as $index => $banner): ?>
+                    <?php
+                        $bannerTitle = trim((string)($banner['title'] ?? '')) ?: $siteName;
+                        $bannerSubtitle = trim((string)($banner['subtitle'] ?? ''));
+                        $bannerDescription = trim((string)($banner['description'] ?? ''));
+                        $bannerLead = $bannerSubtitle !== '' ? $bannerSubtitle : ($bannerDescription !== '' ? $bannerDescription : $siteDescription);
+                        $bannerExtraDescription = $bannerSubtitle !== '' ? $bannerDescription : '';
+                        $bannerImage = homeBannerImageSrc($banner['image'] ?? '');
+                        $bannerMobileImage = homeBannerImageSrc($banner['mobile_image'] ?? '');
+                        $bannerButtonText = trim((string)($banner['button_text'] ?? ''));
+                        $bannerButtonLink = trim((string)($banner['button_link'] ?? '')) ?: '#menu';
+                    ?>
                     <div class="hero-banner-slide <?php echo $index === 0 ? 'active' : ''; ?>" data-hero-slide>
-                        <?php if (!empty($banner['image'])): ?>
+                        <?php if ($bannerImage !== ''): ?>
                             <picture>
-                                <?php if (!empty($banner['mobile_image'])): ?><source media="(max-width: 640px)" srcset="/uploads/banners/<?php echo homeEscape($banner['mobile_image']); ?>"><?php endif; ?>
-                                <img class="hero-banner-art" src="/uploads/banners/<?php echo homeEscape($banner['image']); ?>" alt="<?php echo homeEscape($banner['title']); ?>" <?php echo $index === 0 ? 'fetchpriority="high"' : 'loading="lazy"'; ?> decoding="async">
+                                <?php if ($bannerMobileImage !== ''): ?><source media="(max-width: 640px)" srcset="<?php echo homeEscape($bannerMobileImage); ?>"><?php endif; ?>
+                                <img class="hero-banner-art" src="<?php echo homeEscape($bannerImage); ?>" alt="<?php echo homeEscape($bannerTitle); ?>" <?php echo $index === 0 ? 'fetchpriority="high"' : 'loading="lazy"'; ?> decoding="async">
                             </picture>
                         <?php endif; ?>
-                        <?php if (!$lotusActive): ?>
-                            <div class="hero-banner-copy">
-                                <h1 class="hero-title"><?php echo homeEscape($banner['title']); ?></h1>
-                                <?php if (!empty($banner['subtitle'])): ?><p class="hero-subtitle"><?php echo homeEscape($banner['subtitle']); ?></p><?php endif; ?>
-                                <?php if (!empty($banner['description'])): ?><p class="hero-banner-description"><?php echo homeEscape($banner['description']); ?></p><?php endif; ?>
-                                <?php if (!empty($banner['button_text'])): ?><a href="<?php echo homeEscape($banner['button_link'] ?: '#menu'); ?>" class="glass-button"><?php echo homeEscape($banner['button_text']); ?></a><?php endif; ?>
-                            </div>
-                        <?php endif; ?>
+                        <div class="hero-banner-copy">
+                            <h1 class="hero-title"><?php echo homeEscape($bannerTitle); ?></h1>
+                            <?php if ($bannerLead !== ''): ?><p class="hero-subtitle"><?php echo homeEscape($bannerLead); ?></p><?php endif; ?>
+                            <?php if ($bannerExtraDescription !== ''): ?><p class="hero-banner-description"><?php echo homeEscape($bannerExtraDescription); ?></p><?php endif; ?>
+                            <?php if ($bannerButtonText !== ''): ?><a href="<?php echo homeEscape($bannerButtonLink); ?>" class="glass-button"><?php echo homeEscape($bannerButtonText); ?></a><?php endif; ?>
+                        </div>
                     </div>
                 <?php endforeach; ?>
             </div>
         <?php endif; ?>
 
         <div class="hero-content">
-            <?php if ($lotusActive): ?>
-                <div class="logo-container">
-                    <h1 class="hero-title"><?php echo homeEscape($lotusTitle); ?></h1>
-                    <?php if ($lotusSubtitle !== ''): ?><p class="hero-subtitle"><?php echo homeEscape($lotusSubtitle); ?></p><?php endif; ?>
-                    <?php if ($lotusDescription !== ''): ?><div class="lotus-admin-copy"><?php echo homeSafeHtml($lotusDescription); ?></div><?php endif; ?>
-                    <?php if ($lotusCtaText !== ''): ?><a href="<?php echo homeEscape($lotusCtaLink ?: '#menu'); ?>" class="glass-button"><?php echo homeEscape($lotusCtaText); ?></a><?php endif; ?>
-                </div>
-            <?php elseif (empty($heroBanners)): ?>
-                <h1 class="hero-title"><?php echo htmlspecialchars($heroTitle); ?></h1>
-                <p class="hero-subtitle"><?php echo htmlspecialchars($heroSubtitle); ?></p>
-                <a href="#menu" class="glass-button"><?php echo htmlspecialchars($ctaText); ?></a>
+            <?php if (empty($heroBanners)): ?>
+                <h1 class="hero-title"><?php echo homeEscape($siteName); ?></h1>
+                <p class="hero-subtitle"><?php echo homeEscape($siteDescription); ?></p>
+                <a href="#menu" class="glass-button"><?php echo homeEscape($ctaText); ?></a>
             <?php endif; ?>
 
             <?php if (!empty($heroBanners) && count($heroBanners) > 1): ?>
@@ -1397,7 +1394,7 @@ $featuredItems = $menuModel->getFeatured(6);
             <div class="footer-grid">
                 <div>
                     <h3 class="footer-title"><?php echo homeEscape($siteName); ?></h3>
-                    <p class="footer-text"><?php echo homeEscape($heroSubtitle); ?></p>
+                    <p class="footer-text"><?php echo homeEscape($siteDescription); ?></p>
                     <div class="footer-social">
                         <?php foreach ($socialLinks as $social): ?>
                             <a href="<?php echo homeEscape($social['url']); ?>" target="_blank" rel="noopener" aria-label="<?php echo homeEscape($social['title']); ?>"><?php echo homeEscape($social['icon']); ?></a>
@@ -1471,9 +1468,18 @@ $featuredItems = $menuModel->getFeatured(6);
         // Smooth scroll
         document.querySelectorAll('a[href^="#"]').forEach(anchor => {
             anchor.addEventListener('click', function (e) {
-                e.preventDefault();
-                const target = document.querySelector(this.getAttribute('href'));
+                const href = this.getAttribute('href') || '';
+                if (!href.startsWith('#') || href.length <= 1) {
+                    return;
+                }
+                let target = null;
+                try {
+                    target = document.querySelector(href);
+                } catch (error) {
+                    return;
+                }
                 if (target) {
+                    e.preventDefault();
                     target.scrollIntoView({ behavior: 'smooth' });
                 }
             });
@@ -1500,6 +1506,6 @@ $featuredItems = $menuModel->getFeatured(6);
             });
         });
     </script>
-    <script src="<?php echo homeEscape(assetUrl('assets/js/analytics-tracker.js')); ?>" defer></script>
+    <script src="/assets/js/analytics-tracker.js" defer></script>
 </body>
 </html>

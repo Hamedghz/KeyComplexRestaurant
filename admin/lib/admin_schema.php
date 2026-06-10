@@ -552,6 +552,7 @@ function ensureAdminSchema(): array {
         `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
         `full_name` varchar(255) DEFAULT NULL,
         `mobile` varchar(20) NOT NULL,
+        `pool_name` varchar(100) DEFAULT NULL,
         `acquisition_source` varchar(100) DEFAULT NULL,
         `notes` text DEFAULT NULL,
         `status` enum('new','contacted','converted','rejected') NOT NULL DEFAULT 'new',
@@ -559,16 +560,26 @@ function ensureAdminSchema(): array {
         `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (`id`),
         KEY `idx_pool_mobile` (`mobile`),
+        KEY `idx_pool_leads_pool_name` (`pool_name`),
         KEY `idx_pool_source` (`acquisition_source`),
         KEY `idx_pool_status` (`status`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table pool_leads');
 
+    if (adminTableExists('pool_leads')) {
+        ensureTableColumns('pool_leads', [
+            'pool_name' => 'varchar(100) DEFAULT NULL AFTER `mobile`',
+        ]);
+        if (!adminIndexExists('pool_leads', 'idx_pool_leads_pool_name')) {
+            $run("ALTER TABLE `pool_leads` ADD INDEX `idx_pool_leads_pool_name` (`pool_name`)", 'ایندکس استخر لیدها');
+        }
+    }
+
     $run("CREATE TABLE IF NOT EXISTS `traffic_logs` (
         `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
         `session_id` varchar(64) NOT NULL,
-        `ip_address` varchar(45) DEFAULT NULL,
-        `country` varchar(100) DEFAULT NULL,
-        `city` varchar(100) DEFAULT NULL,
+        `ip_address` varchar(64) DEFAULT NULL,
+        `country` varchar(100) DEFAULT 'Unknown',
+        `city` varchar(100) DEFAULT 'Unknown',
         `isp` varchar(255) DEFAULT NULL,
         `referrer` varchar(500) DEFAULT NULL,
         `landing_page` varchar(500) DEFAULT NULL,
@@ -590,7 +601,7 @@ function ensureAdminSchema(): array {
     $run("CREATE TABLE IF NOT EXISTS `traffic_sources` (
         `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
         `source_name` varchar(100) NOT NULL,
-        `source_type` enum('direct','organic','social','referral','campaign') NOT NULL DEFAULT 'direct',
+        `source_type` varchar(50) NOT NULL DEFAULT 'unknown',
         `visits_count` int(11) NOT NULL DEFAULT 0,
         `date` date NOT NULL,
         `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -603,10 +614,15 @@ function ensureAdminSchema(): array {
     $run("CREATE TABLE IF NOT EXISTS `visitor_sessions` (
         `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
         `session_id` varchar(64) NOT NULL,
-        `ip_address` varchar(45) DEFAULT NULL,
+        `ip_address` varchar(64) DEFAULT NULL,
         `started_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
         `last_activity` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         `is_active` tinyint(1) NOT NULL DEFAULT 1,
+        `current_page` varchar(500) DEFAULT NULL,
+        `source_name` varchar(150) DEFAULT NULL,
+        `device_type` varchar(50) DEFAULT NULL,
+        `browser` varchar(100) DEFAULT NULL,
+        `os` varchar(100) DEFAULT NULL,
         PRIMARY KEY (`id`),
         UNIQUE KEY `uniq_session` (`session_id`),
         KEY `idx_session_active` (`is_active`, `last_activity`)
@@ -614,8 +630,8 @@ function ensureAdminSchema(): array {
 
     $run("CREATE TABLE IF NOT EXISTS `visitor_locations` (
         `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-        `country` varchar(100) NOT NULL,
-        `city` varchar(100) DEFAULT NULL,
+        `country` varchar(100) NOT NULL DEFAULT 'Unknown',
+        `city` varchar(100) NOT NULL DEFAULT 'Unknown',
         `visits_count` int(11) NOT NULL DEFAULT 0,
         `date` date NOT NULL,
         `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -636,6 +652,8 @@ function ensureAdminSchema(): array {
         PRIMARY KEY (`id`),
         UNIQUE KEY `uniq_stat_date` (`stat_date`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table traffic_statistics');
+
+    ensureAdminAnalyticsSchema();
 
     $settings = [
         ['site_description_fa', 'تجربه‌ای لوکس از غذا و نوشیدنی', 'text', 'general', 1],
@@ -785,15 +803,14 @@ function adminModuleDefinitions(): array {
             'columns' => ['id','match_title','prediction_team_one','prediction_team_two','prediction_score_one','prediction_score_two','final_score_one','final_score_two','customer_name','customer_last_name','customer_mobile','wants_reservation','is_winner','crm_status','submitted_at'],
         ],
         'banners' => [
-            'title' => 'بنرهای اصلی', 'min_role' => 'manager', 'table' => 'hero_banners', 'search' => ['title','subtitle'], 'filters' => ['display_location','active_status'], 'date_column' => 'created_at',
+            'title' => 'بنرهای اصلی', 'min_role' => 'manager', 'table' => 'hero_banners', 'search' => ['title','subtitle'], 'filters' => ['active_status'], 'date_column' => 'created_at',
             'fields' => [
                 'title' => ['label'=>'عنوان','type'=>'text','required'=>true], 'subtitle' => ['label'=>'زیرعنوان','type'=>'text'], 'description' => ['label'=>'توضیح','type'=>'textarea'],
                 'button_text' => ['label'=>'متن دکمه','type'=>'text'], 'button_link' => ['label'=>'لینک دکمه','type'=>'text'], 'image' => ['label'=>'تصویر','type'=>'image','folder'=>'banners'], 'mobile_image' => ['label'=>'تصویر موبایل','type'=>'image','folder'=>'banners'],
-                'display_location' => ['label'=>'محل نمایش','type'=>'select','options'=>['homepage'=>'Homepage','menu_page'=>'Menu page','campaigns_page'=>'Campaigns','qr_menu'=>'QR Menu','customer_panel'=>'Customer panel']],
                 'match_id' => ['label'=>'کمپین/مسابقه مرتبط','type'=>'match'], 'menu_item_id' => ['label'=>'آیتم منو مرتبط','type'=>'menu_item'], 'category_id' => ['label'=>'دسته مرتبط','type'=>'category'], 'loyalty_campaign' => ['label'=>'کمپین وفاداری','type'=>'text'],
                 'display_order' => ['label'=>'ترتیب','type'=>'number'], 'active_status' => ['label'=>'فعال','type'=>'checkbox'], 'start_date' => ['label'=>'شروع','type'=>'datetime'], 'end_date' => ['label'=>'پایان','type'=>'datetime'],
             ],
-            'columns' => ['id','title','display_location','display_order','active_status','start_date','end_date','created_at'],
+            'columns' => ['id','title','display_order','active_status','start_date','end_date','created_at'],
         ],
         'categories' => [
             'title' => 'فیلترها و دسته‌بندی منو', 'min_role' => 'manager', 'table' => 'menu_categories', 'unique' => 'slug', 'search' => ['name_fa','name_en','slug'], 'filters' => ['is_active','visible_qr_menu','visible_website','visible_kiosk'], 'date_column' => 'created_at',
@@ -1001,6 +1018,13 @@ function adminEnsureModuleTables(array $config): void {
     foreach (adminModuleRequiredTables($config) as $table) {
         adminEnsureModuleOptionalColumns($table);
     }
+    if (($config['table'] ?? '') === 'hero_banners' && adminTableExists('hero_banners') && adminColumnExists('hero_banners', 'display_location')) {
+        try {
+            adminDb()->exec("UPDATE `hero_banners` SET `display_location` = 'homepage' WHERE `display_location` IS NULL OR `display_location` = ''");
+        } catch (Throwable $e) {
+            safeAdminLog('Hero banner display_location repair failed: ' . $e->getMessage());
+        }
+    }
 }
 
 function adminModulePrefix(array $config): string {
@@ -1069,6 +1093,7 @@ function adminModuleCollectData(array $config, array $current = [], ?array $admi
         if ($type === 'mobile') $value = normalizeMobile($value);
         if ($type === 'date') $value = parsePersianDate($value, false);
         if ($type === 'datetime') $value = parsePersianDate($value, true);
+        if ($type === 'time') $value = parsePersianTime($value);
         if ($type === 'json' && $value !== null && trim((string)$value) !== '') {
             json_decode((string)$value, true);
             if (json_last_error() !== JSON_ERROR_NONE) {
@@ -1088,6 +1113,10 @@ function adminModuleCollectData(array $config, array $current = [], ?array $admi
 }
 
 function adminModulePrepareData(array $config, array $data, array $current = []): array {
+    if (($config['table'] ?? '') === 'hero_banners' && adminColumnExists('hero_banners', 'display_location')) {
+        $data['display_location'] = 'homepage';
+    }
+
     if (($config['table'] ?? '') === 'matches') {
         $teamOne = $data['team_a'] ?? $data['team_one_name'] ?? $current['team_a'] ?? $current['team_one_name'] ?? null;
         $teamTwo = $data['team_b'] ?? $data['team_two_name'] ?? $current['team_b'] ?? $current['team_two_name'] ?? null;
@@ -1297,8 +1326,107 @@ function adminRecalculatePredictionsForMatch(int $matchId): void {
 }
 
 function ensureAdminVisitorAnalyticsSchema(): void {
+    ensureAdminAnalyticsSchema();
+}
+
+function adminEnsureIndexes(string $table, array $indexes): void {
+    if (!adminTableExists($table)) {
+        return;
+    }
+
     $db = adminDb();
-    $db->exec("CREATE TABLE IF NOT EXISTS `visitor_analytics_logs` (
+    foreach ($indexes as $index => $definition) {
+        if (!adminIndexExists($table, $index)) {
+            try {
+                $db->exec("ALTER TABLE `" . str_replace('`', '``', $table) . "` ADD {$definition}");
+            } catch (Throwable $e) {
+                safeAdminLog("Schema index ensure failed for {$table}.{$index}: " . $e->getMessage());
+            }
+        }
+    }
+}
+
+function ensureAdminAnalyticsSchema(): void {
+    $db = adminDb();
+    $run = function (string $sql, string $label) use ($db) {
+        try {
+            $db->exec($sql);
+        } catch (Throwable $e) {
+            safeAdminLog($label . ' failed: ' . $e->getMessage());
+        }
+    };
+
+    $run("CREATE TABLE IF NOT EXISTS `analytics_visitors` (
+        `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+        `visitor_uuid` varchar(64) NOT NULL,
+        `first_seen_at` datetime NOT NULL,
+        `last_seen_at` datetime NOT NULL,
+        `ip_hash` char(64) DEFAULT NULL,
+        `user_agent` text DEFAULT NULL,
+        `browser` varchar(100) DEFAULT NULL,
+        `os` varchar(100) DEFAULT NULL,
+        `device_type` varchar(50) DEFAULT NULL,
+        `country` varchar(100) DEFAULT 'Unknown',
+        `city` varchar(100) DEFAULT 'Unknown',
+        `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`),
+        UNIQUE KEY `uniq_analytics_visitor_uuid` (`visitor_uuid`),
+        KEY `idx_analytics_visitors_device` (`device_type`),
+        KEY `idx_analytics_visitors_browser` (`browser`),
+        KEY `idx_analytics_visitors_os` (`os`),
+        KEY `idx_analytics_visitors_country` (`country`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table analytics_visitors');
+
+    $run("CREATE TABLE IF NOT EXISTS `analytics_sessions` (
+        `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+        `session_uuid` varchar(64) NOT NULL,
+        `visitor_uuid` varchar(64) NOT NULL,
+        `started_at` datetime NOT NULL,
+        `last_activity_at` datetime NOT NULL,
+        `landing_page` varchar(500) DEFAULT NULL,
+        `referrer` varchar(500) DEFAULT NULL,
+        `source` varchar(100) DEFAULT NULL,
+        `medium` varchar(100) DEFAULT NULL,
+        `campaign` varchar(150) DEFAULT NULL,
+        `utm_source` varchar(100) DEFAULT NULL,
+        `utm_medium` varchar(100) DEFAULT NULL,
+        `utm_campaign` varchar(150) DEFAULT NULL,
+        `utm_term` varchar(150) DEFAULT NULL,
+        `utm_content` varchar(150) DEFAULT NULL,
+        `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`),
+        UNIQUE KEY `uniq_analytics_session_uuid` (`session_uuid`),
+        KEY `idx_analytics_sessions_visitor` (`visitor_uuid`),
+        KEY `idx_analytics_sessions_started` (`started_at`),
+        KEY `idx_analytics_sessions_activity` (`last_activity_at`),
+        KEY `idx_analytics_sessions_source` (`source`),
+        KEY `idx_analytics_sessions_medium` (`medium`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table analytics_sessions');
+
+    $run("CREATE TABLE IF NOT EXISTS `analytics_pageviews` (
+        `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+        `visitor_uuid` varchar(64) NOT NULL,
+        `session_uuid` varchar(64) NOT NULL,
+        `page_url` varchar(1000) DEFAULT NULL,
+        `page_path` varchar(500) DEFAULT NULL,
+        `page_title` varchar(255) DEFAULT NULL,
+        `referrer` varchar(500) DEFAULT NULL,
+        `screen_width` int(11) DEFAULT NULL,
+        `screen_height` int(11) DEFAULT NULL,
+        `browser_language` varchar(50) DEFAULT NULL,
+        `timezone` varchar(100) DEFAULT NULL,
+        `viewed_at` datetime NOT NULL,
+        `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`),
+        KEY `idx_analytics_pageviews_visitor` (`visitor_uuid`),
+        KEY `idx_analytics_pageviews_session` (`session_uuid`),
+        KEY `idx_analytics_pageviews_viewed` (`viewed_at`),
+        KEY `idx_analytics_pageviews_path` (`page_path`(191))
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table analytics_pageviews');
+
+    $run("CREATE TABLE IF NOT EXISTS `visitor_analytics_logs` (
         `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
         `session_id` varchar(64) NOT NULL,
         `user_id` int(11) UNSIGNED DEFAULT NULL,
@@ -1334,15 +1462,266 @@ function ensureAdminVisitorAnalyticsSchema(): void {
         KEY `idx_visitor_logs_action` (`target_action`, `is_converted`),
         KEY `idx_visitor_logs_related` (`related_module`, `related_record_id`),
         KEY `idx_visitor_logs_created` (`created_at`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table visitor_analytics_logs');
 
+    $run("CREATE TABLE IF NOT EXISTS `traffic_logs` (
+        `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+        `session_id` varchar(64) NOT NULL,
+        `ip_address` varchar(64) DEFAULT NULL,
+        `country` varchar(100) DEFAULT 'Unknown',
+        `city` varchar(100) DEFAULT 'Unknown',
+        `isp` varchar(255) DEFAULT NULL,
+        `referrer` varchar(500) DEFAULT NULL,
+        `landing_page` varchar(500) DEFAULT NULL,
+        `user_agent` text DEFAULT NULL,
+        `browser` varchar(100) DEFAULT NULL,
+        `os` varchar(100) DEFAULT NULL,
+        `device` varchar(50) DEFAULT NULL,
+        `language` varchar(20) DEFAULT NULL,
+        `visit_duration` int(11) DEFAULT NULL,
+        `pages_viewed` int(11) NOT NULL DEFAULT 1,
+        `is_bot` tinyint(1) NOT NULL DEFAULT 0,
+        `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`),
+        KEY `idx_traffic_session` (`session_id`),
+        KEY `idx_traffic_date` (`created_at`),
+        KEY `idx_traffic_country` (`country`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table traffic_logs');
+
+    $run("CREATE TABLE IF NOT EXISTS `traffic_sources` (
+        `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        `source_name` varchar(100) NOT NULL,
+        `source_type` varchar(50) NOT NULL DEFAULT 'unknown',
+        `visits_count` int(11) NOT NULL DEFAULT 0,
+        `date` date NOT NULL,
+        `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`),
+        UNIQUE KEY `uniq_source_date` (`source_name`, `date`),
+        KEY `idx_source_type` (`source_type`),
+        KEY `idx_source_date` (`date`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table traffic_sources');
+
+    $run("CREATE TABLE IF NOT EXISTS `visitor_sessions` (
+        `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+        `session_id` varchar(64) NOT NULL,
+        `ip_address` varchar(64) DEFAULT NULL,
+        `started_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        `last_activity` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        `is_active` tinyint(1) NOT NULL DEFAULT 1,
+        `current_page` varchar(500) DEFAULT NULL,
+        `source_name` varchar(150) DEFAULT NULL,
+        `device_type` varchar(50) DEFAULT NULL,
+        `browser` varchar(100) DEFAULT NULL,
+        `os` varchar(100) DEFAULT NULL,
+        PRIMARY KEY (`id`),
+        UNIQUE KEY `uniq_session` (`session_id`),
+        KEY `idx_session_active` (`is_active`, `last_activity`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table visitor_sessions');
+
+    $run("CREATE TABLE IF NOT EXISTS `visitor_locations` (
+        `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        `country` varchar(100) NOT NULL DEFAULT 'Unknown',
+        `city` varchar(100) NOT NULL DEFAULT 'Unknown',
+        `visits_count` int(11) NOT NULL DEFAULT 0,
+        `date` date NOT NULL,
+        `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`),
+        UNIQUE KEY `uniq_location_date` (`country`, `city`, `date`),
+        KEY `idx_location_date` (`date`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table visitor_locations');
+
+    $run("CREATE TABLE IF NOT EXISTS `traffic_statistics` (
+        `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        `stat_date` date NOT NULL,
+        `total_visits` int(11) NOT NULL DEFAULT 0,
+        `unique_visitors` int(11) NOT NULL DEFAULT 0,
+        `total_page_views` int(11) NOT NULL DEFAULT 0,
+        `bounce_rate` decimal(5,2) DEFAULT NULL,
+        `avg_duration` int(11) DEFAULT NULL,
+        `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`),
+        UNIQUE KEY `uniq_stat_date` (`stat_date`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table traffic_statistics');
+
+    ensureTableColumns('analytics_visitors', [
+        'visitor_uuid' => "varchar(64) NOT NULL DEFAULT ''",
+        'first_seen_at' => 'datetime NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'last_seen_at' => 'datetime NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'ip_hash' => 'char(64) DEFAULT NULL',
+        'user_agent' => 'text DEFAULT NULL',
+        'browser' => 'varchar(100) DEFAULT NULL',
+        'os' => 'varchar(100) DEFAULT NULL',
+        'device_type' => 'varchar(50) DEFAULT NULL',
+        'country' => "varchar(100) DEFAULT 'Unknown'",
+        'city' => "varchar(100) DEFAULT 'Unknown'",
+        'created_at' => 'timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_at' => 'timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
+    ]);
+    ensureTableColumns('analytics_sessions', [
+        'session_uuid' => "varchar(64) NOT NULL DEFAULT ''",
+        'visitor_uuid' => "varchar(64) NOT NULL DEFAULT ''",
+        'started_at' => 'datetime NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'last_activity_at' => 'datetime NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'landing_page' => 'varchar(500) DEFAULT NULL',
+        'referrer' => 'varchar(500) DEFAULT NULL',
+        'source' => 'varchar(100) DEFAULT NULL',
+        'medium' => 'varchar(100) DEFAULT NULL',
+        'campaign' => 'varchar(150) DEFAULT NULL',
+        'utm_source' => 'varchar(100) DEFAULT NULL',
+        'utm_medium' => 'varchar(100) DEFAULT NULL',
+        'utm_campaign' => 'varchar(150) DEFAULT NULL',
+        'utm_term' => 'varchar(150) DEFAULT NULL',
+        'utm_content' => 'varchar(150) DEFAULT NULL',
+        'created_at' => 'timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_at' => 'timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
+    ]);
+    ensureTableColumns('analytics_pageviews', [
+        'visitor_uuid' => "varchar(64) NOT NULL DEFAULT ''",
+        'session_uuid' => "varchar(64) NOT NULL DEFAULT ''",
+        'page_url' => 'varchar(1000) DEFAULT NULL',
+        'page_path' => 'varchar(500) DEFAULT NULL',
+        'page_title' => 'varchar(255) DEFAULT NULL',
+        'referrer' => 'varchar(500) DEFAULT NULL',
+        'screen_width' => 'int(11) DEFAULT NULL',
+        'screen_height' => 'int(11) DEFAULT NULL',
+        'browser_language' => 'varchar(50) DEFAULT NULL',
+        'timezone' => 'varchar(100) DEFAULT NULL',
+        'viewed_at' => 'datetime NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'created_at' => 'timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    ]);
     ensureTableColumns('visitor_analytics_logs', [
+        'session_id' => "varchar(64) NOT NULL DEFAULT ''",
+        'user_id' => "int(11) UNSIGNED DEFAULT NULL",
+        'customer_id' => "int(11) UNSIGNED DEFAULT NULL",
+        'source_type' => "varchar(100) DEFAULT NULL",
+        'source_name' => "varchar(150) DEFAULT NULL",
         'campaign_type' => "varchar(100) DEFAULT NULL AFTER source_name",
         'entry_link' => "varchar(500) DEFAULT NULL AFTER campaign_type",
+        'referrer_url' => "varchar(500) DEFAULT NULL",
+        'utm_source' => "varchar(100) DEFAULT NULL",
+        'utm_medium' => "varchar(100) DEFAULT NULL",
+        'utm_campaign' => "varchar(150) DEFAULT NULL",
+        'landing_page' => "varchar(500) DEFAULT NULL",
+        'current_page' => "varchar(500) DEFAULT NULL",
+        'next_page' => "varchar(500) DEFAULT NULL",
+        'related_module' => "varchar(100) DEFAULT NULL",
+        'related_record_id' => "int(11) UNSIGNED DEFAULT NULL",
+        'event_type' => "enum('external_entry','page_view','banner_view','banner_click','match_view','prediction_start','prediction_submit','category_view','menu_item_view','survey_view','survey_start','survey_submit','crm_link_entry','exit') NOT NULL DEFAULT 'page_view'",
+        'target_action' => "varchar(100) DEFAULT NULL",
+        'device_type' => "varchar(50) DEFAULT NULL",
+        'browser' => "varchar(100) DEFAULT NULL",
+        'operating_system' => "varchar(100) DEFAULT NULL",
+        'ip_address' => "varchar(64) DEFAULT NULL",
+        'branch_id' => "int(11) UNSIGNED DEFAULT NULL",
+        'is_new_visitor' => "tinyint(1) NOT NULL DEFAULT 0",
+        'is_converted' => "tinyint(1) NOT NULL DEFAULT 0",
+        'duration_seconds' => "int(11) DEFAULT NULL",
+        'created_at' => "timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP",
     ]);
-    if (!adminIndexExists('visitor_analytics_logs', 'idx_visitor_logs_related')) {
-        $db->exec('ALTER TABLE `visitor_analytics_logs` ADD INDEX `idx_visitor_logs_related` (`related_module`, `related_record_id`)');
-    }
+    ensureTableColumns('traffic_logs', [
+        'session_id' => "varchar(64) NOT NULL DEFAULT ''",
+        'ip_address' => 'varchar(64) DEFAULT NULL',
+        'country' => "varchar(100) DEFAULT 'Unknown'",
+        'city' => "varchar(100) DEFAULT 'Unknown'",
+        'isp' => 'varchar(255) DEFAULT NULL',
+        'referrer' => 'varchar(500) DEFAULT NULL',
+        'landing_page' => 'varchar(500) DEFAULT NULL',
+        'user_agent' => 'text DEFAULT NULL',
+        'browser' => 'varchar(100) DEFAULT NULL',
+        'os' => 'varchar(100) DEFAULT NULL',
+        'device' => 'varchar(50) DEFAULT NULL',
+        'language' => 'varchar(20) DEFAULT NULL',
+        'visit_duration' => 'int(11) DEFAULT NULL',
+        'pages_viewed' => 'int(11) NOT NULL DEFAULT 1',
+        'is_bot' => 'tinyint(1) NOT NULL DEFAULT 0',
+        'created_at' => 'timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    ]);
+    ensureTableColumns('traffic_sources', [
+        'source_name' => "varchar(100) NOT NULL DEFAULT 'unknown'",
+        'source_type' => "varchar(50) NOT NULL DEFAULT 'unknown'",
+        'visits_count' => 'int(11) NOT NULL DEFAULT 0',
+        'date' => "date NOT NULL DEFAULT '1970-01-01'",
+        'created_at' => 'timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    ]);
+    ensureTableColumns('visitor_sessions', [
+        'session_id' => "varchar(64) NOT NULL DEFAULT ''",
+        'ip_address' => 'varchar(64) DEFAULT NULL',
+        'started_at' => 'timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'last_activity' => 'timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
+        'is_active' => 'tinyint(1) NOT NULL DEFAULT 1',
+        'current_page' => 'varchar(500) DEFAULT NULL',
+        'source_name' => 'varchar(150) DEFAULT NULL',
+        'device_type' => 'varchar(50) DEFAULT NULL',
+        'browser' => 'varchar(100) DEFAULT NULL',
+        'os' => 'varchar(100) DEFAULT NULL',
+    ]);
+    ensureTableColumns('visitor_locations', [
+        'country' => "varchar(100) NOT NULL DEFAULT 'Unknown'",
+        'city' => "varchar(100) NOT NULL DEFAULT 'Unknown'",
+        'visits_count' => 'int(11) NOT NULL DEFAULT 0',
+        'date' => "date NOT NULL DEFAULT '1970-01-01'",
+        'created_at' => 'timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    ]);
+    ensureTableColumns('traffic_statistics', [
+        'stat_date' => "date NOT NULL DEFAULT '1970-01-01'",
+        'total_visits' => 'int(11) NOT NULL DEFAULT 0',
+        'unique_visitors' => 'int(11) NOT NULL DEFAULT 0',
+        'total_page_views' => 'int(11) NOT NULL DEFAULT 0',
+        'bounce_rate' => 'decimal(5,2) DEFAULT NULL',
+        'avg_duration' => 'int(11) DEFAULT NULL',
+        'created_at' => 'timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    ]);
+
+    adminEnsureIndexes('analytics_visitors', [
+        'uniq_analytics_visitor_uuid' => 'UNIQUE KEY `uniq_analytics_visitor_uuid` (`visitor_uuid`)',
+        'idx_analytics_visitors_device' => 'INDEX `idx_analytics_visitors_device` (`device_type`)',
+        'idx_analytics_visitors_browser' => 'INDEX `idx_analytics_visitors_browser` (`browser`)',
+        'idx_analytics_visitors_os' => 'INDEX `idx_analytics_visitors_os` (`os`)',
+        'idx_analytics_visitors_country' => 'INDEX `idx_analytics_visitors_country` (`country`)',
+    ]);
+    adminEnsureIndexes('analytics_sessions', [
+        'uniq_analytics_session_uuid' => 'UNIQUE KEY `uniq_analytics_session_uuid` (`session_uuid`)',
+        'idx_analytics_sessions_visitor' => 'INDEX `idx_analytics_sessions_visitor` (`visitor_uuid`)',
+        'idx_analytics_sessions_started' => 'INDEX `idx_analytics_sessions_started` (`started_at`)',
+        'idx_analytics_sessions_activity' => 'INDEX `idx_analytics_sessions_activity` (`last_activity_at`)',
+        'idx_analytics_sessions_source' => 'INDEX `idx_analytics_sessions_source` (`source`)',
+        'idx_analytics_sessions_medium' => 'INDEX `idx_analytics_sessions_medium` (`medium`)',
+    ]);
+    adminEnsureIndexes('analytics_pageviews', [
+        'idx_analytics_pageviews_visitor' => 'INDEX `idx_analytics_pageviews_visitor` (`visitor_uuid`)',
+        'idx_analytics_pageviews_session' => 'INDEX `idx_analytics_pageviews_session` (`session_uuid`)',
+        'idx_analytics_pageviews_viewed' => 'INDEX `idx_analytics_pageviews_viewed` (`viewed_at`)',
+        'idx_analytics_pageviews_path' => 'INDEX `idx_analytics_pageviews_path` (`page_path`(191))',
+    ]);
+    adminEnsureIndexes('visitor_analytics_logs', [
+        'idx_visitor_logs_session' => 'INDEX `idx_visitor_logs_session` (`session_id`)',
+        'idx_visitor_logs_source' => 'INDEX `idx_visitor_logs_source` (`source_type`, `source_name`)',
+        'idx_visitor_logs_pages' => 'INDEX `idx_visitor_logs_pages` (`landing_page`(191), `current_page`(191), `next_page`(191))',
+        'idx_visitor_logs_action' => 'INDEX `idx_visitor_logs_action` (`target_action`, `is_converted`)',
+        'idx_visitor_logs_related' => 'INDEX `idx_visitor_logs_related` (`related_module`, `related_record_id`)',
+        'idx_visitor_logs_created' => 'INDEX `idx_visitor_logs_created` (`created_at`)',
+    ]);
+    adminEnsureIndexes('traffic_logs', [
+        'idx_traffic_session' => 'INDEX `idx_traffic_session` (`session_id`)',
+        'idx_traffic_date' => 'INDEX `idx_traffic_date` (`created_at`)',
+        'idx_traffic_country' => 'INDEX `idx_traffic_country` (`country`)',
+    ]);
+    adminEnsureIndexes('traffic_sources', [
+        'uniq_source_date' => 'UNIQUE KEY `uniq_source_date` (`source_name`, `date`)',
+        'idx_source_type' => 'INDEX `idx_source_type` (`source_type`)',
+        'idx_source_date' => 'INDEX `idx_source_date` (`date`)',
+    ]);
+    adminEnsureIndexes('visitor_sessions', [
+        'uniq_session' => 'UNIQUE KEY `uniq_session` (`session_id`)',
+        'idx_session_active' => 'INDEX `idx_session_active` (`is_active`, `last_activity`)',
+    ]);
+    adminEnsureIndexes('visitor_locations', [
+        'uniq_location_date' => 'UNIQUE KEY `uniq_location_date` (`country`, `city`, `date`)',
+        'idx_location_date' => 'INDEX `idx_location_date` (`date`)',
+    ]);
+    adminEnsureIndexes('traffic_statistics', [
+        'uniq_stat_date' => 'UNIQUE KEY `uniq_stat_date` (`stat_date`)',
+    ]);
 }
 
 function adminVisitorAnalyticsSources(): array {

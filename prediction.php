@@ -9,9 +9,10 @@ $settingModel = new Setting();
 $matches = $matchModel->activeForPrediction();
 $status = null;
 $message = '';
+$reservationRequested = false;
 $selectedMatchId = (int)($_POST['match_id'] ?? ($_GET['match_id'] ?? ($matches[0]['id'] ?? 0)));
-$phoneNumber = (string)$settingModel->get('phone_number', '+98 21 1234 5678');
-$callNumber = preg_replace('/[^0-9+]/', '', $phoneNumber);
+$reservationPhone = '09153497502';
+$reservationCallNumber = preg_replace('/[^0-9+]/', '', $reservationPhone);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
@@ -19,6 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             throw new RuntimeException('درخواست نامعتبر است.');
         }
         $selectedMatchId = (int)($_POST['match_id'] ?? 0);
+        $reservationRequested = !empty($_POST['wants_reservation']);
         $predictionModel->createWithCrmMatch([
             'customer_name' => sanitizeInput($_POST['customer_name'] ?? ''),
             'customer_last_name' => sanitizeInput($_POST['customer_last_name'] ?? ''),
@@ -26,13 +28,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'match_id' => $selectedMatchId,
             'predicted_team_one_score' => (int)($_POST['predicted_team_one_score'] ?? -1),
             'predicted_team_two_score' => (int)($_POST['predicted_team_two_score'] ?? -1),
-            'wants_reservation' => !empty($_POST['wants_reservation']) ? 1 : 0,
+            'wants_reservation' => $reservationRequested ? 1 : 0,
             'source' => substr((string)($_SERVER['HTTP_REFERER'] ?? 'prediction.php'), 0, 150),
             'ip_address' => $_SERVER['REMOTE_ADDR'] ?? null,
             'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? null,
         ]);
         $status = 'success';
-        $message = 'پیش‌بینی شما ثبت شد. برای رزرو سریع میز در زمان پخش مسابقه، همین حالا با رستوران کی تماس بگیرید.';
+        $message = $reservationRequested
+            ? 'پیش‌بینی شما ثبت شد. برای تکمیل رزرو میز تماشای مسابقه، با مجموعه تماس بگیرید.'
+            : 'پیش‌بینی شما با موفقیت ثبت شد.';
         $matches = $matchModel->activeForPrediction();
     } catch (Throwable $e) {
         $status = 'error';
@@ -62,7 +66,7 @@ foreach ($matches as $match) {
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <?php echo renderSeoMeta('پیش‌بینی مسابقه | KEY', 'ثبت پیش‌بینی مسابقات ویژه مشتریان KEY', assetUrl('assets/images/home-preview.svg'), BASE_URL . '/prediction.php'); ?>
+    <?php echo renderSeoMeta('پیش‌بینی مسابقه مجموعه کي', 'ثبت پیش‌بینی مسابقات ویژه مشتریان ', assetUrl('assets/images/home-preview.svg'), BASE_URL . '/prediction.php'); ?>
     <?php echo localFontPreloadLinks(); ?>
     <style>
         @font-face{font-family:Vazirmatn;src:url('assets/fonts/Vazirmatn-Regular.woff2') format('woff2');font-display:swap}
@@ -109,8 +113,15 @@ foreach ($matches as $match) {
 <main class="wrap">
     <section class="shell">
         <aside class="panel intro">
-            <h1>پیش‌بینی مسابقه</h1>
-            <p>مسابقه را انتخاب کنید، نتیجه را حدس بزنید و اگر دوست دارید میز تماشای مسابقه را هم رزرو کنید.</p>
+            <h1>پیش‌بینی مسابقه جام جهانی 2026</h1>
+            <p>
+                ⚽ نتیجه مسابقات را پیش‌بینی کنید، میز تماشای مسابقه خود را رزرو کنید و همراه دوستانتان از پخش زنده مسابقات در مجموعه رستوران و کافیشاپ کِی لذت ببرید.
+                با ثبت پیش‌بینی صحیح، شانس برنده شدن بن‌های تخفیف رستوران و استخر را خواهید داشت.
+                </p>
+
+                <p>
+                🎁 جوایز ویژه با حمایت مجموعه رستوران و کافیشاپ کِی، مجموعه آبی دهکده المپیک، استخر هامون و خانه شنا به برندگان اهدا می‌شود.
+                </p>
             <div class="match-list">
                 <?php if (!$matches): ?>
                     <div class="match-card">در حال حاضر مسابقه فعالی برای پیش‌بینی وجود ندارد.</div>
@@ -139,7 +150,7 @@ foreach ($matches as $match) {
             <?php if ($status): ?><div class="alert <?php echo htmlspecialchars($status); ?>"><?php echo htmlspecialchars($message); ?></div><?php endif; ?>
             <?php if ($status === 'success'): ?>
                 <div class="actions">
-                    <?php if ($callNumber): ?><a class="btn call" href="tel:<?php echo htmlspecialchars($callNumber); ?>">تماس برای رزرو سریع</a><?php endif; ?>
+                    <?php if ($reservationRequested && $reservationCallNumber !== ''): ?><a class="btn call" href="tel:<?php echo htmlspecialchars($reservationCallNumber); ?>">تماس برای رزرو میز</a><?php endif; ?>
                     <a class="btn" href="prediction.php">ثبت پیش‌بینی دیگر</a>
                 </div>
             <?php endif; ?>

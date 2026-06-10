@@ -397,23 +397,53 @@ if (!function_exists('formatJalaliDateTime')) {
     }
 }
 
+if (!function_exists('normalizePersianDateDigits')) {
+    function normalizePersianDateDigits($value) {
+        return strtr((string)$value, ['۰'=>'0','۱'=>'1','۲'=>'2','۳'=>'3','۴'=>'4','۵'=>'5','۶'=>'6','۷'=>'7','۸'=>'8','۹'=>'9','٠'=>'0','١'=>'1','٢'=>'2','٣'=>'3','٤'=>'4','٥'=>'5','٦'=>'6','٧'=>'7','٨'=>'8','٩'=>'9']);
+    }
+}
+
+if (!function_exists('parsePersianTime')) {
+    function parsePersianTime($value) {
+        $value = trim(normalizePersianDateDigits($value));
+        if ($value === '') return null;
+        if (!preg_match('/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/', $value, $matches)) return $value;
+        $hour = (int)$matches[1];
+        $minute = (int)$matches[2];
+        $second = isset($matches[3]) ? (int)$matches[3] : 0;
+        if ($hour > 23 || $minute > 59 || $second > 59) return $value;
+        return sprintf('%02d:%02d:%02d', $hour, $minute, $second);
+    }
+}
+
 if (!function_exists('parsePersianDate')) {
     function parsePersianDate($value, $withTime = false) {
-        $value = trim((string)$value);
+        $value = trim(normalizePersianDateDigits($value));
         if ($value === '') return null;
-        $value = strtr($value, ['۰'=>'0','۱'=>'1','۲'=>'2','۳'=>'3','۴'=>'4','۵'=>'5','۶'=>'6','۷'=>'7','۸'=>'8','۹'=>'9','٠'=>'0','١'=>'1','٢'=>'2','٣'=>'3','٤'=>'4','٥'=>'5','٦'=>'6','٧'=>'7','٨'=>'8','٩'=>'9']);
-        $parts = preg_split('/\s+/', $value);
-        $datePart = str_replace('-', '/', $parts[0]);
-        $date = explode('/', $datePart);
-        if (count($date) !== 3) return $value;
-        [$y, $m, $d] = array_map('intval', $date);
-        if ($y < 1700) {
+
+        if (!preg_match('/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})(?:\s+(\d{1,2}:\d{2}(?::\d{2})?))?$/', $value, $matches)) {
+            return $value;
+        }
+
+        $y = (int)$matches[1];
+        $m = (int)$matches[2];
+        $d = (int)$matches[3];
+
+        if ($y >= 1300 && $y <= 1599) {
             [$gy, $gm, $gd] = jalaliToGregorianParts($y, $m, $d);
         } else {
             [$gy, $gm, $gd] = [$y, $m, $d];
         }
-        $time = $parts[1] ?? '00:00:00';
-        if (strlen($time) === 5) $time .= ':00';
+
+        if (!checkdate($gm, $gd, $gy)) {
+            return $value;
+        }
+
+        $time = parsePersianTime($matches[4] ?? '00:00:00');
+        if ($time === null || !preg_match('/^\d{2}:\d{2}:\d{2}$/', $time)) {
+            return $value;
+        }
+
         return sprintf('%04d-%02d-%02d%s', $gy, $gm, $gd, $withTime ? ' ' . $time : '');
     }
 }

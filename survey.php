@@ -518,5 +518,6 @@ $orderId = $_GET['order'] ?? null;
             }
         });
     </script>
+    <script src="/assets/js/analytics-tracker.js" defer></script>
 </body>
 </html>

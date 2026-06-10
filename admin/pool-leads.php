@@ -1,10 +1,16 @@
 <?php
 require_once __DIR__ . '/lib/admin_schema.php';
 $currentAdmin = adminGuard('manager');
+ensureAdminSchema();
 $db = adminDb();
 $pageTitle = 'مدیریت لیدهای استخر';
 $error = '';
 $success = '';
+$poolOptions = [
+    'استخر هامون',
+    'استخر دهکده المپیک',
+    'استخر خانه شنا',
+];
 
 // Handle status update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
@@ -19,7 +25,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $stmt->execute([$status, $id]);
             $success = 'وضعیت با موفقیت به‌روزرسانی شد.';
         } catch (Throwable $e) {
-            $error = 'خطا در به‌روزرسانی: ' . $e->getMessage();
+            safeAdminLog('Pool lead status update failed: ' . $e->getMessage());
+            $error = 'خطا در به‌روزرسانی وضعیت رخ داد.';
         }
     } elseif ($_POST['action'] === 'delete') {
         $id = (int)$_POST['id'];
@@ -29,7 +36,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $stmt->execute([$id]);
             $success = 'لید با موفقیت حذف شد.';
         } catch (Throwable $e) {
-            $error = 'خطا در حذف: ' . $e->getMessage();
+            safeAdminLog('Pool lead delete failed: ' . $e->getMessage());
+            $error = 'خطا در حذف لید رخ داد.';
         }
     } elseif ($_POST['action'] === 'add_note') {
         $id = (int)$_POST['id'];
@@ -40,7 +48,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $stmt->execute([$notes, $id]);
             $success = 'یادداشت با موفقیت ذخیره شد.';
         } catch (Throwable $e) {
-            $error = 'خطا در ذخیره یادداشت: ' . $e->getMessage();
+            safeAdminLog('Pool lead note update failed: ' . $e->getMessage());
+            $error = 'خطا در ذخیره یادداشت رخ داد.';
         }
     }
 }
@@ -48,6 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 // Filters
 $filterStatus = $_GET['status'] ?? '';
 $filterSource = $_GET['source'] ?? '';
+$filterPool = $_GET['pool_name'] ?? '';
 $search = trim($_GET['search'] ?? '');
 
 // Build query
@@ -64,8 +74,14 @@ if ($filterSource !== '') {
     $params[] = $filterSource;
 }
 
+if ($filterPool !== '') {
+    $where[] = 'pool_name = ?';
+    $params[] = $filterPool;
+}
+
 if ($search !== '') {
-    $where[] = '(full_name LIKE ? OR mobile LIKE ?)';
+    $where[] = '(full_name LIKE ? OR mobile LIKE ? OR pool_name LIKE ?)';
+    $params[] = '%' . $search . '%';
     $params[] = '%' . $search . '%';
     $params[] = '%' . $search . '%';
 }
@@ -81,6 +97,11 @@ $leads = $stmt->fetchAll();
 $sourcesStmt = $db->query("SELECT DISTINCT acquisition_source FROM pool_leads WHERE acquisition_source IS NOT NULL ORDER BY acquisition_source");
 $sources = $sourcesStmt->fetchAll(PDO::FETCH_COLUMN);
 
+// Get pool options, including legacy/custom values if any exist.
+$poolStmt = $db->query("SELECT DISTINCT pool_name FROM pool_leads WHERE pool_name IS NOT NULL AND pool_name <> '' ORDER BY pool_name");
+$existingPools = $poolStmt->fetchAll(PDO::FETCH_COLUMN);
+$poolOptions = array_values(array_unique(array_merge($poolOptions, $existingPools)));
+
 // Statistics
 $statsStmt = $db->query("
     SELECT 
@@ -92,6 +113,14 @@ $statsStmt = $db->query("
     FROM pool_leads
 ");
 $stats = $statsStmt->fetch();
+
+$poolStatsStmt = $db->query("
+    SELECT COALESCE(NULLIF(pool_name, ''), '-') AS pool_name, COUNT(*) AS total
+    FROM pool_leads
+    GROUP BY COALESCE(NULLIF(pool_name, ''), '-')
+    ORDER BY total DESC, pool_name ASC
+");
+$poolStats = $poolStatsStmt->fetchAll();
 
 include __DIR__ . '/includes/header.php';
 ?>
@@ -192,13 +221,24 @@ include __DIR__ . '/includes/header.php';
     </div>
 </div>
 
+<?php if ($poolStats): ?>
+<div class="stats-row">
+    <?php foreach ($poolStats as $poolStat): ?>
+        <div class="stat-card">
+            <h3><?php echo h($poolStat['total']); ?></h3>
+            <p><?php echo h($poolStat['pool_name'] ?: '-'); ?></p>
+        </div>
+    <?php endforeach; ?>
+</div>
+<?php endif; ?>
+
 <div class="card">
     <div class="card-header">
         <h2>فیلترها و جستجو</h2>
     </div>
     <div class="card-body">
         <form method="get" class="filter-form">
-            <input type="text" name="search" class="form-control" placeholder="جستجو نام یا موبایل" value="<?php echo h($search); ?>" style="flex: 1; min-width: 200px;">
+            <input type="text" name="search" class="form-control" placeholder="جستجو نام، موبایل یا استخر" value="<?php echo h($search); ?>" style="flex: 1; min-width: 200px;">
             
             <select name="status" class="form-control" style="width: 150px;">
                 <option value="">همه وضعیت‌ها</option>
@@ -213,6 +253,15 @@ include __DIR__ . '/includes/header.php';
                 <?php foreach ($sources as $source): ?>
                     <option value="<?php echo h($source); ?>" <?php echo $filterSource === $source ? 'selected' : ''; ?>>
                         <?php echo h($source); ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+
+            <select name="pool_name" class="form-control" style="width: 190px;">
+                <option value="">همه استخرها</option>
+                <?php foreach ($poolOptions as $poolOption): ?>
+                    <option value="<?php echo h($poolOption); ?>" <?php echo $filterPool === $poolOption ? 'selected' : ''; ?>>
+                        <?php echo h($poolOption); ?>
                     </option>
                 <?php endforeach; ?>
             </select>
@@ -235,6 +284,7 @@ include __DIR__ . '/includes/header.php';
                         <th>شناسه</th>
                         <th>نام کامل</th>
                         <th>موبایل</th>
+                        <th>استخر</th>
                         <th>منبع جذب</th>
                         <th>وضعیت</th>
                         <th>یادداشت</th>
@@ -248,6 +298,7 @@ include __DIR__ . '/includes/header.php';
                             <td><?php echo h($lead['id']); ?></td>
                             <td><?php echo h($lead['full_name']); ?></td>
                             <td><a href="tel:<?php echo h($lead['mobile']); ?>"><?php echo h($lead['mobile']); ?></a></td>
+                            <td><?php echo h(($lead['pool_name'] ?? '') !== '' ? $lead['pool_name'] : '-'); ?></td>
                             <td><?php echo h($lead['acquisition_source'] ?? '-'); ?></td>
                             <td>
                                 <form method="post" style="display: inline;">
