@@ -44,6 +44,170 @@ function homeColumnExists(PDO $db, string $table, string $column): bool {
     }
 }
 
+function homeTableExists(PDO $db, string $table): bool {
+    try {
+        $stmt = $db->prepare('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name');
+        $stmt->execute(['table_name' => $table]);
+        return (int)$stmt->fetchColumn() > 0;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function homeIndexExists(PDO $db, string $table, string $index): bool {
+    try {
+        $stmt = $db->prepare('SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name AND INDEX_NAME = :index_name');
+        $stmt->execute(['table_name' => $table, 'index_name' => $index]);
+        return (int)$stmt->fetchColumn() > 0;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function homeColumnIsNullable(PDO $db, string $table, string $column): bool {
+    try {
+        $stmt = $db->prepare('SELECT IS_NULLABLE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name AND COLUMN_NAME = :column_name LIMIT 1');
+        $stmt->execute(['table_name' => $table, 'column_name' => $column]);
+        return strtoupper((string)$stmt->fetchColumn()) === 'YES';
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function homeEnsureCustomerClubCrmSchema(PDO $db): void {
+    if (!homeTableExists($db, 'crm_customers')) {
+        return;
+    }
+
+    try {
+        if (!homeColumnExists($db, 'crm_customers', 'email')) {
+            $db->exec("ALTER TABLE `crm_customers` ADD COLUMN `email` varchar(150) DEFAULT NULL AFTER `mobile`");
+        }
+    } catch (Throwable $e) {
+        error_log('Customer Club CRM email column ensure failed: ' . $e->getMessage());
+    }
+
+    try {
+        if (homeColumnExists($db, 'crm_customers', 'email') && !homeIndexExists($db, 'crm_customers', 'idx_crm_email')) {
+            $db->exec("ALTER TABLE `crm_customers` ADD INDEX `idx_crm_email` (`email`)");
+        }
+    } catch (Throwable $e) {
+        error_log('Customer Club CRM email index ensure failed: ' . $e->getMessage());
+    }
+}
+
+function homeCustomerClubTags($existingTags): string {
+    $tags = array_filter(array_map('trim', explode(',', (string)$existingTags)));
+    foreach (['customer_club', 'باشگاه مشتریان'] as $tag) {
+        if (!in_array($tag, $tags, true)) {
+            $tags[] = $tag;
+        }
+    }
+    return implode(', ', $tags);
+}
+
+function homeCustomerClubNotes($existingNotes): string {
+    $line = 'ثبت از فرم باشگاه مشتریان در صفحه اصلی - ' . date('Y-m-d H:i:s');
+    $existingNotes = trim((string)$existingNotes);
+    return $existingNotes === '' ? $line : $existingNotes . "\n" . $line;
+}
+
+function homeUpdateCustomerClubCrmRow(PDO $db, int $id, array $row, array $columns, ?string $email = null): void {
+    $sets = [];
+    $params = ['id' => $id];
+
+    if (in_array('acquisition_source', $columns, true)) {
+        $sets[] = '`acquisition_source` = :acquisition_source';
+        $params['acquisition_source'] = 'Customer Club';
+    }
+    if (in_array('customer_status', $columns, true) && trim((string)($row['customer_status'] ?? '')) === '') {
+        $sets[] = '`customer_status` = :customer_status';
+        $params['customer_status'] = 'new_customer';
+    }
+    if (in_array('tags', $columns, true)) {
+        $sets[] = '`tags` = :tags';
+        $params['tags'] = homeCustomerClubTags($row['tags'] ?? '');
+    }
+    if (in_array('follow_up_notes', $columns, true)) {
+        $sets[] = '`follow_up_notes` = :follow_up_notes';
+        $params['follow_up_notes'] = homeCustomerClubNotes($row['follow_up_notes'] ?? '');
+    }
+    if ($email && in_array('email', $columns, true) && trim((string)($row['email'] ?? '')) === '') {
+        $sets[] = '`email` = :email';
+        $params['email'] = $email;
+    }
+    if (in_array('updated_at', $columns, true)) {
+        $sets[] = '`updated_at` = CURRENT_TIMESTAMP';
+    }
+
+    if (!$sets) {
+        return;
+    }
+
+    $stmt = $db->prepare('UPDATE `crm_customers` SET ' . implode(', ', $sets) . ' WHERE `id` = :id');
+    $stmt->execute($params);
+}
+
+function homeInsertCustomerClubCrmRow(PDO $db, array $columns, ?string $mobile, ?string $email): void {
+    $data = [];
+    if (in_array('full_name', $columns, true)) $data['full_name'] = 'عضو باشگاه مشتریان';
+    if ($mobile !== null && in_array('mobile', $columns, true)) $data['mobile'] = $mobile;
+    if ($email !== null && in_array('email', $columns, true)) $data['email'] = $email;
+    if (in_array('acquisition_source', $columns, true)) $data['acquisition_source'] = 'Customer Club';
+    if (in_array('customer_status', $columns, true)) $data['customer_status'] = 'new_customer';
+    if (in_array('tags', $columns, true)) $data['tags'] = 'customer_club, باشگاه مشتریان';
+    if (in_array('follow_up_notes', $columns, true)) $data['follow_up_notes'] = homeCustomerClubNotes('');
+    if (in_array('points_balance', $columns, true)) $data['points_balance'] = 0;
+
+    if (!$data) {
+        return;
+    }
+
+    $names = array_keys($data);
+    $quoted = array_map(static fn($column) => '`' . str_replace('`', '``', $column) . '`', $names);
+    $placeholders = array_map(static fn($column) => ':' . $column, $names);
+    $stmt = $db->prepare('INSERT INTO `crm_customers` (' . implode(', ', $quoted) . ') VALUES (' . implode(', ', $placeholders) . ')');
+    $stmt->execute($data);
+}
+
+function homeSaveCustomerClubToCrm(PDO $db, string $contact, bool $isPhone, bool $isEmail): void {
+    if (!homeTableExists($db, 'crm_customers')) {
+        return;
+    }
+
+    $columnRows = $db->query('DESCRIBE `crm_customers`')->fetchAll(PDO::FETCH_ASSOC);
+    $columns = array_map(static fn($row) => $row['Field'], $columnRows);
+    $mobile = $isPhone ? preg_replace('/[\s\-()]/', '', $contact) : null;
+    $email = $isEmail ? trim($contact) : null;
+
+    if ($mobile !== null && in_array('mobile', $columns, true)) {
+        $stmt = $db->prepare('SELECT * FROM `crm_customers` WHERE `mobile` = :mobile LIMIT 1');
+        $stmt->execute(['mobile' => $mobile]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row) {
+            homeUpdateCustomerClubCrmRow($db, (int)$row['id'], $row, $columns, $email);
+            return;
+        }
+        homeInsertCustomerClubCrmRow($db, $columns, $mobile, $email);
+        return;
+    }
+
+    if ($email !== null && in_array('email', $columns, true)) {
+        $stmt = $db->prepare('SELECT * FROM `crm_customers` WHERE `email` = :email LIMIT 1');
+        $stmt->execute(['email' => $email]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row) {
+            homeUpdateCustomerClubCrmRow($db, (int)$row['id'], $row, $columns, $email);
+            return;
+        }
+        if (in_array('mobile', $columns, true) && !homeColumnIsNullable($db, 'crm_customers', 'mobile')) {
+            error_log('Customer Club CRM email-only skipped because crm_customers.mobile is required.');
+            return;
+        }
+        homeInsertCustomerClubCrmRow($db, $columns, null, $email);
+    }
+}
+
 function homeBannerImageSrc($value): string {
     $path = trim((string)$value);
 
@@ -235,6 +399,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_name'] ?? '') === 'ne
                     'phone' => $isPhone ? $phoneCandidate : null,
                     'email' => $isEmail ? $newsletterInput : null,
                 ]);
+
+                try {
+                    homeEnsureCustomerClubCrmSchema($db);
+                    homeSaveCustomerClubToCrm($db, $newsletterInput, (bool)$isPhone, (bool)$isEmail);
+                } catch (Throwable $crmError) {
+                    error_log('Customer Club CRM save failed: ' . $crmError->getMessage());
+                }
 
                 $newsletterStatus = 'success';
                 $newsletterMessage = 'عضویت شما با موفقیت ثبت شد.';

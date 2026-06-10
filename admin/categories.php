@@ -16,6 +16,9 @@ $error = '';
 try {
     adminEnsureModuleTables($config);
     $config = adminModuleNormalizeConfig($config);
+    if (!empty($config['schema_error'])) {
+        $error = $config['schema_error'];
+    }
     if (empty($config['fields'])) {
         $config['readonly_create'] = true;
         safeAdminLog('Admin module has no editable fields after schema normalization (' . basename($_SERVER['PHP_SELF']) . ' -> ' . ($config['table'] ?? 'unknown') . ')');
@@ -33,7 +36,7 @@ if ($action === 'add' && !empty($config['readonly_create'])) {
     $action = 'list';
 }
 if (in_array($action, ['add', 'edit'], true) && empty($config['fields'])) {
-    $error = 'فرم این صفحه با ستون‌های واقعی جدول همگام نیست.';
+    if (!$error) $error = 'فرم این صفحه با ستون‌های واقعی جدول همگام نیست.';
     $action = 'list';
 }
 $editRow = null;
@@ -56,14 +59,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
             }
             $current = $id ? (adminModuleFetchRow($config, $id) ?: []) : [];
             $data = adminModuleCollectData($config, $current, $currentAdmin);
+            $data = adminModulePrepareData($config, $data, $current);
+            adminModuleValidateData($config, $data, $id);
             $savedId = adminModuleSave($config, $data, $id);
             if ($config['table'] === 'matches') {
                 adminRecalculatePredictionsForMatch($savedId);
             }
             redirectTo(basename($_SERVER['PHP_SELF']) . '?saved=1');
         }
-    } catch (Throwable $e) {
+    } catch (PDOException $e) {
+        safeAdminLog('Admin module save failed (categories): ' . $e->getMessage());
+        $error = 'ذخیره انجام نشد. جزئیات خطا در لاگ سیستم ثبت شد.';
+    } catch (RuntimeException $e) {
         $error = $e->getMessage();
+    } catch (Throwable $e) {
+        safeAdminLog('Admin module save failed (categories): ' . $e->getMessage());
+        $error = 'ذخیره انجام نشد. جزئیات خطا در لاگ سیستم ثبت شد.';
     }
 }
 
@@ -119,11 +130,13 @@ include __DIR__ . '/includes/header.php';
                 <input class="form-control" name="q" placeholder="جستجو" value="<?php echo h($_GET['q'] ?? ''); ?>">
                 <input class="form-control" name="date_from" placeholder="از تاریخ" value="<?php echo h($_GET['date_from'] ?? ''); ?>">
                 <input class="form-control" name="date_to" placeholder="تا تاریخ" value="<?php echo h($_GET['date_to'] ?? ''); ?>">
-                <?php foreach (($config['filters'] ?? []) as $filter): $field = $config['fields'][$filter] ?? ['label' => adminModuleLabel($config, $filter), 'type' => 'checkbox']; $value = $_GET[$filter] ?? ''; ?>
+                <?php foreach (($config['filters'] ?? []) as $filter): $field = adminModuleFilterMeta($config, $filter); $value = $_GET[$filter] ?? ''; ?>
                     <?php if (($field['type'] ?? '') === 'select'): ?>
                         <select class="form-control" name="<?php echo h($filter); ?>"><option value=""><?php echo h($field['label']); ?></option><?php foreach (($field['options'] ?? []) as $key => $label): ?><option value="<?php echo h($key); ?>" <?php echo (string)$value === (string)$key ? 'selected' : ''; ?>><?php echo h($label); ?></option><?php endforeach; ?></select>
                     <?php elseif (in_array(($field['type'] ?? ''), ['category','match','survey_form'], true)): ?>
                         <select class="form-control" name="<?php echo h($filter); ?>"><option value=""><?php echo h($field['label']); ?></option><?php foreach (adminOptionRows($field['type']) as $option): ?><option value="<?php echo h($option['id']); ?>" <?php echo (string)$value === (string)$option['id'] ? 'selected' : ''; ?>><?php echo h($option['title']); ?></option><?php endforeach; ?></select>
+                    <?php elseif (($field['type'] ?? '') === 'number'): ?>
+                        <input class="form-control" type="number" name="<?php echo h($filter); ?>" placeholder="<?php echo h($field['label']); ?>" value="<?php echo h($value); ?>">
                     <?php else: ?>
                         <select class="form-control" name="<?php echo h($filter); ?>"><option value=""><?php echo h(adminModuleLabel($config, $filter)); ?></option><option value="1" <?php echo (string)$value === '1' ? 'selected' : ''; ?>>بله</option><option value="0" <?php echo (string)$value === '0' ? 'selected' : ''; ?>>خیر</option></select>
                     <?php endif; ?>
@@ -136,7 +149,7 @@ include __DIR__ . '/includes/header.php';
                     <tbody>
                     <?php foreach ($data['rows'] as $row): ?>
                         <tr>
-                            <?php foreach ($config['columns'] as $column): ?><td><?php echo h(adminModuleFormatValue($column, $row[$column] ?? '')); ?></td><?php endforeach; ?>
+                            <?php foreach ($config['columns'] as $column): ?><td><?php echo adminModuleRenderValue($config, $column, $row[$column] ?? '', $row); ?></td><?php endforeach; ?>
                             <td>
                                 <a class="btn btn-sm btn-info" href="?action=edit&id=<?php echo h($row['id']); ?>">ویرایش</a>
                                 <form method="post" style="display:inline">
