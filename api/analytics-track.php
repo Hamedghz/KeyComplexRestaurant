@@ -22,7 +22,7 @@ function analyticsTrackString($value, int $max = 255): string {
 
 function analyticsTrackUuid($value): string {
     $value = strtolower(analyticsString($value, 64));
-    if (preg_match('/^[a-f0-9-]{32,64}$/', $value)) {
+    if (preg_match('/^[a-z0-9._:-]{3,64}$/', $value)) {
         return $value;
     }
     return bin2hex(random_bytes(16));
@@ -69,7 +69,12 @@ function analyticsTrackClassifySource(array $payload): array {
     $referrer = analyticsString($payload['referrer'] ?? '', 500);
 
     if ($utmSource !== '' || $utmMedium !== '' || $utmCampaign !== '') {
-        return ['source' => $utmSource !== '' ? $utmSource : 'campaign', 'medium' => 'campaign', 'campaign' => $utmCampaign, 'class' => 'campaign'];
+        return [
+            'source' => $utmSource !== '' ? $utmSource : 'campaign',
+            'medium' => $utmMedium !== '' ? $utmMedium : 'campaign',
+            'campaign' => $utmCampaign,
+            'class' => $utmMedium !== '' ? $utmMedium : 'campaign',
+        ];
     }
     if ($referrer === '') {
         return ['source' => 'direct', 'medium' => 'direct', 'campaign' => '', 'class' => 'direct'];
@@ -145,20 +150,43 @@ function analyticsTrackEventType(string $targetAction): string {
 
 function analyticsTrackTableExists(PDO $db, string $table): bool {
     try {
-        $stmt = $db->prepare('SHOW TABLES LIKE :table');
-        $stmt->execute(['table' => $table]);
-        return (bool)$stmt->fetchColumn();
+        $table = trim($table);
+        if ($table === '') {
+            return false;
+        }
+
+        $stmt = $db->prepare("
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = :table_name
+        ");
+        $stmt->execute(['table_name' => $table]);
+
+        return (int)$stmt->fetchColumn() > 0;
     } catch (Throwable $e) {
-        error_log('Analytics table check failed: ' . $e->getMessage());
+        error_log('Analytics table exists check failed for ' . $table . ': ' . $e->getMessage());
         return false;
     }
 }
 
 function analyticsTrackColumnExists(PDO $db, string $table, string $column): bool {
     try {
-        $stmt = $db->prepare('SHOW COLUMNS FROM `' . str_replace('`', '``', $table) . '` LIKE :column');
-        $stmt->execute(['column' => $column]);
-        return (bool)$stmt->fetchColumn();
+        $table = trim($table);
+        $column = trim($column);
+        if ($table === '' || $column === '') {
+            return false;
+        }
+
+        $stmt = $db->prepare("
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = :table_name
+              AND COLUMN_NAME = :column_name
+        ");
+        $stmt->execute(['table_name' => $table, 'column_name' => $column]);
+        return (int)$stmt->fetchColumn() > 0;
     } catch (Throwable $e) {
         error_log("Analytics column check failed for {$table}.{$column}: " . $e->getMessage());
         return false;
@@ -167,9 +195,21 @@ function analyticsTrackColumnExists(PDO $db, string $table, string $column): boo
 
 function analyticsTrackIndexExists(PDO $db, string $table, string $index): bool {
     try {
-        $stmt = $db->prepare('SHOW INDEX FROM `' . str_replace('`', '``', $table) . '` WHERE Key_name = :index_name');
-        $stmt->execute(['index_name' => $index]);
-        return (bool)$stmt->fetchColumn();
+        $table = trim($table);
+        $index = trim($index);
+        if ($table === '' || $index === '') {
+            return false;
+        }
+
+        $stmt = $db->prepare("
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = :table_name
+              AND INDEX_NAME = :index_name
+        ");
+        $stmt->execute(['table_name' => $table, 'index_name' => $index]);
+        return (int)$stmt->fetchColumn() > 0;
     } catch (Throwable $e) {
         error_log("Analytics index check failed for {$table}.{$index}: " . $e->getMessage());
         return false;
@@ -616,7 +656,15 @@ function analyticsTrackEnsureTables(PDO $db): void {
 }
 
 function analyticsTrackTablesStatus(PDO $db): array {
-    $tables = [
+    $status = [];
+    foreach (analyticsTrackTableNames() as $table) {
+        $status[$table] = analyticsTrackTableExists($db, $table);
+    }
+    return $status;
+}
+
+function analyticsTrackTableNames(): array {
+    return [
         'analytics_visitors',
         'analytics_sessions',
         'analytics_pageviews',
@@ -627,19 +675,52 @@ function analyticsTrackTablesStatus(PDO $db): array {
         'visitor_locations',
         'traffic_statistics',
     ];
-    $status = [];
-    foreach ($tables as $table) {
-        $status[$table] = analyticsTrackTableExists($db, $table);
+}
+
+function analyticsTrackInitialTableFlags(bool $value = false): array {
+    return array_fill_keys(analyticsTrackTableNames(), $value);
+}
+
+function analyticsTrackDatabaseName(PDO $db): string {
+    try {
+        return (string)$db->query('SELECT DATABASE()')->fetchColumn();
+    } catch (Throwable $e) {
+        error_log('Analytics database name lookup failed: ' . $e->getMessage());
+        return '';
     }
-    return $status;
+}
+
+function analyticsTrackSafeErrorCode(Throwable $e): string {
+    if ($e instanceof PDOException) {
+        return 'database_write_failed';
+    }
+    return 'write_failed';
+}
+
+function analyticsTrackRunTableWrite(PDO $db, string $table, array &$inserted, array &$errors, callable $writer): void {
+    try {
+        if (!analyticsTrackTableExists($db, $table)) {
+            $inserted[$table] = false;
+            $errors[$table] = 'table_missing';
+            return;
+        }
+        $writer();
+        $inserted[$table] = true;
+    } catch (Throwable $e) {
+        $inserted[$table] = false;
+        $errors[$table] = analyticsTrackSafeErrorCode($e);
+        error_log('Analytics write failed for ' . $table . ': ' . $e->getMessage());
+    }
 }
 
 function analyticsTrackHealth(): void {
     try {
         $db = Database::getInstance()->getConnection();
+        analyticsTrackEnsureTables($db);
         analyticsTrackJson([
             'ok' => true,
             'database' => 'connected',
+            'database_name' => analyticsTrackDatabaseName($db),
             'tables' => analyticsTrackTablesStatus($db),
         ]);
     } catch (Throwable $e) {
@@ -647,6 +728,7 @@ function analyticsTrackHealth(): void {
         analyticsTrackJson([
             'ok' => false,
             'database' => 'unavailable',
+            'database_name' => '',
             'tables' => [],
         ]);
     }
@@ -689,8 +771,8 @@ function analyticsTrackIpHash(): ?string {
     return $ip !== '' ? hash('sha256', $ip . '|' . DB_NAME) : null;
 }
 
-function analyticsTrackWriteLegacyTables(PDO $db, array $data): void {
-    try {
+function analyticsTrackWriteLegacyTables(PDO $db, array $data, array &$inserted, array &$errors): void {
+    analyticsTrackRunTableWrite($db, 'traffic_logs', $inserted, $errors, function () use ($db, $data): void {
         $trafficStmt = $db->prepare('INSERT INTO traffic_logs (session_id, ip_address, country, city, referrer, landing_page, user_agent, browser, os, device, language, pages_viewed, is_bot, created_at) VALUES (:session_id, :ip_address, :country, :city, :referrer, :landing_page, :user_agent, :browser, :os, :device, :language, 1, :is_bot, :created_at)');
         $trafficStmt->execute([
             'session_id' => $data['session_uuid'],
@@ -707,11 +789,9 @@ function analyticsTrackWriteLegacyTables(PDO $db, array $data): void {
             'is_bot' => $data['is_bot'],
             'created_at' => $data['now'],
         ]);
-    } catch (Throwable $e) {
-        error_log('Analytics legacy traffic_logs write failed: ' . $e->getMessage());
-    }
+    });
 
-    try {
+    analyticsTrackRunTableWrite($db, 'visitor_sessions', $inserted, $errors, function () use ($db, $data): void {
         $sessionStmt = $db->prepare('INSERT INTO visitor_sessions (session_id, ip_address, started_at, last_activity, is_active, current_page, source_name, device_type, browser, os) VALUES (:session_id, :ip_address, :now, :now, 1, :current_page, :source_name, :device_type, :browser, :os) ON DUPLICATE KEY UPDATE last_activity = VALUES(last_activity), is_active = 1, current_page = VALUES(current_page), source_name = VALUES(source_name), device_type = VALUES(device_type), browser = VALUES(browser), os = VALUES(os)');
         $sessionStmt->execute([
             'session_id' => $data['session_uuid'],
@@ -723,42 +803,34 @@ function analyticsTrackWriteLegacyTables(PDO $db, array $data): void {
             'browser' => $data['browser'],
             'os' => $data['os'],
         ]);
-    } catch (Throwable $e) {
-        error_log('Analytics legacy visitor_sessions write failed: ' . $e->getMessage());
-    }
+    });
 
-    try {
+    analyticsTrackRunTableWrite($db, 'traffic_sources', $inserted, $errors, function () use ($db, $data): void {
         $sourceStmt = $db->prepare('INSERT INTO traffic_sources (source_name, source_type, visits_count, date) VALUES (:source_name, :source_type, 1, :date) ON DUPLICATE KEY UPDATE visits_count = visits_count + 1');
         $sourceStmt->execute([
             'source_name' => $data['source_name'],
             'source_type' => $data['source_type'],
             'date' => $data['stat_date'],
         ]);
-    } catch (Throwable $e) {
-        error_log('Analytics legacy traffic_sources write failed: ' . $e->getMessage());
-    }
+    });
 
-    try {
+    analyticsTrackRunTableWrite($db, 'visitor_locations', $inserted, $errors, function () use ($db, $data): void {
         $locationStmt = $db->prepare('INSERT INTO visitor_locations (country, city, visits_count, date) VALUES (:country, :city, 1, :date) ON DUPLICATE KEY UPDATE visits_count = visits_count + 1');
         $locationStmt->execute([
             'country' => 'Unknown',
             'city' => 'Unknown',
             'date' => $data['stat_date'],
         ]);
-    } catch (Throwable $e) {
-        error_log('Analytics legacy visitor_locations write failed: ' . $e->getMessage());
-    }
+    });
 
-    try {
+    analyticsTrackRunTableWrite($db, 'traffic_statistics', $inserted, $errors, function () use ($db, $data): void {
         $statsStmt = $db->prepare('INSERT INTO traffic_statistics (stat_date, total_visits, unique_visitors, total_page_views, bounce_rate, avg_duration) VALUES (:stat_date, 1, :unique_visitors, 1, NULL, NULL) ON DUPLICATE KEY UPDATE total_visits = total_visits + 1, total_page_views = total_page_views + 1, unique_visitors = unique_visitors + :unique_visitors_update');
         $statsStmt->execute([
             'stat_date' => $data['stat_date'],
             'unique_visitors' => $data['is_new_session'],
             'unique_visitors_update' => $data['is_new_session'],
         ]);
-    } catch (Throwable $e) {
-        error_log('Analytics legacy traffic_statistics write failed: ' . $e->getMessage());
-    }
+    });
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['health'] ?? '') === '1') {
@@ -775,15 +847,25 @@ try {
     if ($payload === null) {
         analyticsTrackJson(['ok' => false, 'error' => 'invalid_payload']);
     }
+    $debugAnalytics = (($_GET['debug'] ?? '') === '1') || (string)($payload['debug_analytics'] ?? '') === '1';
 
     $pagePath = analyticsString($payload['page_path'] ?? '/', 500);
     if (analyticsTrackIgnoredPath($pagePath)) {
-        analyticsTrackJson(['ok' => true]);
+        analyticsTrackJson($debugAnalytics ? [
+            'ok' => true,
+            'database_name' => '',
+            'tables' => [],
+            'inserted' => analyticsTrackInitialTableFlags(false),
+            'errors' => [],
+        ] : ['ok' => true]);
     }
 
     $db = Database::getInstance()->getConnection();
     analyticsTrackEnsureTables($db);
     analyticsTrackEnsurePathTable($db);
+    $inserted = analyticsTrackInitialTableFlags(false);
+    $errors = [];
+    $databaseName = analyticsTrackDatabaseName($db);
 
     $now = date('Y-m-d H:i:s');
     $visitorUuid = analyticsTrackUuid($payload['visitor_uuid'] ?? '');
@@ -809,87 +891,102 @@ try {
     $screenWidth = max(0, min(100000, (int)($payload['screen_width'] ?? 0))) ?: null;
     $screenHeight = max(0, min(100000, (int)($payload['screen_height'] ?? 0))) ?: null;
 
-    $visitorStmt = $db->prepare('INSERT INTO analytics_visitors (visitor_uuid, first_seen_at, last_seen_at, ip_hash, user_agent, browser, os, device_type, country, city) VALUES (:visitor_uuid, :now, :now, :ip_hash, :user_agent, :browser, :os, :device_type, :country, :city) ON DUPLICATE KEY UPDATE last_seen_at = VALUES(last_seen_at), ip_hash = VALUES(ip_hash), user_agent = VALUES(user_agent), browser = VALUES(browser), os = VALUES(os), device_type = VALUES(device_type), updated_at = CURRENT_TIMESTAMP');
-    $visitorStmt->execute([
-        'visitor_uuid' => $visitorUuid,
-        'now' => $now,
-        'ip_hash' => $ipHash,
-        'user_agent' => $ua,
-        'browser' => $parsed['browser'],
-        'os' => $parsed['os'],
-        'device_type' => $parsed['device_type'],
-        'country' => 'Unknown',
-        'city' => 'Unknown',
-    ]);
+    analyticsTrackRunTableWrite($db, 'analytics_visitors', $inserted, $errors, function () use ($db, $visitorUuid, $now, $ipHash, $ua, $parsed): void {
+        $visitorStmt = $db->prepare('INSERT INTO analytics_visitors (visitor_uuid, first_seen_at, last_seen_at, ip_hash, user_agent, browser, os, device_type, country, city) VALUES (:visitor_uuid, :now, :now, :ip_hash, :user_agent, :browser, :os, :device_type, :country, :city) ON DUPLICATE KEY UPDATE last_seen_at = VALUES(last_seen_at), ip_hash = VALUES(ip_hash), user_agent = VALUES(user_agent), browser = VALUES(browser), os = VALUES(os), device_type = VALUES(device_type), updated_at = CURRENT_TIMESTAMP');
+        $visitorStmt->execute([
+            'visitor_uuid' => $visitorUuid,
+            'now' => $now,
+            'ip_hash' => $ipHash,
+            'user_agent' => $ua,
+            'browser' => $parsed['browser'],
+            'os' => $parsed['os'],
+            'device_type' => $parsed['device_type'],
+            'country' => 'Unknown',
+            'city' => 'Unknown',
+        ]);
+    });
 
-    $sessionStmt = $db->prepare('INSERT INTO analytics_sessions (session_uuid, visitor_uuid, started_at, last_activity_at, landing_page, referrer, source, medium, campaign, utm_source, utm_medium, utm_campaign, utm_term, utm_content) VALUES (:session_uuid, :visitor_uuid, :now, :now, :landing_page, :referrer, :source, :medium, :campaign, :utm_source, :utm_medium, :utm_campaign, :utm_term, :utm_content) ON DUPLICATE KEY UPDATE last_activity_at = VALUES(last_activity_at), referrer = COALESCE(NULLIF(referrer, ""), VALUES(referrer)), source = VALUES(source), medium = VALUES(medium), campaign = VALUES(campaign), updated_at = CURRENT_TIMESTAMP');
-    $sessionStmt->execute([
-        'session_uuid' => $sessionUuid,
-        'visitor_uuid' => $visitorUuid,
-        'now' => $now,
-        'landing_page' => $pagePath,
-        'referrer' => $referrer,
-        'source' => $source['source'],
-        'medium' => $source['medium'],
-        'campaign' => $source['campaign'],
-        'utm_source' => $utmSource,
-        'utm_medium' => $utmMedium,
-        'utm_campaign' => $utmCampaign,
-        'utm_term' => $utmTerm,
-        'utm_content' => $utmContent,
-    ]);
+    analyticsTrackRunTableWrite($db, 'analytics_sessions', $inserted, $errors, function () use ($db, $sessionUuid, $visitorUuid, $now, $pagePath, $referrer, $source, $utmSource, $utmMedium, $utmCampaign, $utmTerm, $utmContent): void {
+        $sessionStmt = $db->prepare('INSERT INTO analytics_sessions (session_uuid, visitor_uuid, started_at, last_activity_at, landing_page, referrer, source, medium, campaign, utm_source, utm_medium, utm_campaign, utm_term, utm_content) VALUES (:session_uuid, :visitor_uuid, :now, :now, :landing_page, :referrer, :source, :medium, :campaign, :utm_source, :utm_medium, :utm_campaign, :utm_term, :utm_content) ON DUPLICATE KEY UPDATE last_activity_at = VALUES(last_activity_at), referrer = COALESCE(NULLIF(referrer, ""), VALUES(referrer)), source = VALUES(source), medium = VALUES(medium), campaign = VALUES(campaign), updated_at = CURRENT_TIMESTAMP');
+        $sessionStmt->execute([
+            'session_uuid' => $sessionUuid,
+            'visitor_uuid' => $visitorUuid,
+            'now' => $now,
+            'landing_page' => $pagePath,
+            'referrer' => $referrer,
+            'source' => $source['source'],
+            'medium' => $source['medium'],
+            'campaign' => $source['campaign'],
+            'utm_source' => $utmSource,
+            'utm_medium' => $utmMedium,
+            'utm_campaign' => $utmCampaign,
+            'utm_term' => $utmTerm,
+            'utm_content' => $utmContent,
+        ]);
+    });
 
-    $pageStmt = $db->prepare('INSERT INTO analytics_pageviews (visitor_uuid, session_uuid, page_url, page_path, page_title, referrer, screen_width, screen_height, browser_language, timezone, viewed_at) VALUES (:visitor_uuid, :session_uuid, :page_url, :page_path, :page_title, :referrer, :screen_width, :screen_height, :browser_language, :timezone, :viewed_at)');
-    $pageStmt->execute([
-        'visitor_uuid' => $visitorUuid,
-        'session_uuid' => $sessionUuid,
-        'page_url' => $pageUrl,
-        'page_path' => $pagePath,
-        'page_title' => $pageTitle,
-        'referrer' => $referrer,
-        'screen_width' => $screenWidth,
-        'screen_height' => $screenHeight,
-        'browser_language' => $language,
-        'timezone' => $timezone,
-        'viewed_at' => $now,
-    ]);
+    analyticsTrackRunTableWrite($db, 'analytics_pageviews', $inserted, $errors, function () use ($db, $visitorUuid, $sessionUuid, $pageUrl, $pagePath, $pageTitle, $referrer, $screenWidth, $screenHeight, $language, $timezone, $now): void {
+        $pageStmt = $db->prepare('INSERT INTO analytics_pageviews (visitor_uuid, session_uuid, page_url, page_path, page_title, referrer, screen_width, screen_height, browser_language, timezone, viewed_at) VALUES (:visitor_uuid, :session_uuid, :page_url, :page_path, :page_title, :referrer, :screen_width, :screen_height, :browser_language, :timezone, :viewed_at)');
+        $pageStmt->execute([
+            'visitor_uuid' => $visitorUuid,
+            'session_uuid' => $sessionUuid,
+            'page_url' => $pageUrl,
+            'page_path' => $pagePath,
+            'page_title' => $pageTitle,
+            'referrer' => $referrer,
+            'screen_width' => $screenWidth,
+            'screen_height' => $screenHeight,
+            'browser_language' => $language,
+            'timezone' => $timezone,
+            'viewed_at' => $now,
+        ]);
+    });
 
-    $previousStmt = $db->prepare('SELECT id, current_page, landing_page, created_at FROM visitor_analytics_logs WHERE session_id = :session_id ORDER BY id DESC LIMIT 1');
-    $previousStmt->execute(['session_id' => $sessionUuid]);
-    $previous = $previousStmt->fetch();
-    if ($previous && !empty($previous['id'])) {
-        $duration = max(0, strtotime($now) - strtotime((string)$previous['created_at']));
-        $db->prepare('UPDATE visitor_analytics_logs SET next_page = :next_page, duration_seconds = COALESCE(duration_seconds, :duration) WHERE id = :id')
-            ->execute(['next_page' => $pagePath, 'duration' => $duration, 'id' => $previous['id']]);
+    $previous = null;
+    if (analyticsTrackTableExists($db, 'visitor_analytics_logs')) {
+        try {
+            $previousStmt = $db->prepare('SELECT id, current_page, landing_page, created_at FROM visitor_analytics_logs WHERE session_id = :session_id ORDER BY id DESC LIMIT 1');
+            $previousStmt->execute(['session_id' => $sessionUuid]);
+            $previous = $previousStmt->fetch();
+            if ($previous && !empty($previous['id'])) {
+                $duration = max(0, strtotime($now) - strtotime((string)$previous['created_at']));
+                $db->prepare('UPDATE visitor_analytics_logs SET next_page = :next_page, duration_seconds = COALESCE(duration_seconds, :duration) WHERE id = :id')
+                    ->execute(['next_page' => $pagePath, 'duration' => $duration, 'id' => $previous['id']]);
+            }
+        } catch (Throwable $e) {
+            error_log('Analytics previous path lookup failed: ' . $e->getMessage());
+        }
     }
     [$targetAction, $relatedModule] = analyticsTrackTargetAction($pagePath);
     $isNewSession = $previous ? 0 : 1;
     $isConverted = in_array($targetAction, ['prediction_submit','survey_submit','customer_club_signup','menu_item_view','banner_click','campaign_click'], true) ? 1 : 0;
     $eventType = analyticsTrackEventType($targetAction);
-    $pathStmt = $db->prepare('INSERT INTO visitor_analytics_logs (session_id, source_type, source_name, campaign_type, entry_link, referrer_url, utm_source, utm_medium, utm_campaign, landing_page, current_page, related_module, event_type, target_action, device_type, browser, operating_system, ip_address, is_new_visitor, is_converted, created_at) VALUES (:session_id, :source_type, :source_name, :campaign_type, :entry_link, :referrer_url, :utm_source, :utm_medium, :utm_campaign, :landing_page, :current_page, :related_module, :event_type, :target_action, :device_type, :browser, :operating_system, :ip_address, :is_new_visitor, :is_converted, :created_at)');
-    $pathStmt->execute([
-        'session_id' => $sessionUuid,
-        'source_type' => analyticsTrackDetectSourceLabel($source, $payload),
-        'source_name' => $source['source'],
-        'campaign_type' => $source['medium'],
-        'entry_link' => $pageUrl,
-        'referrer_url' => $referrer,
-        'utm_source' => $utmSource,
-        'utm_medium' => $utmMedium,
-        'utm_campaign' => $utmCampaign,
-        'landing_page' => $previous ? (($previous['landing_page'] ?? '') ?: $pagePath) : $pagePath,
-        'current_page' => $pagePath,
-        'related_module' => $relatedModule,
-        'event_type' => $eventType,
-        'target_action' => $targetAction,
-        'device_type' => $parsed['device_type'],
-        'browser' => $parsed['browser'],
-        'operating_system' => $parsed['os'],
-        'ip_address' => $ipHash,
-        'is_new_visitor' => $isNewSession,
-        'is_converted' => $isConverted,
-        'created_at' => $now,
-    ]);
+    analyticsTrackRunTableWrite($db, 'visitor_analytics_logs', $inserted, $errors, function () use ($db, $sessionUuid, $source, $payload, $pageUrl, $referrer, $utmSource, $utmMedium, $utmCampaign, $previous, $pagePath, $relatedModule, $eventType, $targetAction, $parsed, $ipHash, $isNewSession, $isConverted, $now): void {
+        $pathStmt = $db->prepare('INSERT INTO visitor_analytics_logs (session_id, source_type, source_name, campaign_type, entry_link, referrer_url, utm_source, utm_medium, utm_campaign, landing_page, current_page, related_module, event_type, target_action, device_type, browser, operating_system, ip_address, is_new_visitor, is_converted, created_at) VALUES (:session_id, :source_type, :source_name, :campaign_type, :entry_link, :referrer_url, :utm_source, :utm_medium, :utm_campaign, :landing_page, :current_page, :related_module, :event_type, :target_action, :device_type, :browser, :operating_system, :ip_address, :is_new_visitor, :is_converted, :created_at)');
+        $pathStmt->execute([
+            'session_id' => $sessionUuid,
+            'source_type' => $source['medium'],
+            'source_name' => $source['source'],
+            'campaign_type' => $source['medium'],
+            'entry_link' => $pageUrl,
+            'referrer_url' => $referrer,
+            'utm_source' => $utmSource,
+            'utm_medium' => $utmMedium,
+            'utm_campaign' => $utmCampaign,
+            'landing_page' => $previous ? (($previous['landing_page'] ?? '') ?: $pagePath) : $pagePath,
+            'current_page' => $pagePath,
+            'related_module' => $relatedModule,
+            'event_type' => $eventType,
+            'target_action' => $targetAction,
+            'device_type' => $parsed['device_type'],
+            'browser' => $parsed['browser'],
+            'operating_system' => $parsed['os'],
+            'ip_address' => $ipHash,
+            'is_new_visitor' => $isNewSession,
+            'is_converted' => $isConverted,
+            'created_at' => $now,
+        ]);
+    });
 
     analyticsTrackWriteLegacyTables($db, [
         'session_uuid' => $sessionUuid,
@@ -907,7 +1004,17 @@ try {
         'stat_date' => date('Y-m-d', strtotime($now)),
         'is_new_session' => $isNewSession,
         'now' => $now,
-    ]);
+    ], $inserted, $errors);
+
+    if ($debugAnalytics) {
+        analyticsTrackJson([
+            'ok' => !in_array(false, $inserted, true),
+            'database_name' => $databaseName,
+            'tables' => analyticsTrackTablesStatus($db),
+            'inserted' => $inserted,
+            'errors' => $errors,
+        ]);
+    }
 
     analyticsTrackJson(['ok' => true]);
 } catch (Throwable $e) {

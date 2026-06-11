@@ -101,36 +101,38 @@
       screen_width: window.screen && window.screen.width ? window.screen.width : null,
       screen_height: window.screen && window.screen.height ? window.screen.height : null,
       language: navigator.language || '',
-      timezone: (window.Intl && Intl.DateTimeFormat) ? (Intl.DateTimeFormat().resolvedOptions().timeZone || '') : ''
+      timezone: (window.Intl && Intl.DateTimeFormat) ? (Intl.DateTimeFormat().resolvedOptions().timeZone || '') : '',
+      debug_analytics: debug ? 1 : 0
     };
   }
 
-  function sendBeaconFallback(body) {
+  function sendBeaconFallback(url, body) {
     if (!navigator.sendBeacon) {
       return;
     }
     try {
       var blob = new Blob([body], { type: 'application/json' });
-      var queued = navigator.sendBeacon(endpoint, blob);
-      debugLog('[analytics] beacon fallback', { endpoint: endpoint, queued: queued });
+      var queued = navigator.sendBeacon(url, blob);
+      debugLog('analytics beacon fallback', { endpoint: url, queued: queued });
     } catch (error) {
       if (debug) {
-        debugLog('[analytics] beacon fallback failed', error);
+        debugLog('analytics beacon fallback failed', error);
       }
     }
   }
 
   function sendPayload(payload) {
     var body = JSON.stringify(payload);
-    debugLog('[analytics] payload', payload);
+    var url = endpoint + (debug ? '?debug=1' : '');
+    debugLog('analytics payload', payload);
 
     if (window.fetch) {
-      fetch(endpoint, {
+      fetch(url, {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: body,
-        keepalive: true,
-        credentials: 'same-origin'
+        keepalive: true
       })
         .then(function (response) {
           if (!debug) {
@@ -143,8 +145,8 @@
             } catch (error) {
               parsed = text;
             }
-            debugLog('[analytics] response', {
-              endpoint: endpoint,
+            debugLog('analytics response', {
+              endpoint: url,
               status: response.status,
               ok: response.ok,
               body: parsed
@@ -154,35 +156,35 @@
         })
         .catch(function (error) {
           if (debug) {
-            debugLog('[analytics] fetch failed, trying beacon', error);
+            debugLog('analytics error', error);
           }
-          sendBeaconFallback(body);
+          sendBeaconFallback(url, body);
         });
       return;
     }
 
-    sendBeaconFallback(body);
+    sendBeaconFallback(url, body);
   }
 
   try {
     var path = window.location.pathname || '/';
     if (ignoredPath(path)) {
-      debugLog('[analytics] ignored path', path);
+      debugLog('analytics ignored path', path);
       return;
     }
 
     var visitorUuid = getStoredUuid(window.localStorage, visitorKey);
     var sessionUuid = getStoredUuid(window.sessionStorage, sessionKey);
 
-    if (isDuplicatePageview(sessionUuid, path)) {
-      debugLog('[analytics] duplicate pageview skipped', { session_uuid: sessionUuid, page_path: path });
+    if (!debug && isDuplicatePageview(sessionUuid, path)) {
+      debugLog('analytics duplicate pageview skipped', { session_uuid: sessionUuid, page_path: path });
       return;
     }
 
     sendPayload(buildPayload(visitorUuid, sessionUuid, path));
   } catch (error) {
     if (debug) {
-      debugLog('[analytics] failed', error);
+      debugLog('analytics error', error);
     }
   }
 })();

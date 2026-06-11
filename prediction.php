@@ -208,5 +208,6 @@ foreach ($matches as $match) {
         updateTeams();
     }());
 </script>
+<script src="/assets/js/analytics-tracker.js" defer></script>
 </body>
 </html>

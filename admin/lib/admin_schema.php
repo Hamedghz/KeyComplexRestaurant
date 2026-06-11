@@ -37,33 +37,111 @@ function adminDb(): PDO {
     return Database::getInstance()->getConnection();
 }
 
-function adminTableExists(string $table): bool {
+function adminResolveSchemaHelperArgs(array $args, int $expectedWithoutDb, string $helperName): ?array {
+    if (count($args) === $expectedWithoutDb + 1 && $args[0] instanceof PDO) {
+        return array_merge([$args[0]], array_map('strval', array_slice($args, 1)));
+    }
+    if (count($args) === $expectedWithoutDb) {
+        return array_merge([adminDb()], array_map('strval', $args));
+    }
+
+    safeAdminLog($helperName . ' called with invalid arguments.');
+    return null;
+}
+
+function adminTableExists(...$args): bool {
     try {
-        $stmt = adminDb()->prepare('SHOW TABLES LIKE :table');
-        $stmt->execute(['table' => $table]);
-        return (bool)$stmt->fetchColumn();
+        $resolved = adminResolveSchemaHelperArgs($args, 1, 'adminTableExists');
+        if ($resolved === null) {
+            return false;
+        }
+
+        [$db, $table] = $resolved;
+        $table = trim((string)$table);
+        if ($table === '') {
+            return false;
+        }
+
+        $stmt = $db->prepare("
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = :table_name
+        ");
+        $stmt->execute(['table_name' => $table]);
+        return (int)$stmt->fetchColumn() > 0;
     } catch (Throwable $e) {
+        safeAdminLog('adminTableExists failed: ' . $e->getMessage());
         return false;
     }
 }
 
-function adminColumnExists(string $table, string $column): bool {
+function adminColumnExists(...$args): bool {
     try {
-        $stmt = adminDb()->prepare('SHOW COLUMNS FROM `' . str_replace('`', '``', $table) . '` LIKE :column');
-        $stmt->execute(['column' => $column]);
-        return (bool)$stmt->fetchColumn();
+        $resolved = adminResolveSchemaHelperArgs($args, 2, 'adminColumnExists');
+        if ($resolved === null) {
+            return false;
+        }
+
+        [$db, $table, $column] = $resolved;
+        $table = trim((string)$table);
+        $column = trim((string)$column);
+
+        if ($table === '' || $column === '') {
+            return false;
+        }
+
+        $stmt = $db->prepare("
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = :table_name
+              AND COLUMN_NAME = :column_name
+        ");
+
+        $stmt->execute([
+            'table_name' => $table,
+            'column_name' => $column,
+        ]);
+
+        return (int)$stmt->fetchColumn() > 0;
     } catch (Throwable $e) {
+        safeAdminLog('adminColumnExists failed: ' . $e->getMessage());
         return false;
     }
 }
 
 
-function adminIndexExists(string $table, string $index): bool {
+function adminIndexExists(...$args): bool {
     try {
-        $stmt = adminDb()->prepare('SHOW INDEX FROM `' . str_replace('`', '``', $table) . '` WHERE Key_name = :index_name');
-        $stmt->execute(['index_name' => $index]);
-        return (bool)$stmt->fetchColumn();
+        $resolved = adminResolveSchemaHelperArgs($args, 2, 'adminIndexExists');
+        if ($resolved === null) {
+            return false;
+        }
+
+        [$db, $table, $index] = $resolved;
+        $table = trim((string)$table);
+        $index = trim((string)$index);
+
+        if ($table === '' || $index === '') {
+            return false;
+        }
+
+        $stmt = $db->prepare("
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = :table_name
+              AND INDEX_NAME = :index_name
+        ");
+        $stmt->execute([
+            'table_name' => $table,
+            'index_name' => $index,
+        ]);
+
+        return (int)$stmt->fetchColumn() > 0;
     } catch (Throwable $e) {
+        safeAdminLog('adminIndexExists failed: ' . $e->getMessage());
         return false;
     }
 }
@@ -82,6 +160,33 @@ function ensureTableColumns(string $table, array $columns): void {
             }
         }
     }
+}
+
+function adminEnsureIndex(string $table, string $index, string $columns): bool {
+    if (!adminTableExists($table) || adminIndexExists($table, $index)) {
+        return true;
+    }
+
+    try {
+        adminDb()->exec("ALTER TABLE `" . str_replace('`', '``', $table) . "` ADD INDEX `{$index}` {$columns}");
+        return true;
+    } catch (Throwable $e) {
+        safeAdminLog("Schema index repair failed for {$table}.{$index}: " . $e->getMessage());
+        return false;
+    }
+}
+
+function adminRepairResult(string $table, array $requiredColumns, array $changes): array {
+    $existing = adminModuleExistingColumnNames($table);
+    $missing = array_values(array_diff(array_keys($requiredColumns), $existing));
+    if ($missing) {
+        safeAdminLog(ucfirst($table) . ' schema repair incomplete. Missing columns: ' . implode(', ', $missing));
+    }
+    return [
+        'ok' => !$missing && adminTableExists($table),
+        'changes' => $changes,
+        'missing_after_repair' => $missing,
+    ];
 }
 
 function adminMatchesColumnDefinitions(): array {
@@ -130,18 +235,99 @@ function adminMatchesColumnDefinitions(): array {
     ];
 }
 
-function adminEnsureMatchesSchema(): void {
-    $db = adminDb();
-    if (!adminTableExists('matches')) {
-        ensureAdminCanonicalTables($db, ['matches']);
-    }
-    if (!adminTableExists('matches')) {
-        safeAdminLog('Matches schema repair incomplete. Missing table: matches');
-        return;
+function adminPredictionsColumnDefinitions(): array {
+    return [
+        'customer_id' => 'int(11) UNSIGNED DEFAULT NULL',
+        'customer_name' => 'varchar(150) DEFAULT NULL',
+        'customer_last_name' => 'varchar(150) DEFAULT NULL',
+        'customer_mobile' => 'varchar(20) DEFAULT NULL',
+        'mobile' => 'varchar(20) DEFAULT NULL',
+        'match_id' => 'int(11) UNSIGNED DEFAULT NULL',
+        'team_one_name' => 'varchar(120) DEFAULT NULL',
+        'team_two_name' => 'varchar(120) DEFAULT NULL',
+        'predicted_team_one_score' => 'tinyint UNSIGNED DEFAULT NULL',
+        'predicted_team_two_score' => 'tinyint UNSIGNED DEFAULT NULL',
+        'predicted_score_team_a' => 'tinyint UNSIGNED DEFAULT NULL',
+        'predicted_score_team_b' => 'tinyint UNSIGNED DEFAULT NULL',
+        'prediction_content' => 'text DEFAULT NULL',
+        'status' => "varchar(50) NOT NULL DEFAULT 'pending'",
+        'is_winner' => 'tinyint(1) NOT NULL DEFAULT 0',
+        'evaluated_at' => 'datetime DEFAULT NULL',
+        'points_awarded' => 'int(11) NOT NULL DEFAULT 0',
+        'crm_follow_up' => 'tinyint(1) NOT NULL DEFAULT 0',
+        'wants_reservation' => 'tinyint(1) NOT NULL DEFAULT 0',
+        'reserve_table_interest' => 'tinyint(1) NOT NULL DEFAULT 0',
+        'source' => 'varchar(150) DEFAULT NULL',
+        'ip_address' => 'varchar(45) DEFAULT NULL',
+        'user_agent' => 'varchar(255) DEFAULT NULL',
+        'crm_matched' => 'tinyint(1) NOT NULL DEFAULT 0',
+        'customer_exists' => 'tinyint(1) NOT NULL DEFAULT 0',
+        'attended_match_time' => 'tinyint(1) NOT NULL DEFAULT 0',
+        'is_correct_prediction' => 'tinyint(1) NOT NULL DEFAULT 0',
+        'crm_match' => 'tinyint(1) NOT NULL DEFAULT 0',
+        'attended_match' => 'tinyint(1) NOT NULL DEFAULT 0',
+        'submitted_at' => 'timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'created_at' => 'timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_at' => 'timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
+    ];
+}
+
+function adminHeroBannersColumnDefinitions(): array {
+    return [
+        'title' => 'varchar(200) DEFAULT NULL',
+        'subtitle' => 'varchar(255) DEFAULT NULL',
+        'description' => 'text DEFAULT NULL',
+        'button_text' => 'varchar(100) DEFAULT NULL',
+        'button_link' => 'varchar(255) DEFAULT NULL',
+        'image' => 'varchar(255) DEFAULT NULL',
+        'mobile_image' => 'varchar(255) DEFAULT NULL',
+        'display_location' => "varchar(50) NOT NULL DEFAULT 'homepage'",
+        'match_id' => 'int(11) UNSIGNED DEFAULT NULL',
+        'menu_item_id' => 'int(11) UNSIGNED DEFAULT NULL',
+        'category_id' => 'int(11) UNSIGNED DEFAULT NULL',
+        'loyalty_campaign' => 'varchar(150) DEFAULT NULL',
+        'display_order' => 'int(11) NOT NULL DEFAULT 0',
+        'active_status' => 'tinyint(1) NOT NULL DEFAULT 1',
+        'start_date' => 'datetime DEFAULT NULL',
+        'end_date' => 'datetime DEFAULT NULL',
+        'created_at' => 'timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'updated_at' => 'timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
+    ];
+}
+
+function adminCreateTableIfMissing(string $table, array $columns): bool {
+    if (adminTableExists($table)) {
+        return true;
     }
 
-    ensureTableColumns('matches', adminMatchesColumnDefinitions());
+    $parts = ['`id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT'];
+    foreach ($columns as $column => $definition) {
+        $parts[] = '`' . str_replace('`', '``', $column) . '` ' . $definition;
+    }
+    $parts[] = 'PRIMARY KEY (`id`)';
 
+    try {
+        adminDb()->exec("CREATE TABLE IF NOT EXISTS `" . str_replace('`', '``', $table) . "` (\n  " . implode(",\n  ", $parts) . "\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        return true;
+    } catch (Throwable $e) {
+        safeAdminLog("Critical table create failed for {$table}: " . $e->getMessage());
+        return false;
+    }
+}
+
+function adminRepairMatchesSchema(): array {
+    $changes = [];
+    $columns = adminMatchesColumnDefinitions();
+    if (!adminTableExists('matches')) {
+        if (adminCreateTableIfMissing('matches', $columns)) {
+            $changes[] = 'created matches table';
+        }
+    }
+    if (!adminTableExists('matches')) {
+        return ['ok' => false, 'changes' => $changes, 'missing_after_repair' => array_keys($columns)];
+    }
+
+    ensureTableColumns('matches', $columns);
     foreach ([
         'idx_matches_date' => '(`match_date`)',
         'idx_matches_status' => '(`status`)',
@@ -150,21 +336,90 @@ function adminEnsureMatchesSchema(): void {
         'idx_matches_match_start' => '(`match_start_at`)',
         'idx_matches_finished' => '(`match_finished`)',
         'idx_matches_active_status' => '(`is_active`, `active_for_prediction`, `status`)',
-    ] as $index => $columns) {
-        if (!adminIndexExists('matches', $index)) {
-            try {
-                $db->exec("ALTER TABLE `matches` ADD INDEX `{$index}` {$columns}");
-            } catch (Throwable $e) {
-                safeAdminLog("Matches schema index repair failed for {$index}: " . $e->getMessage());
-            }
+    ] as $index => $definition) {
+        if (adminEnsureIndex('matches', $index, $definition)) {
+            $changes[] = "ensured index {$index}";
         }
     }
+    return adminRepairResult('matches', $columns, $changes);
+}
 
-    $existing = adminModuleExistingColumnNames('matches');
-    $missing = array_values(array_diff(array_keys(adminMatchesColumnDefinitions()), $existing));
-    if ($missing) {
-        safeAdminLog('Matches schema repair incomplete. Missing columns: ' . implode(', ', $missing));
+function adminRepairPredictionsSchema(): array {
+    $changes = [];
+    $columns = adminPredictionsColumnDefinitions();
+    if (!adminTableExists('predictions')) {
+        if (adminCreateTableIfMissing('predictions', $columns)) {
+            $changes[] = 'created predictions table';
+        }
     }
+    if (!adminTableExists('predictions')) {
+        return ['ok' => false, 'changes' => $changes, 'missing_after_repair' => array_keys($columns)];
+    }
+
+    ensureTableColumns('predictions', $columns);
+    foreach ([
+        'idx_predictions_mobile' => '(`mobile`)',
+        'idx_predictions_customer_mobile' => '(`customer_mobile`)',
+        'idx_predictions_customer_id' => '(`customer_id`)',
+        'idx_predictions_match' => '(`match_id`)',
+        'idx_predictions_winner' => '(`is_winner`)',
+        'idx_predictions_created_at' => '(`created_at`)',
+        'idx_predictions_submitted_at' => '(`submitted_at`)',
+    ] as $index => $definition) {
+        if (adminEnsureIndex('predictions', $index, $definition)) {
+            $changes[] = "ensured index {$index}";
+        }
+    }
+    return adminRepairResult('predictions', $columns, $changes);
+}
+
+function adminRepairHeroBannersSchema(): array {
+    $changes = [];
+    $columns = adminHeroBannersColumnDefinitions();
+    if (!adminTableExists('hero_banners')) {
+        if (adminCreateTableIfMissing('hero_banners', $columns)) {
+            $changes[] = 'created hero_banners table';
+        }
+    }
+    if (!adminTableExists('hero_banners')) {
+        return ['ok' => false, 'changes' => $changes, 'missing_after_repair' => array_keys($columns)];
+    }
+
+    ensureTableColumns('hero_banners', $columns);
+    foreach ([
+        'idx_hero_active_order' => '(`active_status`, `display_order`)',
+        'idx_hero_start_end' => '(`start_date`, `end_date`)',
+        'idx_hero_display_location' => '(`display_location`)',
+    ] as $index => $definition) {
+        if (adminEnsureIndex('hero_banners', $index, $definition)) {
+            $changes[] = "ensured index {$index}";
+        }
+    }
+    try {
+        adminDb()->exec("UPDATE `hero_banners` SET `display_location` = 'homepage' WHERE `display_location` IS NULL OR `display_location` = ''");
+        $changes[] = 'normalized empty display_location';
+    } catch (Throwable $e) {
+        safeAdminLog('Hero banner display_location repair failed: ' . $e->getMessage());
+    }
+    return adminRepairResult('hero_banners', $columns, $changes);
+}
+
+function adminRepairCriticalModuleSchema(array $config): array {
+    $table = (string)($config['table'] ?? '');
+    if ($table === 'matches') {
+        return adminRepairMatchesSchema();
+    }
+    if ($table === 'predictions') {
+        return adminRepairPredictionsSchema();
+    }
+    if ($table === 'hero_banners') {
+        return adminRepairHeroBannersSchema();
+    }
+    return ['ok' => true, 'changes' => [], 'missing_after_repair' => []];
+}
+
+function adminEnsureMatchesSchema(): void {
+    adminRepairMatchesSchema();
 }
 
 
@@ -831,7 +1086,7 @@ function adminModuleDefinitions(): array {
             'columns' => ['id','full_name','mobile','email','customer_status','points_balance','total_orders','total_purchase_volume','acquisition_source','attended_match_event','tags','created_at'],
         ],
         'matches' => [
-            'title' => 'مدیریت مسابقات', 'min_role' => 'manager', 'table' => 'matches', 'search' => ['title','team_a','team_b','status'], 'filters' => ['status','is_active','active_for_prediction','match_finished'], 'date_column' => 'match_start_at',
+            'title' => 'مدیریت مسابقات', 'min_role' => 'manager', 'table' => 'matches', 'search' => ['title','team_a','team_b','team_one_name','team_two_name'], 'filters' => ['status','is_active','active_for_prediction','match_finished'], 'date_column' => 'match_start_at',
             'join' => 'SELECT m.*, COALESCE(m.team_one_name, m.team_a) AS team_one_display, COALESCE(m.team_two_name, m.team_b) AS team_two_display, COALESCE(m.match_start_at, CONCAT(m.match_date, " ", m.kickoff_time)) AS match_start_display, COALESCE(m.prediction_start_at, m.prediction_open_at) AS prediction_start_display, COALESCE(m.prediction_end_at, m.prediction_close_at) AS prediction_end_display, COALESCE(m.points_reward, m.reward_points, 0) AS points_reward_display, (SELECT COUNT(*) FROM predictions p WHERE p.match_id = m.id) AS prediction_count, (SELECT COUNT(*) FROM predictions p WHERE p.match_id = m.id AND COALESCE(p.is_winner, p.is_correct_prediction, 0) = 1) AS winner_count FROM matches m', 'alias' => 'm', 'required_tables' => ['predictions'],
             'fields' => [
                 'title' => ['label'=>'عنوان کمپین/مسابقه','type'=>'text'], 'description' => ['label'=>'توضیح','type'=>'textarea'], 'rules' => ['label'=>'قوانین','type'=>'textarea'], 'participation_conditions' => ['label'=>'شرایط مشارکت','type'=>'textarea'],
@@ -847,7 +1102,7 @@ function adminModuleDefinitions(): array {
             'columns' => ['id','title','team_one_display','team_two_display','match_start_display','prediction_start_display','prediction_end_display','status','points_reward_display','prediction_count','winner_count','match_finished','created_at'],
         ],
         'predictions' => [
-            'title' => 'پیش‌بینی‌ها', 'min_role' => 'manager', 'table' => 'predictions', 'readonly_create' => true, 'search' => ['customer_name','customer_last_name','mobile','customer_mobile'], 'filters' => ['match_id','status','is_winner','wants_reservation','customer_exists','crm_match'], 'date_column' => 'submitted_at',
+            'title' => 'پیش‌بینی‌ها', 'min_role' => 'manager', 'table' => 'predictions', 'readonly_create' => true, 'allow_delete' => false, 'search' => ['customer_name','customer_last_name','mobile','customer_mobile'], 'filters' => ['match_id','status','is_winner','wants_reservation','customer_exists','crm_match'], 'date_column' => 'submitted_at',
             'filter_fields' => [
                 'match_id' => ['label'=>'مسابقه','type'=>'match'],
             ],
@@ -1012,7 +1267,7 @@ function adminModuleOptionalColumns(): array {
             'predicted_team_one_score' => "tinyint UNSIGNED DEFAULT NULL",
             'predicted_team_two_score' => "tinyint UNSIGNED DEFAULT NULL",
             'prediction_content' => "text DEFAULT NULL",
-            'status' => "enum('pending','approved','rejected') NOT NULL DEFAULT 'pending'",
+            'status' => "varchar(50) NOT NULL DEFAULT 'pending'",
             'is_winner' => "tinyint(1) NOT NULL DEFAULT 0",
             'evaluated_at' => "datetime DEFAULT NULL",
             'points_awarded' => "int(11) NOT NULL DEFAULT 0",
@@ -1071,7 +1326,7 @@ function adminModuleOptionalColumns(): array {
             'follow_up_notes' => "text DEFAULT NULL",
         ],
         'hero_banners' => [
-            'display_location' => "enum('homepage','menu_page','campaigns_page','qr_menu','customer_panel') NOT NULL DEFAULT 'homepage'",
+            'display_location' => "varchar(50) NOT NULL DEFAULT 'homepage'",
             'match_id' => "int(11) UNSIGNED DEFAULT NULL",
             'menu_item_id' => "int(11) UNSIGNED DEFAULT NULL",
             'category_id' => "int(11) UNSIGNED DEFAULT NULL",
@@ -1200,6 +1455,7 @@ function adminModuleNormalizeConfig(array $config): array {
     $audit = adminModuleSchemaAudit($config);
     $allowed = $audit['existing_columns'];
     $virtualColumns = adminModuleVirtualColumns();
+    $configuredFields = $config['fields'] ?? [];
 
     if (!empty($audit['missing_fields'])) {
         safeAdminLog('Admin module configured fields missing from table ' . ($config['table'] ?? 'unknown') . ': ' . implode(', ', $audit['missing_fields']));
@@ -1208,19 +1464,34 @@ function adminModuleNormalizeConfig(array $config): array {
         safeAdminLog('Admin module list columns missing from table ' . ($config['table'] ?? 'unknown') . ': ' . implode(', ', $audit['missing_columns']));
     }
 
-    $config['fields'] = array_filter($config['fields'] ?? [], static fn($field) => in_array($field, $allowed, true), ARRAY_FILTER_USE_KEY);
+    $config['fields'] = array_filter($configuredFields, static fn($field) => in_array($field, $allowed, true), ARRAY_FILTER_USE_KEY);
     $config['columns'] = array_values(array_filter($config['columns'] ?? [], static fn($col) => in_array($col, $allowed, true) || in_array($col, $virtualColumns, true)));
     $config['filters'] = array_values(array_filter($config['filters'] ?? [], static fn($col) => in_array($col, $allowed, true)));
     $config['search'] = array_values(array_filter($config['search'] ?? [], static fn($col) => in_array($col, $allowed, true)));
     $config['_schema_audit'] = $audit;
 
-    if (empty($config['fields']) && empty($config['readonly_create'])) {
+    if (!empty($audit['missing_fields']) && empty($config['readonly_create'])) {
         $missing = $audit['missing_fields'] ? implode(', ', $audit['missing_fields']) : 'هیچ فیلد قابل ویرایشی پیدا نشد';
         $config['schema_error'] = 'فرم این صفحه با ستون‌های واقعی جدول «' . ($config['table'] ?? 'نامشخص') . '» همگام نیست. فیلدهای ناموجود: ' . $missing;
         safeAdminLog('Admin module schema error for ' . ($config['table'] ?? 'unknown') . ': ' . $missing);
+    } elseif (empty($config['fields']) && empty($config['readonly_create'])) {
+        $config['schema_error'] = 'فرم این صفحه با ستون‌های واقعی جدول «' . ($config['table'] ?? 'نامشخص') . '» همگام نیست. فیلدهای ناموجود: هیچ فیلد قابل ویرایشی پیدا نشد';
+        safeAdminLog('Admin module schema error for ' . ($config['table'] ?? 'unknown') . ': no editable fields');
     }
 
     return $config;
+}
+
+function adminAssertParsedDateValue($value, bool $withTime): void {
+    if ($value === null || $value === '') {
+        return;
+    }
+    $pattern = $withTime
+        ? '/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/'
+        : '/^\d{4}-\d{2}-\d{2}$/';
+    if (!is_string($value) || !preg_match($pattern, $value)) {
+        throw new RuntimeException('تاریخ وارد شده معتبر نیست.');
+    }
 }
 
 
@@ -1233,12 +1504,15 @@ function adminModuleUploadImage(string $field, string $folder, string $current =
         throw new RuntimeException($validation['message']);
     }
     $dir = UPLOAD_PATH . '/' . trim($folder, '/');
-    return optimizeUploadedImage($_FILES[$field]['tmp_name'], $dir, uniqid($field . '_', true));
+    $filename = optimizeUploadedImage($_FILES[$field]['tmp_name'], $dir, uniqid($field . '_', true));
+    return 'uploads/' . trim($folder, '/') . '/' . basename($filename);
 }
 
 function adminModuleImageSrc($value, string $folder): string {
-    $value = ltrim((string)$value, '/');
+    $value = trim((string)$value);
     if ($value === '') return '';
+    if (preg_match('/^https?:\/\//i', $value)) return $value;
+    $value = ltrim($value, '/');
     if (str_starts_with($value, 'uploads/')) return '../' . $value;
     return '../uploads/' . trim($folder, '/') . '/' . $value;
 }
@@ -1267,9 +1541,20 @@ function adminModuleCollectData(array $config, array $current = [], ?array $admi
         }
         $value = $_POST[$name] ?? ($meta['default'] ?? null);
         if ($type === 'mobile') $value = normalizeMobile($value);
-        if ($type === 'date') $value = parsePersianDate($value, false);
-        if ($type === 'datetime') $value = parsePersianDate($value, true);
-        if ($type === 'time') $value = parsePersianTime($value);
+        if ($type === 'date') {
+            $value = parsePersianDate($value, false);
+            adminAssertParsedDateValue($value, false);
+        }
+        if ($type === 'datetime') {
+            $value = parsePersianDate($value, true);
+            adminAssertParsedDateValue($value, true);
+        }
+        if ($type === 'time') {
+            $value = parsePersianTime($value);
+            if ($value !== null && $value !== '' && (!is_string($value) || !preg_match('/^\d{2}:\d{2}:\d{2}$/', $value))) {
+                throw new RuntimeException('تاریخ وارد شده معتبر نیست.');
+            }
+        }
         if ($type === 'json' && $value !== null && trim((string)$value) !== '') {
             json_decode((string)$value, true);
             if (json_last_error() !== JSON_ERROR_NONE) {
@@ -1328,10 +1613,10 @@ function adminModulePrepareData(array $config, array $data, array $current = [])
         }
 
         $status = (string)($data['status'] ?? $current['status'] ?? 'active');
-        if (adminColumnExists('matches', 'is_active')) {
+        if (adminColumnExists('matches', 'is_active') && !array_key_exists('is_active', $data)) {
             $data['is_active'] = in_array($status, ['active', 'scheduled', 'live'], true) ? 1 : (isset($data['is_active']) ? (int)$data['is_active'] : 0);
         }
-        if (adminColumnExists('matches', 'active_for_prediction')) {
+        if (adminColumnExists('matches', 'active_for_prediction') && !array_key_exists('active_for_prediction', $data)) {
             $data['active_for_prediction'] = in_array($status, ['active', 'scheduled', 'live'], true) ? 1 : (isset($data['active_for_prediction']) ? (int)$data['active_for_prediction'] : 0);
         }
         if (($data['final_team_one_score'] ?? $data['final_score_team_a'] ?? null) !== null && ($data['final_team_two_score'] ?? $data['final_score_team_b'] ?? null) !== null) {

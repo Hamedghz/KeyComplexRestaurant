@@ -634,6 +634,7 @@ $featuredItems = $menuModel->getFeatured(6);
             left: 0;
             width: 100%;
             height: 100%;
+            pointer-events: none;
         }
 
         .hero-static-fallback {
@@ -664,7 +665,7 @@ $featuredItems = $menuModel->getFeatured(6);
         
         .hero-content {
             position: relative;
-            z-index: 15;
+            z-index: 25;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
@@ -672,6 +673,12 @@ $featuredItems = $menuModel->getFeatured(6);
             justify-content: center;
             text-align: center;
             padding: 86px 20px 20px;
+            pointer-events: none;
+        }
+
+        .hero-content .glass-button,
+        .hero-banner-dots,
+        .hero-banner-dots button {
             pointer-events: auto;
         }
         
@@ -719,6 +726,8 @@ $featuredItems = $menuModel->getFeatured(6);
         
         .glass-button {
             display: inline-block;
+            position: relative;
+            z-index: 30;
             padding: 18px 50px;
             background: rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(10px);
@@ -731,6 +740,8 @@ $featuredItems = $menuModel->getFeatured(6);
             transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
             animation: fadeInUp 1s ease-out 0.9s both;
+            pointer-events: auto;
+            cursor: pointer;
         }
         
         .glass-button:hover {
@@ -747,6 +758,7 @@ $featuredItems = $menuModel->getFeatured(6);
             transform: translateX(-50%);
             animation: bounce 2s infinite;
             z-index: 2;
+            pointer-events: none;
         }
         
         @keyframes bounce {
@@ -1257,13 +1269,15 @@ $featuredItems = $menuModel->getFeatured(6);
         }
 
 
-        .hero-banner-slider { position:absolute; inset:0; width:100%; min-height:100vh; z-index:0; }
-        .hero-banner-slide { display: none; animation: fadeIn 0.7s ease; position:absolute; inset:0; width:100%; min-height:100vh; }
-        .hero-banner-slide.active { display: block; }
-        .hero-banner-slide picture { position:absolute; inset:0; width:100%; height:100%; }
-        .hero-banner-art { width:100%; min-height:100vh; height:100%; object-fit: cover; object-position:center; background-position:center; background-size:cover; display:block; border-radius:0; margin:0; box-shadow:none; }
-        .hero-banner-copy { position:relative; z-index:14; min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:86px 20px 20px; pointer-events:auto; }
-        .hero-banner-copy::before { content:''; position:absolute; inset:0; z-index:-1; background:linear-gradient(180deg, rgba(0,70,71,.25), rgba(0,0,0,.68)); }
+        .hero-banner-slider { position:absolute; inset:0; width:100%; min-height:100vh; z-index:1; pointer-events:none; }
+        .hero-banner-slide { display: none; animation: fadeIn 0.7s ease; position:absolute; inset:0; width:100%; min-height:100vh; pointer-events:none; }
+        .hero-banner-slide.active { display: block; pointer-events:auto; }
+        .hero-banner-slide picture { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+        .hero-banner-art { width:100%; min-height:100vh; height:100%; object-fit: cover; object-position:center; background-position:center; background-size:cover; display:block; border-radius:0; margin:0; box-shadow:none; pointer-events:none; }
+        .hero-banner-copy { position:relative; z-index:20; min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:86px 20px 20px; pointer-events:auto; }
+        .hero-banner-copy::before { content:''; position:absolute; inset:0; z-index:-1; background:linear-gradient(180deg, rgba(0,70,71,.25), rgba(0,0,0,.68)); pointer-events:none; }
+        .hero-banner-copy a,
+        .hero-banner-copy .glass-button { position:relative; z-index:30; pointer-events:auto; cursor:pointer; }
         .hero-banner-description { max-width: 760px; margin: 1rem auto 1.75rem; color: rgba(255,255,255,0.88); line-height: 1.9; font-size: clamp(15px, 1.4vw, 18px); }
         .hero-banner-dots { display:flex; gap:8px; justify-content:center; margin-top:18px; }
         .hero-banner-dots button { width:10px; height:10px; border-radius:50%; border:0; background:rgba(255,255,255,.45); cursor:pointer; }

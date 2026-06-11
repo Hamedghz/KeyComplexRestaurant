@@ -633,14 +633,14 @@ CREATE TABLE IF NOT EXISTS `crm_timelines` (
 
 CREATE TABLE IF NOT EXISTS `hero_banners` (
   `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-  `title` varchar(200) NOT NULL,
+  `title` varchar(200) DEFAULT NULL,
   `subtitle` varchar(255) DEFAULT NULL,
   `description` text DEFAULT NULL,
   `button_text` varchar(100) DEFAULT NULL,
   `button_link` varchar(255) DEFAULT NULL,
   `image` varchar(255) DEFAULT NULL,
   `mobile_image` varchar(255) DEFAULT NULL,
-  `display_location` enum('homepage','menu_page','campaigns_page','qr_menu','customer_panel') NOT NULL DEFAULT 'homepage',
+  `display_location` varchar(50) NOT NULL DEFAULT 'homepage',
   `match_id` int(11) UNSIGNED DEFAULT NULL,
   `menu_item_id` int(11) UNSIGNED DEFAULT NULL,
   `category_id` int(11) UNSIGNED DEFAULT NULL,
@@ -653,7 +653,8 @@ CREATE TABLE IF NOT EXISTS `hero_banners` (
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_hero_active_order` (`active_status`, `display_order`),
-  KEY `idx_hero_start_end` (`start_date`, `end_date`)
+  KEY `idx_hero_start_end` (`start_date`, `end_date`),
+  KEY `idx_hero_display_location` (`display_location`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `matches` (
@@ -685,8 +686,8 @@ CREATE TABLE IF NOT EXISTS `matches` (
   `match_end_at` datetime DEFAULT NULL,
   `start_date` datetime DEFAULT NULL,
   `end_date` datetime DEFAULT NULL,
-  `status` enum('active','inactive','archived','scheduled','live','finished','cancelled') NOT NULL DEFAULT 'active',
-  `campaign_status` enum('active','inactive','archived') NOT NULL DEFAULT 'active',
+  `status` varchar(50) NOT NULL DEFAULT 'active',
+  `campaign_status` varchar(50) NOT NULL DEFAULT 'active',
   `participant_count` int(11) NOT NULL DEFAULT 0,
   `banner_id` int(11) UNSIGNED DEFAULT NULL,
   `menu_item_id` int(11) UNSIGNED DEFAULT NULL,
@@ -715,19 +716,19 @@ CREATE TABLE IF NOT EXISTS `matches` (
 CREATE TABLE IF NOT EXISTS `predictions` (
   `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
   `customer_id` int(11) UNSIGNED DEFAULT NULL,
-  `customer_name` varchar(150) NOT NULL,
+  `customer_name` varchar(150) DEFAULT NULL,
   `customer_last_name` varchar(150) DEFAULT NULL,
   `customer_mobile` varchar(20) DEFAULT NULL,
-  `mobile` varchar(20) NOT NULL,
-  `match_id` int(11) UNSIGNED NOT NULL,
+  `mobile` varchar(20) DEFAULT NULL,
+  `match_id` int(11) UNSIGNED DEFAULT NULL,
   `team_one_name` varchar(120) DEFAULT NULL,
   `team_two_name` varchar(120) DEFAULT NULL,
   `predicted_team_one_score` tinyint UNSIGNED DEFAULT NULL,
   `predicted_team_two_score` tinyint UNSIGNED DEFAULT NULL,
-  `predicted_score_team_a` tinyint UNSIGNED NOT NULL,
-  `predicted_score_team_b` tinyint UNSIGNED NOT NULL,
+  `predicted_score_team_a` tinyint UNSIGNED DEFAULT NULL,
+  `predicted_score_team_b` tinyint UNSIGNED DEFAULT NULL,
   `prediction_content` text DEFAULT NULL,
-  `status` enum('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+  `status` varchar(50) NOT NULL DEFAULT 'pending',
   `is_winner` tinyint(1) NOT NULL DEFAULT 0,
   `evaluated_at` datetime DEFAULT NULL,
   `points_awarded` int(11) NOT NULL DEFAULT 0,
@@ -754,6 +755,7 @@ CREATE TABLE IF NOT EXISTS `predictions` (
   KEY `idx_predictions_match` (`match_id`),
   KEY `idx_predictions_winner` (`is_winner`),
   KEY `idx_predictions_created_at` (`created_at`),
+  KEY `idx_predictions_submitted_at` (`submitted_at`),
   CONSTRAINT `fk_predictions_match` FOREIGN KEY (`match_id`) REFERENCES `matches` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
