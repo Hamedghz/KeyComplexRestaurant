@@ -11,6 +11,12 @@ $poolOptions = [
     'استخر دهکده المپیک',
     'استخر خانه شنا',
 ];
+$customerTypes = [
+    'ادارات',
+    'تفریحی',
+    'آموزشی',
+    'آب درمانی',
+];
 
 // Handle status update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
@@ -27,6 +33,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         } catch (Throwable $e) {
             safeAdminLog('Pool lead status update failed: ' . $e->getMessage());
             $error = 'خطا در به‌روزرسانی وضعیت رخ داد.';
+        }
+    } elseif ($_POST['action'] === 'update_customer_type') {
+        $id = (int)$_POST['id'];
+        $customerType = trim((string)($_POST['customer_type'] ?? ''));
+
+        if ($customerType !== '' && !in_array($customerType, $customerTypes, true)) {
+            $error = 'نوع مشتری نامعتبر است.';
+        } else {
+            try {
+                $stmt = $db->prepare("UPDATE pool_leads SET customer_type = ? WHERE id = ?");
+                $stmt->execute([$customerType !== '' ? $customerType : null, $id]);
+                $success = 'نوع مشتری با موفقیت به‌روزرسانی شد.';
+            } catch (Throwable $e) {
+                safeAdminLog('Pool lead customer type update failed: ' . $e->getMessage());
+                $error = 'خطا در به‌روزرسانی نوع مشتری رخ داد.';
+            }
         }
     } elseif ($_POST['action'] === 'delete') {
         $id = (int)$_POST['id'];
@@ -58,7 +80,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 $filterStatus = $_GET['status'] ?? '';
 $filterSource = $_GET['source'] ?? '';
 $filterPool = $_GET['pool_name'] ?? '';
+$filterCustomerType = $_GET['customer_type'] ?? '';
 $search = trim($_GET['search'] ?? '');
+$export = (string)($_GET['export'] ?? '') === 'csv';
 
 // Build query
 $where = ['1=1'];
@@ -79,8 +103,15 @@ if ($filterPool !== '') {
     $params[] = $filterPool;
 }
 
+if ($filterCustomerType !== '') {
+    $where[] = 'customer_type = ?';
+    $params[] = $filterCustomerType;
+}
+
 if ($search !== '') {
-    $where[] = '(full_name LIKE ? OR mobile LIKE ? OR pool_name LIKE ?)';
+    $where[] = '(full_name LIKE ? OR mobile LIKE ? OR pool_name LIKE ? OR acquisition_source LIKE ? OR customer_type LIKE ?)';
+    $params[] = '%' . $search . '%';
+    $params[] = '%' . $search . '%';
     $params[] = '%' . $search . '%';
     $params[] = '%' . $search . '%';
     $params[] = '%' . $search . '%';
@@ -92,6 +123,41 @@ $whereClause = implode(' AND ', $where);
 $stmt = $db->prepare("SELECT * FROM pool_leads WHERE $whereClause ORDER BY created_at DESC");
 $stmt->execute($params);
 $leads = $stmt->fetchAll();
+
+if ($export) {
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="pool-leads-' . date('Ymd-His') . '.csv"');
+    header('X-Content-Type-Options: nosniff');
+    $out = fopen('php://output', 'w');
+    fprintf($out, chr(0xEF) . chr(0xBB) . chr(0xBF));
+    fputcsv($out, [
+        'id',
+        'full_name',
+        'mobile',
+        'pool_name',
+        'customer_type',
+        'acquisition_source',
+        'status',
+        'notes',
+        'created_at',
+        'updated_at',
+    ]);
+    foreach ($leads as $lead) {
+        fputcsv($out, [
+            $lead['id'] ?? '',
+            $lead['full_name'] ?? '',
+            $lead['mobile'] ?? '',
+            $lead['pool_name'] ?? '',
+            $lead['customer_type'] ?? '',
+            $lead['acquisition_source'] ?? '',
+            $lead['status'] ?? '',
+            $lead['notes'] ?? '',
+            $lead['created_at'] ?? '',
+            $lead['updated_at'] ?? '',
+        ]);
+    }
+    exit;
+}
 
 // Get acquisition sources
 $sourcesStmt = $db->query("SELECT DISTINCT acquisition_source FROM pool_leads WHERE acquisition_source IS NOT NULL ORDER BY acquisition_source");
@@ -121,6 +187,41 @@ $poolStatsStmt = $db->query("
     ORDER BY total DESC, pool_name ASC
 ");
 $poolStats = $poolStatsStmt->fetchAll();
+
+$customerTypeStatsStmt = $db->query("
+    SELECT COALESCE(NULLIF(customer_type, ''), '-') AS customer_type, COUNT(*) AS total
+    FROM pool_leads
+    WHERE customer_type IS NOT NULL AND customer_type <> ''
+    GROUP BY COALESCE(NULLIF(customer_type, ''), '-')
+    ORDER BY total DESC, customer_type ASC
+");
+$customerTypeStats = $customerTypeStatsStmt->fetchAll();
+
+$filteredStatsStmt = $db->prepare("
+    SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN status = 'new' THEN 1 ELSE 0 END) AS new,
+        SUM(CASE WHEN status = 'contacted' THEN 1 ELSE 0 END) AS contacted,
+        SUM(CASE WHEN status = 'converted' THEN 1 ELSE 0 END) AS converted,
+        SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS rejected
+    FROM pool_leads
+    WHERE $whereClause
+");
+$filteredStatsStmt->execute($params);
+$filteredStats = $filteredStatsStmt->fetch() ?: ['total' => 0, 'new' => 0, 'contacted' => 0, 'converted' => 0, 'rejected' => 0];
+
+$sourceSummaryStmt = $db->prepare("
+    SELECT COALESCE(NULLIF(acquisition_source, ''), '-') AS source, COUNT(*) AS total
+    FROM pool_leads
+    WHERE $whereClause
+    GROUP BY COALESCE(NULLIF(acquisition_source, ''), '-')
+    ORDER BY total DESC, source ASC
+    LIMIT 12
+");
+$sourceSummaryStmt->execute($params);
+$sourceSummary = $sourceSummaryStmt->fetchAll();
+
+$exportUrl = '?' . http_build_query(array_merge($_GET, ['export' => 'csv']));
 
 include __DIR__ . '/includes/header.php';
 ?>
@@ -232,9 +333,36 @@ include __DIR__ . '/includes/header.php';
 </div>
 <?php endif; ?>
 
+<div class="stats-row">
+    <div class="stat-card">
+        <h3><?php echo h($filteredStats['total'] ?? 0); ?></h3>
+        <p>نتیجه فیلتر فعلی</p>
+    </div>
+    <div class="stat-card">
+        <h3><?php echo h($filteredStats['new'] ?? 0); ?></h3>
+        <p>جدید در فیلتر</p>
+    </div>
+    <div class="stat-card">
+        <h3><?php echo h($filteredStats['converted'] ?? 0); ?></h3>
+        <p>تبدیل شده در فیلتر</p>
+    </div>
+</div>
+
+<?php if ($customerTypeStats): ?>
+<div class="stats-row">
+    <?php foreach ($customerTypeStats as $customerTypeStat): ?>
+        <div class="stat-card">
+            <h3><?php echo h($customerTypeStat['total']); ?></h3>
+            <p>تعداد <?php echo h($customerTypeStat['customer_type'] ?: '-'); ?></p>
+        </div>
+    <?php endforeach; ?>
+</div>
+<?php endif; ?>
+
 <div class="card">
     <div class="card-header">
         <h2>فیلترها و جستجو</h2>
+        <a class="btn btn-primary" href="<?php echo h($exportUrl); ?>">خروجی CSV</a>
     </div>
     <div class="card-body">
         <form method="get" class="filter-form">
@@ -265,12 +393,39 @@ include __DIR__ . '/includes/header.php';
                     </option>
                 <?php endforeach; ?>
             </select>
+
+            <select name="customer_type" class="form-control" style="width: 180px;">
+                <option value="">همه نوع مشتری‌ها</option>
+                <?php foreach ($customerTypes as $customerType): ?>
+                    <option value="<?php echo h($customerType); ?>" <?php echo $filterCustomerType === $customerType ? 'selected' : ''; ?>>
+                        <?php echo h($customerType); ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
             
             <button type="submit" class="btn btn-primary">اعمال فیلتر</button>
             <a href="pool-leads.php" class="btn btn-secondary">پاک کردن</a>
         </form>
     </div>
 </div>
+
+<?php if ($sourceSummary): ?>
+<div class="card">
+    <div class="card-header"><h2>خلاصه منابع در فیلتر فعلی</h2></div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table">
+                <thead><tr><th>منبع جذب</th><th>تعداد لید</th></tr></thead>
+                <tbody>
+                    <?php foreach ($sourceSummary as $sourceRow): ?>
+                        <tr><td><?php echo h($sourceRow['source']); ?></td><td><?php echo h($sourceRow['total']); ?></td></tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <div class="card">
     <div class="card-header">
@@ -285,6 +440,7 @@ include __DIR__ . '/includes/header.php';
                         <th>نام کامل</th>
                         <th>موبایل</th>
                         <th>استخر</th>
+                        <th>نوع مشتری</th>
                         <th>منبع جذب</th>
                         <th>وضعیت</th>
                         <th>یادداشت</th>
@@ -299,7 +455,22 @@ include __DIR__ . '/includes/header.php';
                             <td><?php echo h($lead['full_name']); ?></td>
                             <td><a href="tel:<?php echo h($lead['mobile']); ?>"><?php echo h($lead['mobile']); ?></a></td>
                             <td><?php echo h(($lead['pool_name'] ?? '') !== '' ? $lead['pool_name'] : '-'); ?></td>
-                            <td><?php echo h($lead['acquisition_source'] ?? '-'); ?></td>
+                            <td>
+                                <form method="post" style="display: inline;">
+                                    <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>">
+                                    <input type="hidden" name="action" value="update_customer_type">
+                                    <input type="hidden" name="id" value="<?php echo h($lead['id']); ?>">
+                                    <select name="customer_type" class="form-control" onchange="this.form.submit()">
+                                        <option value="" <?php echo ($lead['customer_type'] ?? '') === '' ? 'selected' : ''; ?>>-</option>
+                                        <?php foreach ($customerTypes as $customerType): ?>
+                                            <option value="<?php echo h($customerType); ?>" <?php echo ($lead['customer_type'] ?? '') === $customerType ? 'selected' : ''; ?>>
+                                                <?php echo h($customerType); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </form>
+                            </td>
+                            <td><?php echo h(($lead['acquisition_source'] ?? '') !== '' ? $lead['acquisition_source'] : '-'); ?></td>
                             <td>
                                 <form method="post" style="display: inline;">
                                     <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>">

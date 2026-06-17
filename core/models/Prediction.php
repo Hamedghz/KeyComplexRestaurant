@@ -49,11 +49,9 @@ class Prediction extends Model {
         if (!$match) {
             throw new RuntimeException('مسابقه یافت نشد.');
         }
-        $now = date('Y-m-d H:i:s');
-        $predictionStart = $match['prediction_start_at'] ?? $match['prediction_open_at'] ?? null;
-        $predictionEnd = $match['prediction_end_at'] ?? $match['prediction_close_at'] ?? null;
-        if (empty($match['is_active']) || empty($match['active_for_prediction']) || in_array((string)($match['status'] ?? 'active'), ['inactive', 'archived', 'cancelled'], true) || $predictionStart > $now || $predictionEnd < $now) {
-            throw new RuntimeException('مهلت ثبت پیش‌بینی برای این مسابقه فعال نیست.');
+        $availabilityError = matchPredictionAvailabilityError($match);
+        if ($availabilityError !== null) {
+            throw new RuntimeException($availabilityError);
         }
 
         $dupSql = $this->hasColumn('customer_mobile')
@@ -69,7 +67,8 @@ class Prediction extends Model {
         if ($customer) {
             $visitStmt = $this->db->prepare('SELECT COUNT(*) AS total FROM orders WHERE (customer_phone = :mobile OR user_id = :user_id) AND created_at BETWEEN :start_at AND :end_at');
             $start = $match['match_start_at'] ?? ($match['match_date'] . ' ' . ($match['broadcast_time'] ?: $match['kickoff_time']));
-            $end = date('Y-m-d H:i:s', strtotime($start . ' +3 hours'));
+            $startDateTime = parseStoredDateTime($start) ?: appNow();
+            $end = $startDateTime->modify('+3 hours')->format('Y-m-d H:i:s');
             $visitStmt->execute(['mobile' => $mobile, 'user_id' => $customer['user_id'] ?? 0, 'start_at' => $start, 'end_at' => $end]);
             $data['attended_match_time'] = ((int)($visitStmt->fetch()['total'] ?? 0)) > 0 ? 1 : 0;
         }

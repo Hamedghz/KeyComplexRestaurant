@@ -14,7 +14,13 @@ $poolOptions = [
     'استخر دهکده المپیک',
     'استخر خانه شنا',
 ];
-$formData = ['full_name' => '', 'mobile' => '', 'pool_name' => '', 'acquisition_source' => ''];
+$customerTypes = [
+    'ادارات',
+    'تفریحی',
+    'آموزشی',
+    'آب درمانی',
+];
+$formData = ['full_name' => '', 'mobile' => '', 'pool_name' => '', 'customer_type' => '', 'acquisition_source' => ''];
 
 // Get acquisition sources
 try {
@@ -36,6 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $formData['full_name'] = trim((string)($_POST['full_name'] ?? ''));
     $formData['mobile'] = trim((string)($_POST['mobile'] ?? ''));
     $formData['pool_name'] = trim((string)($_POST['pool_name'] ?? ''));
+    $formData['customer_type'] = trim((string)($_POST['customer_type'] ?? ''));
     $formData['acquisition_source'] = trim((string)($_POST['acquisition_source'] ?? ''));
 
     $submittedToken = (string)($_POST[CSRF_TOKEN_NAME] ?? '');
@@ -55,22 +62,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (!in_array($formData['pool_name'], $poolOptions, true)) {
         $status = 'error';
         $message = 'لطفاً استخر موردنظر را انتخاب کنید.';
+    } elseif (!in_array($formData['customer_type'], $customerTypes, true)) {
+        $status = 'error';
+        $message = 'لطفاً نوع مشتری را انتخاب کنید.';
     } else {
         try {
             $stmt = $db->prepare("
-                INSERT INTO pool_leads (full_name, mobile, pool_name, acquisition_source, status)
-                VALUES (:full_name, :mobile, :pool_name, :acquisition_source, 'new')
+                INSERT INTO pool_leads (full_name, mobile, pool_name, customer_type, acquisition_source, status)
+                VALUES (:full_name, :mobile, :pool_name, :customer_type, :acquisition_source, 'new')
             ");
             $stmt->execute([
                 'full_name' => $formData['full_name'],
                 'mobile' => $formData['mobile'],
                 'pool_name' => $formData['pool_name'],
+                'customer_type' => $formData['customer_type'],
                 'acquisition_source' => $formData['acquisition_source'] ?: null,
             ]);
 
             $status = 'success';
             $message = 'اطلاعات شما با موفقیت ثبت شد. به زودی با شما تماس خواهیم گرفت.';
-            $formData = ['full_name' => '', 'mobile' => '', 'pool_name' => '', 'acquisition_source' => ''];
+            $formData = ['full_name' => '', 'mobile' => '', 'pool_name' => '', 'customer_type' => '', 'acquisition_source' => ''];
         } catch (PDOException $e) {
             if ($e->getCode() === '23000') {
                 $status = 'error';
@@ -290,6 +301,18 @@ $csrfToken = generateCSRFToken();
                         <label class="radio-option">
                             <input type="radio" name="pool_name" value="<?php echo htmlspecialchars($poolOption); ?>" <?php echo $formData['pool_name'] === $poolOption ? 'checked' : ''; ?> required>
                             <span><?php echo htmlspecialchars($poolOption); ?></span>
+                        </label>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">نوع مشتری *</label>
+                <div class="radio-group">
+                    <?php foreach ($customerTypes as $customerType): ?>
+                        <label class="radio-option">
+                            <input type="radio" name="customer_type" value="<?php echo htmlspecialchars($customerType); ?>" <?php echo $formData['customer_type'] === $customerType ? 'checked' : ''; ?> required>
+                            <span><?php echo htmlspecialchars($customerType); ?></span>
                         </label>
                     <?php endforeach; ?>
                 </div>

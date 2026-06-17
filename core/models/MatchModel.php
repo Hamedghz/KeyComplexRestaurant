@@ -16,39 +16,59 @@ class MatchModel extends Model {
     }
 
     public function activeForPrediction() {
-        $hasAliases = $this->hasColumn('team_one_name') && $this->hasColumn('prediction_start_at') && $this->hasColumn('match_start_at');
-        if (!$hasAliases) {
+        $now = appMysqlDateTime();
+        $hasTeamAliases = $this->hasColumn('team_one_name') && $this->hasColumn('team_two_name');
+        $hasMatchStart = $this->hasColumn('match_start_at');
+        $hasPointsReward = $this->hasColumn('points_reward');
+        $hasPredictionWindow = $this->hasColumn('prediction_start_at') && $this->hasColumn('prediction_end_at');
+
+        $teamOneSelect = $hasTeamAliases ? 'COALESCE(team_one_name, team_a)' : 'team_a';
+        $teamTwoSelect = $hasTeamAliases ? 'COALESCE(team_two_name, team_b)' : 'team_b';
+        $matchStartSelect = $hasMatchStart ? "COALESCE(match_start_at, CONCAT(match_date, ' ', kickoff_time))" : "CONCAT(match_date, ' ', kickoff_time)";
+        $pointsSelect = $hasPointsReward ? 'COALESCE(points_reward, reward_points, 0)' : 'reward_points';
+        $predictionStartColumn = $hasPredictionWindow ? 'prediction_start_at' : 'prediction_open_at';
+        $predictionEndColumn = $hasPredictionWindow ? 'prediction_end_at' : 'prediction_close_at';
+
+        if (!$hasPredictionWindow) {
             $stmt = $this->db->prepare("
-                SELECT *, team_a AS display_team_one, team_b AS display_team_two, prediction_open_at AS display_prediction_start_at, prediction_close_at AS display_prediction_end_at, CONCAT(match_date, ' ', kickoff_time) AS display_match_start_at, reward_points AS display_points_reward
+                SELECT *,
+                       {$teamOneSelect} AS display_team_one,
+                       {$teamTwoSelect} AS display_team_two,
+                       {$predictionStartColumn} AS display_prediction_start_at,
+                       {$predictionEndColumn} AS display_prediction_end_at,
+                       {$matchStartSelect} AS display_match_start_at,
+                       {$pointsSelect} AS display_points_reward
                 FROM matches
                 WHERE is_active = 1
                   AND active_for_prediction = 1
-                  AND status NOT IN ('inactive', 'archived', 'cancelled')
-                  AND prediction_open_at <= NOW()
-                  AND prediction_close_at >= NOW()
+                  AND {$predictionStartColumn} <= :now_start
+                  AND {$predictionEndColumn} >= :now_end
                 ORDER BY match_date ASC, kickoff_time ASC
             ");
-            $stmt->execute();
-            return $stmt->fetchAll();
+            $stmt->execute(['now_start' => $now, 'now_end' => $now]);
+            return array_values(array_filter($stmt->fetchAll(), static function (array $match): bool {
+                return isMatchOpenForPrediction($match);
+            }));
         }
 
         $stmt = $this->db->prepare("
             SELECT *,
-                   COALESCE(team_one_name, team_a) AS display_team_one,
-                   COALESCE(team_two_name, team_b) AS display_team_two,
-                   COALESCE(prediction_start_at, prediction_open_at) AS display_prediction_start_at,
-                   COALESCE(prediction_end_at, prediction_close_at) AS display_prediction_end_at,
-                   COALESCE(match_start_at, CONCAT(match_date, ' ', kickoff_time)) AS display_match_start_at,
-                   COALESCE(points_reward, reward_points, 0) AS display_points_reward
+                   {$teamOneSelect} AS display_team_one,
+                   {$teamTwoSelect} AS display_team_two,
+                   prediction_start_at AS display_prediction_start_at,
+                   prediction_end_at AS display_prediction_end_at,
+                   {$matchStartSelect} AS display_match_start_at,
+                   {$pointsSelect} AS display_points_reward
             FROM matches
-            WHERE COALESCE(is_active, 1) = 1
-              AND COALESCE(active_for_prediction, 1) = 1
-              AND COALESCE(status, 'active') NOT IN ('inactive', 'archived', 'cancelled')
-              AND COALESCE(prediction_start_at, prediction_open_at) <= NOW()
-              AND COALESCE(prediction_end_at, prediction_close_at) >= NOW()
-            ORDER BY COALESCE(match_start_at, CONCAT(match_date, ' ', kickoff_time)) ASC, id ASC
+            WHERE is_active = 1
+              AND active_for_prediction = 1
+              AND prediction_start_at <= :now_start
+              AND prediction_end_at >= :now_end
+            ORDER BY {$matchStartSelect} ASC, id ASC
         ");
-        $stmt->execute();
-        return $stmt->fetchAll();
+        $stmt->execute(['now_start' => $now, 'now_end' => $now]);
+        return array_values(array_filter($stmt->fetchAll(), static function (array $match): bool {
+            return isMatchOpenForPrediction($match);
+        }));
     }
 }

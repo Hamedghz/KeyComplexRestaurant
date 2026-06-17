@@ -236,6 +236,86 @@ function homeBannerImageSrc($value): string {
     return '';
 }
 
+function homeSocialIconImageSrc($value): string {
+    $path = trim((string)$value);
+
+    if ($path === '') {
+        return '';
+    }
+
+    if (preg_match('/^https?:\/\//i', $path)) {
+        return normalizeAssetPath($path);
+    }
+
+    if (str_starts_with(ltrim($path, '/'), 'uploads/social-icons/')) {
+        return normalizeAssetPath($path);
+    }
+
+    return '';
+}
+
+function homeRenderSocialIcon(array $social): string {
+    $title = trim((string)($social['title'] ?? ''));
+    $image = homeSocialIconImageSrc($social['icon_image'] ?? '');
+
+    if ($image !== '') {
+        return '<img src="' . homeEscape($image) . '" alt="' . homeEscape($title) . '" class="social-link-icon">';
+    }
+
+    $icon = trim((string)($social['icon'] ?? ''));
+    return homeEscape($icon !== '' ? $icon : $title);
+}
+
+function homeFirstSettingValue(Setting $settingModel, array $keys): string {
+    foreach ($keys as $key) {
+        $value = trim((string)$settingModel->get($key, ''));
+        if ($value !== '' && preg_match('/^https?:\/\//i', $value)) {
+            return $value;
+        }
+    }
+
+    return '';
+}
+
+function homeCssColor($value, string $fallback): string {
+    $color = trim((string)$value);
+
+    if (preg_match('/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i', $color)) {
+        return $color;
+    }
+
+    return $fallback;
+}
+
+function homeFallbackMapUrl($lat, $lng): string {
+    $lat = trim((string)$lat);
+    $lng = trim((string)$lng);
+
+    if ($lat === '' || $lng === '') {
+        return '#location';
+    }
+
+    return 'https://balad.ir/location?latitude=' . rawurlencode($lat) . '&longitude=' . rawurlencode($lng);
+}
+
+function homeMapEmbedSrc(string $url): string {
+    $url = trim($url);
+
+    if ($url === '' || !preg_match('/^https?:\/\//i', $url)) {
+        return '';
+    }
+
+    if (preg_match('/\/embed\b|output=embed/i', $url)) {
+        return $url;
+    }
+
+    if (preg_match('/^https?:\/\/(www\.)?google\.[^\/]+\/maps/i', $url)) {
+        return str_contains($url, '?') ? $url . '&output=embed' : $url . '?output=embed';
+    }
+
+    return '';
+}
+
 function normalizeTelLink($phone) {
     return preg_replace('/[^0-9+]/', '', (string)$phone);
 }
@@ -427,8 +507,8 @@ $siteNameEn = $settingModel->get('site_name_en', 'KEY Restaurant & Coffeehouse')
 $siteDescription = trim((string)$settingModel->get('site_description_fa', '')) ?: $legacyHeroSubtitle;
 $brandLogoImage = normalizeAssetPath($settingModel->get('lotus_logo_image', ''));
 $ctaText = trim((string)$settingModel->get('hero_cta_text_fa', '')) ?: 'مشاهده منو';
-$primaryColor = $settingModel->get('primary_color', '#004647');
-$accentColor = $settingModel->get('accent_color', '#D4AF37');
+$primaryColor = homeCssColor($settingModel->get('primary_color', '#004647'), '#004647');
+$accentColor = homeCssColor($settingModel->get('accent_color', '#D4AF37'), '#D4AF37');
 $menuTitle = $settingModel->get('featured_menu_title_fa', 'منوی ویژه');
 $keyStory = getActiveKeyStory($settingModel);
 $aboutTitle = $keyStory['title'];
@@ -488,7 +568,10 @@ $dayMap = [
 $now = new DateTimeImmutable('now');
 $currentDayKey = $dayMap[$now->format('D')] ?? 'saturday';
 $isCurrentlyOpen = isOpenNow($openingHours, $currentDayKey, $now);
-$baladMapUrl = $settingModel->get('balad_map_url', 'https://balad.ir/location?latitude=' . rawurlencode((string)$locationLat) . '&longitude=' . rawurlencode((string)$locationLng));
+$configuredMapUrl = homeFirstSettingValue($settingModel, ['balad_map_url', 'map_url', 'location_url', 'google_map_url', 'google_maps_url', 'location_map_url', 'map_embed_url']);
+$baladMapUrl = $configuredMapUrl !== '' ? $configuredMapUrl : homeFallbackMapUrl($locationLat, $locationLng);
+$mapEmbedUrl = homeMapEmbedSrc($baladMapUrl);
+$hasConfiguredMapUrl = $configuredMapUrl !== '';
 $telLink = normalizeTelLink($phoneNumber);
 $socialLinks = [];
 $newsletterToken = generateCSRFToken();
@@ -499,7 +582,8 @@ $webglSettings = $settingModel->getWebGLSettings();
 // Get dynamic hero banners and filterable menu categories/items
 $db = Database::getInstance()->getConnection();
 try {
-    $socialStmt = $db->query("SELECT title, icon, url FROM social_links WHERE active = 1 AND url <> '' ORDER BY sort_order ASC, id ASC");
+    $socialIconImageSelect = homeColumnExists($db, 'social_links', 'icon_image') ? 'icon_image' : 'NULL AS icon_image';
+    $socialStmt = $db->query("SELECT title, icon, {$socialIconImageSelect}, url FROM social_links WHERE active = 1 AND url <> '' ORDER BY sort_order ASC, id ASC");
     $socialLinks = $socialStmt->fetchAll();
 } catch (Throwable $e) {
     $socialLinks = [];
@@ -560,6 +644,7 @@ $featuredItems = $menuModel->getFeatured(6);
             color: var(--white);
             direction: rtl;
             overflow-x: hidden;
+            padding-bottom: env(safe-area-inset-bottom);
         }
 
         .top-header {
@@ -589,9 +674,16 @@ $featuredItems = $menuModel->getFeatured(6);
             display: inline-flex;
             align-items: center;
             gap: 10px;
+            min-width: 0;
             text-decoration: none;
             color: #fff;
             font-weight: 700;
+        }
+
+        .brand-mark span {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .brand-mark img {
@@ -606,12 +698,14 @@ $featuredItems = $menuModel->getFeatured(6);
             align-items: center;
             gap: 16px;
             flex-wrap: wrap;
+            justify-content: flex-end;
         }
 
         .header-nav a {
             color: rgba(255,255,255,.9);
             text-decoration: none;
             font-size: 14px;
+            white-space: nowrap;
             transition: color .2s ease;
         }
 
@@ -779,30 +873,66 @@ $featuredItems = $menuModel->getFeatured(6);
             left: 30px;
             top: 50%;
             transform: translateY(-50%);
-            z-index: 100;
+            z-index: 120;
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 14px;
         }
         
         .social-link {
-            width: 50px;
-            height: 50px;
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
+            width: 58px;
+            height: 58px;
+            min-width: 58px;
+            min-height: 58px;
+            max-width: 58px;
+            max-height: 58px;
+            background: linear-gradient(145deg, rgba(212, 175, 55, 0.24), rgba(255, 255, 255, 0.08));
+            backdrop-filter: blur(14px);
             border-radius: 50%;
+            border: 1px solid rgba(212, 175, 55, 0.38);
+            overflow: hidden;
             display: flex;
             align-items: center;
             justify-content: center;
             color: var(--white);
             text-decoration: none;
-            font-size: 20px;
-            transition: all 0.3s;
+            font-size: 23px;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.34), 0 0 0 0 rgba(212, 175, 55, 0.24);
+            transition: transform 0.25s ease, background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+            animation: socialPulse 3.8s ease-in-out infinite;
+        }
+
+        .social-link:nth-child(2n) {
+            animation-delay: 0.55s;
         }
         
-        .social-link:hover {
+        .social-link:hover,
+        .social-link:focus-visible {
             background: var(--accent);
+            border-color: rgba(255, 255, 255, 0.72);
+            color: #111;
             transform: scale(1.1);
+            outline: none;
+            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.42), 0 0 24px rgba(212, 175, 55, 0.34);
+        }
+
+        .social-link-icon {
+            width: 30px;
+            height: 30px;
+            max-width: 30px;
+            max-height: 30px;
+            object-fit: contain;
+            display: block;
+            flex: 0 0 auto;
+        }
+
+        @keyframes socialPulse {
+            0%, 100% {
+                box-shadow: 0 12px 30px rgba(0, 0, 0, 0.34), 0 0 0 0 rgba(212, 175, 55, 0.18);
+            }
+            50% {
+                box-shadow: 0 14px 34px rgba(0, 0, 0, 0.38), 0 0 0 8px rgba(212, 175, 55, 0);
+            }
         }
         
         /* Menu Section */
@@ -1008,12 +1138,14 @@ $featuredItems = $menuModel->getFeatured(6);
             display: flex;
             gap: 14px;
             flex-wrap: wrap;
+            align-items: center;
         }
 
         .secondary-button {
             display: inline-flex;
             align-items: center;
             justify-content: center;
+            min-height: 48px;
             padding: 14px 24px;
             border-radius: 999px;
             color: var(--white);
@@ -1031,6 +1163,14 @@ $featuredItems = $menuModel->getFeatured(6);
         .map-frame {
             min-height: 390px;
             overflow: hidden;
+        }
+
+        .map-frame iframe {
+            width: 100%;
+            height: 100%;
+            min-height: 390px;
+            border: 0;
+            display: block;
         }
 
         .map-fallback-card {
@@ -1064,6 +1204,11 @@ $featuredItems = $menuModel->getFeatured(6);
             background: rgba(0, 0, 0, 0.58);
             color: #fff;
             backdrop-filter: blur(12px);
+        }
+
+        .map-fallback-overlay span:not(.secondary-button) {
+            color: rgba(255, 255, 255, 0.76);
+            line-height: 1.8;
         }
 
         .hours-section {
@@ -1205,6 +1350,7 @@ $featuredItems = $menuModel->getFeatured(6);
         .footer-contact li {
             color: rgba(255, 255, 255, 0.62);
             line-height: 1.9;
+            overflow-wrap: anywhere;
         }
 
         .footer-link {
@@ -1234,14 +1380,28 @@ $featuredItems = $menuModel->getFeatured(6);
         .footer-social a {
             width: 42px;
             height: 42px;
+            min-width: 42px;
+            min-height: 42px;
+            max-width: 42px;
+            max-height: 42px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
             border-radius: 50%;
+            overflow: hidden;
             color: var(--white);
             text-decoration: none;
             background: rgba(255, 255, 255, 0.08);
             border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .footer-social .social-link-icon {
+            width: 22px;
+            height: 22px;
+            max-width: 22px;
+            max-height: 22px;
+            object-fit: contain;
+            display: block;
         }
 
         .footer-bottom {
@@ -1257,6 +1417,21 @@ $featuredItems = $menuModel->getFeatured(6);
             .location-grid,
             .footer-grid {
                 grid-template-columns: 1fr;
+            }
+
+            .footer-grid {
+                text-align: center;
+                gap: 28px;
+            }
+
+            .footer-grid > div {
+                max-width: 560px;
+                margin-inline: auto;
+            }
+
+            .footer-social,
+            .section-actions {
+                justify-content: center;
             }
 
             .about-image-wrap,
@@ -1294,13 +1469,97 @@ $featuredItems = $menuModel->getFeatured(6);
         @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
         @media (max-width: 768px) {
-            .top-header { height: 60px; }
-            .top-header-inner { width: calc(100% - 22px); }
-            .header-nav { gap: 10px; }
-            .header-nav a { font-size: 13px; }
-            .hero-content, .hero-banner-copy { padding-top: 76px; }
+            .top-header {
+                height: auto;
+                min-height: 66px;
+                padding: 8px 0 9px;
+                background: linear-gradient(180deg, rgba(0,0,0,.72), rgba(0,0,0,.28));
+            }
+            .top-header-inner {
+                width: calc(100% - 22px);
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+            .brand-mark {
+                width: 100%;
+                justify-content: center;
+                font-size: clamp(14px, 4.4vw, 18px);
+            }
+            .brand-mark img {
+                width: 34px;
+                height: 34px;
+            }
+            .header-nav {
+                width: 100%;
+                flex-wrap: nowrap;
+                justify-content: flex-start;
+                gap: 8px;
+                overflow-x: auto;
+                padding: 0 2px 3px;
+                scrollbar-width: none;
+            }
+            .header-nav::-webkit-scrollbar { display: none; }
+            .header-nav a {
+                flex: 0 0 auto;
+                font-size: 12px;
+                padding: 7px 10px;
+                border-radius: 999px;
+                background: rgba(255,255,255,.08);
+            }
+            .hero-content, .hero-banner-copy {
+                min-height: 100svh;
+                padding: 128px 18px 92px;
+            }
+            .hero-title {
+                font-size: clamp(30px, 10vw, 44px);
+                line-height: 1.28;
+                margin-bottom: 14px;
+            }
+            .hero-subtitle,
+            .hero-banner-description {
+                font-size: clamp(15px, 4.2vw, 18px);
+                line-height: 1.85;
+                margin-bottom: 24px;
+            }
+            .glass-button {
+                width: min(100%, 300px);
+                padding: 15px 24px;
+                font-size: 16px;
+            }
+            .scroll-indicator {
+                bottom: 96px;
+            }
             .social-links {
-                left: 15px;
+                top: auto;
+                left: 50%;
+                bottom: calc(14px + env(safe-area-inset-bottom));
+                transform: translateX(-50%);
+                width: min(calc(100% - 28px), 360px);
+                flex-direction: row;
+                justify-content: center;
+                gap: 10px;
+                padding: 8px;
+                border-radius: 999px;
+                background: rgba(0, 0, 0, 0.38);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                backdrop-filter: blur(16px);
+            }
+
+            .social-link {
+                width: 52px;
+                height: 52px;
+                min-width: 52px;
+                min-height: 52px;
+                max-width: 52px;
+                max-height: 52px;
+                font-size: 21px;
+            }
+
+            .social-link-icon {
+                width: 27px;
+                height: 27px;
+                max-width: 27px;
+                max-height: 27px;
             }
             
             .menu-grid {
@@ -1330,6 +1589,50 @@ $featuredItems = $menuModel->getFeatured(6);
 
             .newsletter-form input {
                 min-height: 52px;
+                width: 100%;
+                text-align: center;
+            }
+
+            .newsletter-form .secondary-button,
+            .section-actions .secondary-button {
+                width: 100%;
+            }
+
+            .footer {
+                padding-bottom: calc(112px + env(safe-area-inset-bottom));
+            }
+        }
+
+        @media (max-width: 420px) {
+            .premium-section,
+            .menu-section {
+                padding-inline: 12px;
+            }
+
+            .contact-card,
+            .newsletter-card,
+            .about-copy {
+                padding: 22px 18px;
+            }
+
+            .section-title {
+                font-size: 30px;
+            }
+
+            .map-fallback-overlay {
+                inset: auto 14px 14px 14px;
+                padding: 16px;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .social-link,
+            .scroll-indicator,
+            .hero-title,
+            .hero-subtitle,
+            .glass-button,
+            .hero-banner-slide {
+                animation: none;
             }
         }
     </style>
@@ -1348,10 +1651,11 @@ $featuredItems = $menuModel->getFeatured(6);
             <nav class="header-nav">
                 <a href="#hero-section">خانه</a>
                 <a href="#menu">منو</a>
-                <a href="#about">داستان KEY</a>
+                <a href="#about">درباره ما</a>
                 <a href="#location">نقشه</a>
                 <a href="#hours">ساعات کاری</a>
                 <a href="#newsletter">باشگاه مشتریان</a>
+                <a href="/survey.php">نظرسنجی</a>
             </nav>
         </div>
     </header>
@@ -1420,7 +1724,7 @@ $featuredItems = $menuModel->getFeatured(6);
     <!-- Social Links -->
     <div class="social-links">
         <?php foreach ($socialLinks as $social): ?>
-            <a href="<?php echo homeEscape($social['url']); ?>" class="social-link" target="_blank" rel="noopener" aria-label="<?php echo homeEscape($social['title']); ?>"><?php echo homeEscape($social['icon']); ?></a>
+            <a href="<?php echo homeEscape($social['url']); ?>" class="social-link" target="_blank" rel="noopener" aria-label="<?php echo homeEscape($social['title']); ?>"><?php echo homeRenderSocialIcon($social); ?></a>
         <?php endforeach; ?>
         <?php if ($telLink !== ''): ?>
             <a href="tel:<?php echo homeEscape($telLink); ?>" class="social-link" aria-label="Call">📞</a>
@@ -1521,13 +1825,19 @@ $featuredItems = $menuModel->getFeatured(6);
                         <a class="secondary-button" href="<?php echo homeEscape($baladMapUrl); ?>" target="_blank" rel="noopener">باز کردن در بلد</a>
                     </div>
                 </div>
-                <a class="map-frame glass-panel map-fallback-card" href="<?php echo homeEscape($baladMapUrl); ?>" target="_blank" rel="noopener noreferrer" aria-label="Open KEY Restaurant location in Balad">
-                    <div class="map-fallback-overlay">
-                        <strong>KEY Restaurant Location</strong>
-                        <span><?php echo homeEscape($locationLat); ?>, <?php echo homeEscape($locationLng); ?></span>
-                        <span class="secondary-button">باز کردن در بلد</span>
+                <?php if ($mapEmbedUrl !== ''): ?>
+                    <div class="map-frame glass-panel">
+                        <iframe src="<?php echo homeEscape($mapEmbedUrl); ?>" title="<?php echo homeEscape($locationTitle); ?>" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
                     </div>
-                </a>
+                <?php else: ?>
+                    <a class="map-frame glass-panel map-fallback-card" href="<?php echo homeEscape($baladMapUrl); ?>" target="_blank" rel="noopener noreferrer" aria-label="<?php echo homeEscape($locationTitle); ?>">
+                        <div class="map-fallback-overlay">
+                            <strong><?php echo $hasConfiguredMapUrl ? 'مشاهده نقشه مجموعه' : 'موقعیت تقریبی مجموعه'; ?></strong>
+                            <span><?php echo homeEscape($addressFa ?: $locationTitle); ?></span>
+                            <span class="secondary-button">باز کردن در بلد</span>
+                        </div>
+                    </a>
+                <?php endif; ?>
             </div>
         </div>
     </section>
@@ -1582,7 +1892,7 @@ $featuredItems = $menuModel->getFeatured(6);
                     <p class="footer-text"><?php echo homeEscape($siteDescription); ?></p>
                     <div class="footer-social">
                         <?php foreach ($socialLinks as $social): ?>
-                            <a href="<?php echo homeEscape($social['url']); ?>" target="_blank" rel="noopener" aria-label="<?php echo homeEscape($social['title']); ?>"><?php echo homeEscape($social['icon']); ?></a>
+                            <a href="<?php echo homeEscape($social['url']); ?>" target="_blank" rel="noopener" aria-label="<?php echo homeEscape($social['title']); ?>"><?php echo homeRenderSocialIcon($social); ?></a>
                         <?php endforeach; ?>
                     </div>
                 </div>

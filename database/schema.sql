@@ -440,25 +440,28 @@ CREATE TABLE IF NOT EXISTS `activity_log` (
 -- ============================================
 CREATE TABLE IF NOT EXISTS `dynamic_forms` (
   `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-  `form_name` varchar(100) NOT NULL,
-  `form_title_fa` varchar(200) NOT NULL,
-  `form_title_en` varchar(200) DEFAULT NULL,
+  `form_name` varchar(150) NOT NULL,
+  `form_title_fa` varchar(255) NOT NULL,
+  `form_title_en` varchar(255) DEFAULT NULL,
   `form_description_fa` text DEFAULT NULL,
   `form_description_en` text DEFAULT NULL,
-  `form_schema` JSON NOT NULL COMMENT 'JSON schema of form fields',
-  `is_active` tinyint(1) DEFAULT 1,
-  `display_order` int(11) DEFAULT 0,
-  `created_by` int(11) UNSIGNED DEFAULT NULL,
+  `form_schema` longtext DEFAULT NULL,
+  `related_page` varchar(100) DEFAULT 'survey',
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `display_order` int(11) NOT NULL DEFAULT 0,
   `start_date` datetime DEFAULT NULL,
   `end_date` datetime DEFAULT NULL,
   `publishing_channels` varchar(255) DEFAULT NULL,
   `branch_id` int(11) UNSIGNED DEFAULT NULL,
-  `survey_version` int(11) NOT NULL DEFAULT 1,
+  `survey_version` varchar(50) DEFAULT NULL,
+  `created_by` int(11) UNSIGNED DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `is_active` (`is_active`),
   KEY `display_order` (`display_order`),
+  KEY `idx_dynamic_forms_active_page` (`is_active`, `related_page`, `display_order`),
+  KEY `idx_dynamic_forms_dates` (`start_date`, `end_date`),
   KEY `created_by` (`created_by`),
   CONSTRAINT `fk_forms_admin` FOREIGN KEY (`created_by`) REFERENCES `admins` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -471,23 +474,28 @@ CREATE TABLE IF NOT EXISTS `survey_responses` (
   `form_id` int(11) UNSIGNED NOT NULL,
   `order_id` int(11) UNSIGNED DEFAULT NULL,
   `user_id` int(11) UNSIGNED DEFAULT NULL,
-  `response_data` JSON NOT NULL COMMENT 'JSON response data',
-  `customer_name` varchar(100) DEFAULT NULL,
+  `response_data` longtext DEFAULT NULL,
+  `customer_name` varchar(150) DEFAULT NULL,
+  `customer_mobile` varchar(20) DEFAULT NULL,
   `customer_phone` varchar(20) DEFAULT NULL,
-  `customer_email` varchar(100) DEFAULT NULL,
+  `customer_email` varchar(150) DEFAULT NULL,
   `ip_address` varchar(45) DEFAULT NULL,
   `user_agent` varchar(255) DEFAULT NULL,
   `branch_id` int(11) UNSIGNED DEFAULT NULL,
-  `satisfaction_score` decimal(5,2) DEFAULT NULL,
+  `satisfaction_score` tinyint DEFAULT NULL,
   `is_dissatisfied` tinyint(1) NOT NULL DEFAULT 0,
   `crm_follow_up` tinyint(1) NOT NULL DEFAULT 0,
   `submitted_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `form_id` (`form_id`),
   KEY `order_id` (`order_id`),
   KEY `user_id` (`user_id`),
   KEY `submitted_at` (`submitted_at`),
   KEY `idx_survey_customer_phone` (`customer_phone`),
+  KEY `idx_survey_responses_form` (`form_id`),
+  KEY `idx_survey_responses_submitted` (`submitted_at`),
+  KEY `idx_survey_responses_mobile` (`customer_mobile`),
   CONSTRAINT `fk_responses_form` FOREIGN KEY (`form_id`) REFERENCES `dynamic_forms` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_responses_order` FOREIGN KEY (`order_id`) REFERENCES `orders` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_responses_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
@@ -496,8 +504,8 @@ CREATE TABLE IF NOT EXISTS `survey_responses` (
 -- ============================================
 -- SAMPLE SURVEY FORM
 -- ============================================
-INSERT IGNORE INTO `dynamic_forms` (`form_name`, `form_title_fa`, `form_title_en`, `form_description_fa`, `form_schema`, `is_active`) VALUES
-('customer_satisfaction', 'نظرسنجی رضایت مشتری', 'Customer Satisfaction Survey', 'لطفاً نظر خود را درباره تجربه خرید به اشتراک بگذارید', 
+INSERT IGNORE INTO `dynamic_forms` (`form_name`, `form_title_fa`, `form_title_en`, `form_description_fa`, `form_schema`, `related_page`, `is_active`) VALUES
+('customer_satisfaction', 'نظرسنجی رضایت مشتری', 'Customer Satisfaction Survey', 'لطفاً نظر خود را درباره تجربه خرید به اشتراک بگذارید',
 '{
   "fields": [
     {
@@ -577,7 +585,7 @@ INSERT IGNORE INTO `dynamic_forms` (`form_name`, `form_title_fa`, `form_title_en
       "required": false
     }
   ]
-}', 1);
+}', 'survey', 1);
 
 
 -- CRM, content, prediction, security, employee, and analytics schema
@@ -773,7 +781,9 @@ CREATE TABLE IF NOT EXISTS `employee_performance` (
   `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
   `admin_id` int(11) UNSIGNED NOT NULL,
   `period_month` char(7) NOT NULL,
+  `period_id` int(11) UNSIGNED DEFAULT NULL,
   `score` decimal(5,2) NOT NULL DEFAULT 0.00,
+  `score_breakdown` longtext DEFAULT NULL,
   `reward` varchar(255) DEFAULT NULL,
   `penalty` varchar(255) DEFAULT NULL,
   `evaluation_notes` text DEFAULT NULL,
@@ -783,6 +793,7 @@ CREATE TABLE IF NOT EXISTS `employee_performance` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uniq_employee_period` (`admin_id`, `period_month`),
   KEY `idx_employee_performance_month_score` (`period_month`, `score`),
+  KEY `idx_employee_performance_period_score` (`period_id`, `score`),
   CONSTRAINT `fk_employee_performance_admin` FOREIGN KEY (`admin_id`) REFERENCES `admins` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_employee_performance_evaluator` FOREIGN KEY (`evaluated_by`) REFERENCES `admins` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -803,6 +814,7 @@ CREATE TABLE IF NOT EXISTS `social_links` (
   `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
   `title` varchar(100) NOT NULL,
   `icon` varchar(50) NOT NULL,
+  `icon_image` varchar(255) DEFAULT NULL,
   `url` varchar(500) NOT NULL,
   `sort_order` int(11) NOT NULL DEFAULT 0,
   `active` tinyint(1) NOT NULL DEFAULT 1,
@@ -812,22 +824,216 @@ CREATE TABLE IF NOT EXISTS `social_links` (
   KEY `idx_social_active_order` (`active`, `sort_order`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `hr_evaluation_categories` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `code` varchar(80) NOT NULL,
+  `title` varchar(160) NOT NULL,
+  `form_type` varchar(60) NOT NULL DEFAULT 'employee_performance',
+  `allow_self_evaluation` tinyint(1) NOT NULL DEFAULT 0,
+  `prevent_duplicate_responses` tinyint(1) NOT NULL DEFAULT 1,
+  `manual_result_entry` tinyint(1) NOT NULL DEFAULT 0,
+  `external_link` varchar(500) DEFAULT NULL,
+  `age_guidance` varchar(120) DEFAULT NULL,
+  `question_count` int(11) DEFAULT NULL,
+  `intended_use` varchar(180) DEFAULT NULL,
+  `description` text DEFAULT NULL,
+  `applicable_role` varchar(60) DEFAULT NULL,
+  `department` varchar(100) DEFAULT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `sort_order` int(11) NOT NULL DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_hr_eval_category_code` (`code`),
+  KEY `idx_hr_eval_category_active_order` (`is_active`, `sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_evaluation_criteria` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `category_id` int(11) UNSIGNED NOT NULL,
+  `code` varchar(80) NOT NULL,
+  `title` varchar(180) NOT NULL,
+  `description` text DEFAULT NULL,
+  `input_type` varchar(40) NOT NULL DEFAULT 'numeric',
+  `options_json` longtext DEFAULT NULL,
+  `weight` decimal(7,2) NOT NULL DEFAULT 0.00,
+  `max_score` decimal(7,2) NOT NULL DEFAULT 100.00,
+  `include_in_score` tinyint(1) NOT NULL DEFAULT 1,
+  `visibility` varchar(40) NOT NULL DEFAULT 'manager',
+  `applicable_role` varchar(60) DEFAULT NULL,
+  `department` varchar(100) DEFAULT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `sort_order` int(11) NOT NULL DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_hr_eval_criterion_code` (`category_id`, `code`),
+  KEY `idx_hr_eval_criterion_category` (`category_id`, `is_active`, `sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_evaluation_periods` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `title` varchar(180) NOT NULL,
+  `period_type` varchar(60) NOT NULL DEFAULT 'monthly',
+  `period_key` varchar(60) DEFAULT NULL,
+  `start_date` date DEFAULT NULL,
+  `end_date` date DEFAULT NULL,
+  `status` varchar(40) NOT NULL DEFAULT 'draft',
+  `visibility` varchar(40) NOT NULL DEFAULT 'manager',
+  `description` text DEFAULT NULL,
+  `created_by` int(11) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_hr_eval_period_status` (`status`, `period_type`),
+  KEY `idx_hr_eval_period_key` (`period_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_assessment_tests` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `title` varchar(180) NOT NULL,
+  `test_code` varchar(80) NOT NULL,
+  `category` varchar(80) NOT NULL DEFAULT 'other',
+  `age_guidance` varchar(120) DEFAULT NULL,
+  `question_count` int(11) DEFAULT NULL,
+  `description` text DEFAULT NULL,
+  `external_link` varchar(500) DEFAULT NULL,
+  `source_url` varchar(500) DEFAULT NULL,
+  `source_license` varchar(160) DEFAULT NULL,
+  `scoring_method_type` varchar(40) NOT NULL DEFAULT 'manual',
+  `import_metadata` longtext DEFAULT NULL,
+  `is_paid` tinyint(1) NOT NULL DEFAULT 0,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `sort_order` int(11) NOT NULL DEFAULT 0,
+  `intended_use` varchar(180) DEFAULT NULL,
+  `time_limit_minutes` int(11) DEFAULT NULL,
+  `assigned_role` varchar(60) DEFAULT NULL,
+  `assigned_department` varchar(100) DEFAULT NULL,
+  `allow_retake` tinyint(1) NOT NULL DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_hr_assessment_test_code` (`test_code`),
+  KEY `idx_hr_assessment_active_order` (`is_active`, `sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_test_dimensions` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `test_id` int(11) UNSIGNED NOT NULL,
+  `code` varchar(80) NOT NULL,
+  `title` varchar(180) NOT NULL,
+  `description` text DEFAULT NULL,
+  `positive_label` varchar(120) DEFAULT NULL,
+  `negative_label` varchar(120) DEFAULT NULL,
+  `sort_order` int(11) NOT NULL DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_hr_test_dimension` (`test_id`, `code`),
+  KEY `idx_hr_test_dimension_test` (`test_id`, `sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_test_questions` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `test_id` int(11) UNSIGNED NOT NULL,
+  `dimension_id` int(11) UNSIGNED DEFAULT NULL,
+  `code` varchar(80) NOT NULL,
+  `question_text` text NOT NULL,
+  `answer_type` varchar(40) NOT NULL DEFAULT 'scale_5',
+  `options_json` longtext DEFAULT NULL,
+  `weight` decimal(7,2) NOT NULL DEFAULT 1.00,
+  `scoring_direction` varchar(20) NOT NULL DEFAULT 'positive',
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `sort_order` int(11) NOT NULL DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_hr_test_question` (`test_id`, `code`),
+  KEY `idx_hr_test_question_test` (`test_id`, `is_active`, `sort_order`),
+  KEY `idx_hr_test_question_dimension` (`dimension_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_test_assignments` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `test_id` int(11) UNSIGNED NOT NULL,
+  `employee_id` int(11) UNSIGNED DEFAULT NULL,
+  `department` varchar(100) DEFAULT NULL,
+  `role` varchar(60) DEFAULT NULL,
+  `period_id` int(11) UNSIGNED DEFAULT NULL,
+  `due_date` date DEFAULT NULL,
+  `status` varchar(40) NOT NULL DEFAULT 'active',
+  `allow_retake` tinyint(1) NOT NULL DEFAULT 0,
+  `assigned_by` int(11) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_hr_test_assignment_test` (`test_id`, `status`),
+  KEY `idx_hr_test_assignment_employee` (`employee_id`, `status`),
+  KEY `idx_hr_test_assignment_scope` (`department`, `role`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_test_responses` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `assignment_id` int(11) UNSIGNED DEFAULT NULL,
+  `test_id` int(11) UNSIGNED NOT NULL,
+  `employee_id` int(11) UNSIGNED NOT NULL,
+  `period_id` int(11) UNSIGNED DEFAULT NULL,
+  `status` varchar(40) NOT NULL DEFAULT 'in_progress',
+  `answers_json` longtext DEFAULT NULL,
+  `dimension_scores_json` longtext DEFAULT NULL,
+  `profile_output` varchar(180) DEFAULT NULL,
+  `normalized_score` decimal(6,2) DEFAULT NULL,
+  `started_at` datetime DEFAULT NULL,
+  `submitted_at` datetime DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_hr_test_response_employee` (`employee_id`, `status`),
+  KEY `idx_hr_test_response_test` (`test_id`, `submitted_at`),
+  KEY `idx_hr_test_response_assignment` (`assignment_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_assessment_results` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `employee_id` int(11) UNSIGNED NOT NULL,
+  `test_id` int(11) UNSIGNED NOT NULL,
+  `completion_date` date NOT NULL,
+  `result_summary` text DEFAULT NULL,
+  `score_value` varchar(120) DEFAULT NULL,
+  `result_type` varchar(120) DEFAULT NULL,
+  `attachment_path` varchar(500) DEFAULT NULL,
+  `hr_notes` text DEFAULT NULL,
+  `visibility` varchar(40) NOT NULL DEFAULT 'private',
+  `recorded_by` int(11) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_hr_assessment_result_employee` (`employee_id`, `completion_date`),
+  KEY `idx_hr_assessment_result_test` (`test_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `employee_evaluations` (
   `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
   `evaluator_id` int(11) UNSIGNED NOT NULL,
   `employee_id` int(11) UNSIGNED NOT NULL,
   `period_month` char(7) NOT NULL,
+  `period_id` int(11) UNSIGNED DEFAULT NULL,
   `category_group` varchar(50) NOT NULL DEFAULT 'common',
+  `category_id` int(11) UNSIGNED DEFAULT NULL,
   `scores` JSON NOT NULL,
+  `answers` longtext DEFAULT NULL,
   `peer_score` decimal(5,2) NOT NULL DEFAULT 0.00,
   `manager_score` decimal(5,2) NOT NULL DEFAULT 0.00,
+  `category_score` decimal(5,2) NOT NULL DEFAULT 0.00,
+  `source_type` varchar(40) NOT NULL DEFAULT 'peer',
   `notes` text DEFAULT NULL,
   `is_private` tinyint(1) NOT NULL DEFAULT 1,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uniq_eval_once` (`evaluator_id`, `employee_id`, `period_month`),
+  UNIQUE KEY `uniq_eval_once_form` (`evaluator_id`, `employee_id`, `period_id`, `category_id`, `period_month`),
   KEY `idx_eval_employee_month` (`employee_id`, `period_month`),
+  KEY `idx_eval_period_category` (`period_id`, `category_id`),
+  KEY `idx_eval_category_group` (`category_group`),
   CONSTRAINT `fk_eval_evaluator` FOREIGN KEY (`evaluator_id`) REFERENCES `admins` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_eval_employee` FOREIGN KEY (`employee_id`) REFERENCES `admins` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -853,15 +1059,19 @@ CREATE TABLE IF NOT EXISTS `employee_score_history` (
   `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
   `employee_id` int(11) UNSIGNED NOT NULL,
   `period_month` char(7) NOT NULL,
+  `period_id` int(11) UNSIGNED DEFAULT NULL,
   `manager_score` decimal(5,2) NOT NULL DEFAULT 0.00,
   `peer_score` decimal(5,2) NOT NULL DEFAULT 0.00,
   `attendance_score` decimal(5,2) NOT NULL DEFAULT 0.00,
   `department_kpi_score` decimal(5,2) NOT NULL DEFAULT 0.00,
   `final_score` decimal(5,2) NOT NULL DEFAULT 0.00,
+  `category_breakdown` longtext DEFAULT NULL,
+  `source_breakdown` longtext DEFAULT NULL,
   `calculated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uniq_score_employee_month` (`employee_id`, `period_month`),
   KEY `idx_score_month_final` (`period_month`, `final_score`),
+  KEY `idx_score_period_final` (`period_id`, `final_score`),
   CONSTRAINT `fk_score_employee` FOREIGN KEY (`employee_id`) REFERENCES `admins` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -912,6 +1122,7 @@ CREATE TABLE IF NOT EXISTS `pool_leads` (
     `full_name` VARCHAR(255) NOT NULL,
     `mobile` VARCHAR(20) NOT NULL,
     `pool_name` VARCHAR(100) DEFAULT NULL,
+    `customer_type` VARCHAR(100) DEFAULT NULL,
     `acquisition_source` VARCHAR(100) NULL,
     `notes` TEXT NULL,
     `status` ENUM('new', 'contacted', 'converted', 'rejected') NOT NULL DEFAULT 'new',
@@ -920,6 +1131,7 @@ CREATE TABLE IF NOT EXISTS `pool_leads` (
     PRIMARY KEY (`id`),
     KEY `idx_pool_mobile` (`mobile`),
     KEY `idx_pool_leads_pool_name` (`pool_name`),
+    KEY `idx_pool_leads_customer_type` (`customer_type`),
     KEY `idx_pool_source` (`acquisition_source`),
     KEY `idx_pool_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -1022,6 +1234,8 @@ CREATE TABLE IF NOT EXISTS `analytics_visitors` (
   `visitor_uuid` varchar(64) NOT NULL,
   `first_seen_at` datetime NOT NULL,
   `last_seen_at` datetime NOT NULL,
+  `ip_address` varchar(45) DEFAULT NULL,
+  `masked_ip` varchar(64) DEFAULT NULL,
   `ip_hash` char(64) DEFAULT NULL,
   `user_agent` text DEFAULT NULL,
   `browser` varchar(100) DEFAULT NULL,

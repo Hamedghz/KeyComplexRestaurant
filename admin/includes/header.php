@@ -1,3 +1,120 @@
+<?php
+$adminCurrentPage = basename(parse_url($_SERVER['REQUEST_URI'] ?? ($_SERVER['PHP_SELF'] ?? ''), PHP_URL_PATH) ?: ($_SERVER['PHP_SELF'] ?? ''));
+
+if (!function_exists('adminMenuCanAccessRole')) {
+    function adminMenuCanAccessRole(?array $admin, string $requiredRole): bool {
+        $roles = ['employee' => 0, 'manager' => 1, 'admin' => 2, 'super_admin' => 3];
+        $currentRole = (string)($admin['role'] ?? ($_SESSION['admin_role'] ?? 'employee'));
+
+        return ($roles[$currentRole] ?? -1) >= ($roles[$requiredRole] ?? 0);
+    }
+}
+
+if (!function_exists('h')) {
+    function h($value): string {
+        return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+    }
+}
+
+if (!function_exists('adminMenuIsActive')) {
+    function adminMenuIsActive(array $item, string $currentPage): bool {
+        $activePages = $item['active'] ?? [$item['url'] ?? ''];
+
+        return in_array($currentPage, $activePages, true);
+    }
+}
+
+$adminMenuGroups = [
+    [
+        'title' => 'داشبورد',
+        'items' => [
+            ['url' => 'dashboard.php', 'icon' => '📊', 'title' => 'داشبورد', 'role' => 'employee'],
+            ['url' => 'employee-dashboard.php', 'icon' => '🧑‍💼', 'title' => 'داشبورد کارمند', 'role' => 'employee'],
+        ],
+    ],
+    [
+        'title' => 'مشتریان و CRM',
+        'items' => [
+            ['url' => 'crm.php', 'icon' => '👤', 'title' => 'CRM', 'role' => 'manager'],
+            ['url' => 'crm-reports.php', 'icon' => '📣', 'title' => 'گزارش منابع جذب', 'role' => 'manager'],
+            ['url' => 'acquisition-sources.php', 'icon' => '🧲', 'title' => 'منابع جذب', 'role' => 'manager'],
+            ['url' => 'orders.php', 'icon' => '📋', 'title' => 'سفارشات', 'role' => 'employee'],
+        ],
+    ],
+    [
+        'title' => 'مسابقات و پیش‌بینی',
+        'items' => [
+            ['url' => 'matches.php', 'icon' => '⚽', 'title' => 'مسابقات', 'role' => 'manager'],
+            ['url' => 'predictions.php', 'icon' => '🏆', 'title' => 'پیش‌بینی', 'role' => 'manager'],
+        ],
+    ],
+    [
+        'title' => 'سایت و محتوا',
+        'items' => [
+            ['url' => 'banners.php', 'icon' => '🖼️', 'title' => 'بنر اصلی', 'role' => 'manager'],
+            ['url' => 'social-links.php', 'icon' => '🔗', 'title' => 'شبکه‌های اجتماعی', 'role' => 'admin'],
+            ['url' => 'key-story.php', 'icon' => '📖', 'title' => 'مدیریت داستان KEY', 'role' => 'manager'],
+        ],
+    ],
+    [
+        'title' => 'منو و محصولات',
+        'items' => [
+            ['url' => 'categories.php', 'icon' => '📁', 'title' => 'فیلترهای منو', 'role' => 'manager'],
+            ['url' => 'menu-items.php', 'icon' => '🍽️', 'title' => 'آیتم‌های منو', 'role' => 'manager'],
+        ],
+    ],
+    [
+        'title' => 'نظرسنجی و ارزیابی',
+        'items' => [
+            ['url' => 'surveys.php', 'icon' => '📝', 'title' => 'نظرسنجی‌ها', 'role' => 'admin'],
+            ['url' => 'survey-responses.php', 'icon' => '📨', 'title' => 'پاسخ‌های نظرسنجی', 'role' => 'manager'],
+            ['url' => 'feedback.php', 'icon' => '⭐', 'title' => 'نظرات', 'role' => 'manager'],
+            ['url' => 'evaluation-builder.php', 'icon' => '🧭', 'title' => 'Build Evaluation', 'role' => 'admin', 'active' => ['evaluation-builder.php', 'employee-evaluation-settings.php']],
+            ['url' => 'employee-evaluations.php', 'icon' => '📝', 'title' => 'Evaluate', 'role' => 'employee'],
+            ['url' => 'employee-tests.php', 'icon' => '🧠', 'title' => 'آزمون‌های من', 'role' => 'employee'],
+            ['url' => 'employee-performance.php', 'icon' => '📈', 'title' => 'View', 'role' => 'manager'],
+            ['url' => 'employee-assessments.php', 'icon' => '🧪', 'title' => 'Assessment Results', 'role' => 'manager'],
+        ],
+    ],
+    [
+        'title' => 'استخر و لیدها',
+        'items' => [
+            ['url' => 'pool-leads.php', 'icon' => '🏊', 'title' => 'لیدهای استخر', 'role' => 'manager'],
+        ],
+    ],
+    [
+        'title' => 'آنالیتیکس و گزارش‌ها',
+        'items' => [
+            ['url' => 'analytics.php', 'icon' => '📈', 'title' => 'Visitor Logs', 'role' => 'manager'],
+            ['url' => 'analytics-traffic-sources.php', 'icon' => '🧭', 'title' => 'Traffic Sources', 'role' => 'manager'],
+            ['url' => 'visitor-analytics.php', 'icon' => '🧩', 'title' => 'Visitor Path Analytics', 'role' => 'manager'],
+            ['url' => 'analytics-live.php', 'icon' => '🟢', 'title' => 'Live Visitors', 'role' => 'manager'],
+            ['url' => 'analytics-geographic.php', 'icon' => '🌍', 'title' => 'Geographic Analytics', 'role' => 'manager'],
+            ['url' => 'analytics-device.php', 'icon' => '📱', 'title' => 'Device Analytics', 'role' => 'manager'],
+            ['url' => 'analytics-export.php', 'icon' => '📤', 'title' => 'Export Center', 'role' => 'manager'],
+        ],
+    ],
+    [
+        'title' => 'فایل‌ها و مستندات',
+        'items' => [
+            ['url' => 'media.php', 'icon' => '🗂️', 'title' => 'رسانه‌ها', 'role' => 'manager'],
+        ],
+    ],
+    [
+        'title' => 'کاربران و دسترسی',
+        'items' => [
+            ['url' => 'users.php', 'icon' => '👥', 'title' => 'کاربران', 'role' => 'admin'],
+        ],
+    ],
+    [
+        'title' => 'تنظیمات و سیستم',
+        'items' => [
+            ['url' => 'settings.php', 'icon' => '⚙️', 'title' => 'تنظیمات', 'role' => 'admin'],
+            ['url' => 'system-update.php', 'icon' => '⬆️', 'title' => 'بروزرسانی سیستم', 'role' => 'super_admin'],
+        ],
+    ],
+];
+?>
 <!DOCTYPE html>
 <html lang="fa-IR" dir="rtl">
 <head>
@@ -64,7 +181,53 @@
         }
         
         .sidebar-menu {
-            padding: 20px 0;
+            padding: 14px 0 20px;
+        }
+
+        .menu-group {
+            margin: 4px 0;
+        }
+
+        .menu-group summary {
+            list-style: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 10px 20px;
+            color: rgba(255,255,255,0.82);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 700;
+            border-right: 3px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .menu-group summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .menu-group summary::before {
+            content: '▾';
+            font-size: 11px;
+            transform: rotate(90deg);
+            transition: transform 0.2s ease;
+            opacity: 0.85;
+        }
+
+        .menu-group[open] summary::before {
+            transform: rotate(0deg);
+        }
+
+        .menu-group summary:hover,
+        .menu-group.active summary {
+            background: rgba(255,255,255,0.08);
+            color: white;
+            border-right-color: rgba(212,175,55,0.75);
+        }
+
+        .menu-group-items {
+            padding: 2px 0 6px;
         }
         
         .menu-item {
@@ -74,6 +237,12 @@
             text-decoration: none;
             transition: all 0.3s;
             border-right: 3px solid transparent;
+        }
+
+        .menu-group .menu-item {
+            padding: 10px 36px 10px 20px;
+            font-size: 14px;
+            color: rgba(255,255,255,0.92);
         }
         
         .menu-item:hover,
@@ -457,97 +626,34 @@
             <p>پنل مدیریت</p>
         </div>
         
-        <nav class="sidebar-menu">
-            <a href="dashboard.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'dashboard.php' ? 'active' : ''; ?>">
-                <span>📊</span> داشبورد
-            </a>
-            <a href="crm.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'crm.php' ? 'active' : ''; ?>">
-                <span>👤</span> CRM
-            </a>
-            <a href="crm-reports.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'crm-reports.php' ? 'active' : ''; ?>">
-                <span>📣</span> گزارش منابع جذب
-            </a>
-            <a href="acquisition-sources.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'acquisition-sources.php' ? 'active' : ''; ?>">
-                <span>🧲</span> منابع جذب
-            </a>
-            <a href="matches.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'matches.php' ? 'active' : ''; ?>">
-                <span>⚽</span> مسابقات
-            </a>
-            <a href="predictions.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'predictions.php' ? 'active' : ''; ?>">
-                <span>🏆</span> پیش‌بینی
-            </a>
-            <a href="banners.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'banners.php' ? 'active' : ''; ?>">
-                <span>🖼️</span> بنر اصلی
-            </a>
-            <a href="categories.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'categories.php' ? 'active' : ''; ?>">
-                <span>📁</span> فیلترهای منو
-            </a>
-            <a href="menu-items.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'menu-items.php' ? 'active' : ''; ?>">
-                <span>🍽️</span> آیتم‌های منو
-            </a>
-            <a href="surveys.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'surveys.php' ? 'active' : ''; ?>">
-                <span>📝</span> نظرسنجی‌ها
-            </a>
-            <a href="survey-responses.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'survey-responses.php' ? 'active' : ''; ?>">
-                <span>📨</span> پاسخ‌های نظرسنجی
-            </a>
-            <a href="orders.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'orders.php' ? 'active' : ''; ?>">
-                <span>📋</span> سفارشات
-            </a>
-            <a href="users.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'users.php' ? 'active' : ''; ?>">
-                <span>👥</span> کاربران
-            </a>
-            <a href="feedback.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'feedback.php' ? 'active' : ''; ?>">
-                <span>⭐</span> نظرات
-            </a>
-            <a href="media.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'media.php' ? 'active' : ''; ?>">
-                <span>🗂️</span> رسانه‌ها
-            </a>
-            <a href="employee-dashboard.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'employee-dashboard.php' ? 'active' : ''; ?>">
-                <span>🧑‍💼</span> داشبورد کارمند
-            </a>
-            <a href="employee-evaluations.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'employee-evaluations.php' ? 'active' : ''; ?>">
-                <span>📝</span> ارزیابی همکاران
-            </a>
-            <a href="employee-performance.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'employee-performance.php' ? 'active' : ''; ?>">
-                <span>📈</span> عملکرد کارکنان
-            </a>
-            <a href="settings.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'settings.php' ? 'active' : ''; ?>">
-                <span>⚙️</span> تنظیمات
-            </a>
-            <a href="social-links.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'social-links.php' ? 'active' : ''; ?>">
-                <span>🔗</span> شبکه‌های اجتماعی
-            </a>
-            <a href="key-story.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'key-story.php' ? 'active' : ''; ?>">
-                <span>📖</span> مدیریت داستان KEY
-            </a>
-            <a href="pool-leads.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'pool-leads.php' ? 'active' : ''; ?>">
-                <span>🏊</span> لیدهای استخر
-            </a>
-            <a href="analytics.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'analytics.php' ? 'active' : ''; ?>">
-                <span>📈</span> Visitor Logs
-            </a>
-            <a href="analytics-traffic-sources.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'analytics-traffic-sources.php' ? 'active' : ''; ?>">
-                <span>🧭</span> Traffic Sources
-            </a>
-            <a href="visitor-analytics.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'visitor-analytics.php' ? 'active' : ''; ?>">
-                <span>🧩</span> Visitor Path Analytics
-            </a>
-            <a href="analytics-live.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'analytics-live.php' ? 'active' : ''; ?>">
-                <span>🟢</span> Live Visitors
-            </a>
-            <a href="analytics-geographic.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'analytics-geographic.php' ? 'active' : ''; ?>">
-                <span>🌍</span> Geographic Analytics
-            </a>
-            <a href="analytics-device.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'analytics-device.php' ? 'active' : ''; ?>">
-                <span>📱</span> Device Analytics
-            </a>
-            <a href="analytics-export.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'analytics-export.php' ? 'active' : ''; ?>">
-                <span>📤</span> Export Center
-            </a>
-            <a href="system-update.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) == 'system-update.php' ? 'active' : ''; ?>">
-                <span>⬆️</span> بروزرسانی سیستم
-            </a>
+        <nav class="sidebar-menu" aria-label="Admin navigation">
+            <?php foreach ($adminMenuGroups as $menuGroup): ?>
+                <?php
+                $visibleItems = array_values(array_filter($menuGroup['items'], function ($item) use ($currentAdmin) {
+                    return adminMenuCanAccessRole($currentAdmin ?? null, $item['role'] ?? 'employee');
+                }));
+                $groupIsActive = false;
+                foreach ($visibleItems as $visibleItem) {
+                    if (adminMenuIsActive($visibleItem, $adminCurrentPage)) {
+                        $groupIsActive = true;
+                        break;
+                    }
+                }
+                ?>
+                <?php if ($visibleItems): ?>
+                    <details class="menu-group <?php echo $groupIsActive ? 'active' : ''; ?>" <?php echo $groupIsActive ? 'open' : ''; ?>>
+                        <summary><?php echo h($menuGroup['title']); ?></summary>
+                        <div class="menu-group-items">
+                            <?php foreach ($visibleItems as $menuItem): ?>
+                                <?php $itemIsActive = adminMenuIsActive($menuItem, $adminCurrentPage); ?>
+                                <a href="<?php echo h($menuItem['url']); ?>" class="menu-item <?php echo $itemIsActive ? 'active' : ''; ?>">
+                                    <span><?php echo h($menuItem['icon']); ?></span> <?php echo h($menuItem['title']); ?>
+                                </a>
+                            <?php endforeach; ?>
+                        </div>
+                    </details>
+                <?php endif; ?>
+            <?php endforeach; ?>
         </nav>
     </div>
     

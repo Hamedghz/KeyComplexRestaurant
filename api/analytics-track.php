@@ -28,6 +28,28 @@ function analyticsTrackUuid($value): string {
     return bin2hex(random_bytes(16));
 }
 
+function analyticsTrackClientIp(): string {
+    $ip = analyticsString($_SERVER['REMOTE_ADDR'] ?? '', 100);
+    return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : '';
+}
+
+function analyticsTrackMaskIp(string $ip): string {
+    if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+        return '';
+    }
+    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+        $parts = explode('.', $ip);
+        $parts[3] = '0';
+        return implode('.', $parts);
+    }
+    $packed = @inet_pton($ip);
+    if ($packed === false) {
+        return '';
+    }
+    $hex = bin2hex($packed);
+    return implode(':', str_split(substr($hex, 0, 16) . str_repeat('0', 16), 4));
+}
+
 function analyticsTrackIgnoredPath(string $path): bool {
     $path = '/' . ltrim($path, '/');
     foreach (['/admin/', '/api/', '/assets/', '/uploads/'] as $prefix) {
@@ -39,13 +61,23 @@ function analyticsTrackIgnoredPath(string $path): bool {
 }
 
 function analyticsTrackUserAgent(string $ua): array {
+    $ua = trim($ua);
+    if ($ua === '') {
+        return ['browser' => 'Unknown', 'os' => 'Unknown', 'device_type' => 'Unknown', 'is_bot' => 0];
+    }
+
     $isBot = (bool)preg_match('/bot|crawl|spider|slurp|bingpreview|facebookexternalhit|whatsapp|telegrambot|headless|monitor|uptime|validator/i', $ua);
+    if ($isBot) {
+        return ['browser' => 'Bot', 'os' => 'Bot', 'device_type' => 'Bot', 'is_bot' => 1];
+    }
+
     $browser = 'Unknown';
-    if (stripos($ua, 'Edg/') !== false) $browser = 'Edge';
+    if (stripos($ua, 'Edg/') !== false || stripos($ua, 'Edge/') !== false) $browser = 'Edge';
+    elseif (stripos($ua, 'SamsungBrowser/') !== false) $browser = 'Samsung Internet';
     elseif (stripos($ua, 'OPR/') !== false || stripos($ua, 'Opera') !== false) $browser = 'Opera';
-    elseif (stripos($ua, 'Chrome/') !== false) $browser = 'Chrome';
+    elseif (stripos($ua, 'Firefox/') !== false || stripos($ua, 'FxiOS/') !== false) $browser = 'Firefox';
+    elseif (stripos($ua, 'Chrome/') !== false || stripos($ua, 'CriOS/') !== false) $browser = 'Chrome';
     elseif (stripos($ua, 'Safari/') !== false) $browser = 'Safari';
-    elseif (stripos($ua, 'Firefox/') !== false) $browser = 'Firefox';
 
     $os = 'Unknown';
     if (stripos($ua, 'Windows') !== false) $os = 'Windows';
@@ -54,12 +86,11 @@ function analyticsTrackUserAgent(string $ua): array {
     elseif (stripos($ua, 'Mac OS') !== false || stripos($ua, 'Macintosh') !== false) $os = 'macOS';
     elseif (stripos($ua, 'Linux') !== false) $os = 'Linux';
 
-    $device = 'desktop';
-    if ($isBot) $device = 'bot';
-    elseif (stripos($ua, 'tablet') !== false || stripos($ua, 'iPad') !== false) $device = 'tablet';
-    elseif (stripos($ua, 'Mobile') !== false || stripos($ua, 'Android') !== false || stripos($ua, 'iPhone') !== false) $device = 'mobile';
+    $device = 'Desktop';
+    if (stripos($ua, 'tablet') !== false || stripos($ua, 'iPad') !== false || (stripos($ua, 'Android') !== false && stripos($ua, 'Mobile') === false)) $device = 'Tablet';
+    elseif (stripos($ua, 'Mobile') !== false || stripos($ua, 'iPhone') !== false || (stripos($ua, 'Android') !== false && stripos($ua, 'Mobile') !== false)) $device = 'Mobile';
 
-    return ['browser' => $browser, 'os' => $os, 'device_type' => $device, 'is_bot' => $isBot ? 1 : 0];
+    return ['browser' => $browser, 'os' => $os, 'device_type' => $device, 'is_bot' => 0];
 }
 
 function analyticsTrackClassifySource(array $payload): array {
@@ -252,6 +283,8 @@ function analyticsTrackEnsureAnalyticsSchema(PDO $db): void {
         `visitor_uuid` varchar(64) NOT NULL,
         `first_seen_at` datetime NOT NULL,
         `last_seen_at` datetime NOT NULL,
+        `ip_address` varchar(45) DEFAULT NULL,
+        `masked_ip` varchar(64) DEFAULT NULL,
         `ip_hash` char(64) DEFAULT NULL,
         `user_agent` text DEFAULT NULL,
         `browser` varchar(100) DEFAULT NULL,
@@ -442,6 +475,8 @@ function analyticsTrackRepairAnalyticsSchema(PDO $db): void {
         'visitor_uuid' => "varchar(64) NOT NULL DEFAULT ''",
         'first_seen_at' => 'datetime NOT NULL DEFAULT CURRENT_TIMESTAMP',
         'last_seen_at' => 'datetime NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'ip_address' => 'varchar(45) DEFAULT NULL',
+        'masked_ip' => 'varchar(64) DEFAULT NULL',
         'ip_hash' => 'char(64) DEFAULT NULL',
         'user_agent' => 'text DEFAULT NULL',
         'browser' => 'varchar(100) DEFAULT NULL',
@@ -767,7 +802,7 @@ function analyticsTrackDecodePayload(): ?array {
 }
 
 function analyticsTrackIpHash(): ?string {
-    $ip = analyticsString($_SERVER['REMOTE_ADDR'] ?? '', 100);
+    $ip = analyticsTrackClientIp();
     return $ip !== '' ? hash('sha256', $ip . '|' . DB_NAME) : null;
 }
 
@@ -776,7 +811,7 @@ function analyticsTrackWriteLegacyTables(PDO $db, array $data, array &$inserted,
         $trafficStmt = $db->prepare('INSERT INTO traffic_logs (session_id, ip_address, country, city, referrer, landing_page, user_agent, browser, os, device, language, pages_viewed, is_bot, created_at) VALUES (:session_id, :ip_address, :country, :city, :referrer, :landing_page, :user_agent, :browser, :os, :device, :language, 1, :is_bot, :created_at)');
         $trafficStmt->execute([
             'session_id' => $data['session_uuid'],
-            'ip_address' => $data['ip_hash'],
+            'ip_address' => $data['masked_ip'],
             'country' => 'Unknown',
             'city' => 'Unknown',
             'referrer' => $data['referrer'],
@@ -795,7 +830,7 @@ function analyticsTrackWriteLegacyTables(PDO $db, array $data, array &$inserted,
         $sessionStmt = $db->prepare('INSERT INTO visitor_sessions (session_id, ip_address, started_at, last_activity, is_active, current_page, source_name, device_type, browser, os) VALUES (:session_id, :ip_address, :now, :now, 1, :current_page, :source_name, :device_type, :browser, :os) ON DUPLICATE KEY UPDATE last_activity = VALUES(last_activity), is_active = 1, current_page = VALUES(current_page), source_name = VALUES(source_name), device_type = VALUES(device_type), browser = VALUES(browser), os = VALUES(os)');
         $sessionStmt->execute([
             'session_id' => $data['session_uuid'],
-            'ip_address' => $data['ip_hash'],
+            'ip_address' => $data['masked_ip'],
             'now' => $data['now'],
             'current_page' => $data['page_path'],
             'source_name' => $data['source_name'],
@@ -872,6 +907,8 @@ try {
     $sessionUuid = analyticsTrackUuid($payload['session_uuid'] ?? '');
     $ua = analyticsString($_SERVER['HTTP_USER_AGENT'] ?? '', 1000);
     $parsed = analyticsTrackUserAgent($ua);
+    $clientIp = analyticsTrackClientIp();
+    $maskedIp = analyticsTrackMaskIp($clientIp);
     $ipHash = analyticsTrackIpHash();
     $source = analyticsTrackClassifySource($payload);
     $source['source'] = analyticsString($source['source'] ?? 'unknown', 100);
@@ -891,11 +928,13 @@ try {
     $screenWidth = max(0, min(100000, (int)($payload['screen_width'] ?? 0))) ?: null;
     $screenHeight = max(0, min(100000, (int)($payload['screen_height'] ?? 0))) ?: null;
 
-    analyticsTrackRunTableWrite($db, 'analytics_visitors', $inserted, $errors, function () use ($db, $visitorUuid, $now, $ipHash, $ua, $parsed): void {
-        $visitorStmt = $db->prepare('INSERT INTO analytics_visitors (visitor_uuid, first_seen_at, last_seen_at, ip_hash, user_agent, browser, os, device_type, country, city) VALUES (:visitor_uuid, :now, :now, :ip_hash, :user_agent, :browser, :os, :device_type, :country, :city) ON DUPLICATE KEY UPDATE last_seen_at = VALUES(last_seen_at), ip_hash = VALUES(ip_hash), user_agent = VALUES(user_agent), browser = VALUES(browser), os = VALUES(os), device_type = VALUES(device_type), updated_at = CURRENT_TIMESTAMP');
+    analyticsTrackRunTableWrite($db, 'analytics_visitors', $inserted, $errors, function () use ($db, $visitorUuid, $now, $clientIp, $maskedIp, $ipHash, $ua, $parsed): void {
+        $visitorStmt = $db->prepare("INSERT INTO analytics_visitors (visitor_uuid, first_seen_at, last_seen_at, ip_address, masked_ip, ip_hash, user_agent, browser, os, device_type, country, city) VALUES (:visitor_uuid, :now, :now, :ip_address, :masked_ip, :ip_hash, :user_agent, :browser, :os, :device_type, :country, :city) ON DUPLICATE KEY UPDATE last_seen_at = VALUES(last_seen_at), ip_address = COALESCE(NULLIF(VALUES(ip_address), ''), ip_address), masked_ip = COALESCE(NULLIF(VALUES(masked_ip), ''), masked_ip), ip_hash = COALESCE(VALUES(ip_hash), ip_hash), user_agent = COALESCE(NULLIF(VALUES(user_agent), ''), user_agent), browser = CASE WHEN VALUES(browser) <> 'Unknown' OR browser IS NULL OR browser = '' OR browser = 'Unknown' THEN VALUES(browser) ELSE browser END, os = CASE WHEN VALUES(os) <> 'Unknown' OR os IS NULL OR os = '' OR os = 'Unknown' THEN VALUES(os) ELSE os END, device_type = CASE WHEN VALUES(device_type) <> 'Unknown' OR device_type IS NULL OR device_type = '' OR device_type = 'Unknown' THEN VALUES(device_type) ELSE device_type END, updated_at = CURRENT_TIMESTAMP");
         $visitorStmt->execute([
             'visitor_uuid' => $visitorUuid,
             'now' => $now,
+            'ip_address' => $clientIp !== '' ? $clientIp : null,
+            'masked_ip' => $maskedIp !== '' ? $maskedIp : null,
             'ip_hash' => $ipHash,
             'user_agent' => $ua,
             'browser' => $parsed['browser'],
@@ -961,7 +1000,7 @@ try {
     $isNewSession = $previous ? 0 : 1;
     $isConverted = in_array($targetAction, ['prediction_submit','survey_submit','customer_club_signup','menu_item_view','banner_click','campaign_click'], true) ? 1 : 0;
     $eventType = analyticsTrackEventType($targetAction);
-    analyticsTrackRunTableWrite($db, 'visitor_analytics_logs', $inserted, $errors, function () use ($db, $sessionUuid, $source, $payload, $pageUrl, $referrer, $utmSource, $utmMedium, $utmCampaign, $previous, $pagePath, $relatedModule, $eventType, $targetAction, $parsed, $ipHash, $isNewSession, $isConverted, $now): void {
+    analyticsTrackRunTableWrite($db, 'visitor_analytics_logs', $inserted, $errors, function () use ($db, $sessionUuid, $source, $payload, $pageUrl, $referrer, $utmSource, $utmMedium, $utmCampaign, $previous, $pagePath, $relatedModule, $eventType, $targetAction, $parsed, $maskedIp, $ipHash, $isNewSession, $isConverted, $now): void {
         $pathStmt = $db->prepare('INSERT INTO visitor_analytics_logs (session_id, source_type, source_name, campaign_type, entry_link, referrer_url, utm_source, utm_medium, utm_campaign, landing_page, current_page, related_module, event_type, target_action, device_type, browser, operating_system, ip_address, is_new_visitor, is_converted, created_at) VALUES (:session_id, :source_type, :source_name, :campaign_type, :entry_link, :referrer_url, :utm_source, :utm_medium, :utm_campaign, :landing_page, :current_page, :related_module, :event_type, :target_action, :device_type, :browser, :operating_system, :ip_address, :is_new_visitor, :is_converted, :created_at)');
         $pathStmt->execute([
             'session_id' => $sessionUuid,
@@ -981,7 +1020,7 @@ try {
             'device_type' => $parsed['device_type'],
             'browser' => $parsed['browser'],
             'operating_system' => $parsed['os'],
-            'ip_address' => $ipHash,
+            'ip_address' => $maskedIp !== '' ? $maskedIp : $ipHash,
             'is_new_visitor' => $isNewSession,
             'is_converted' => $isConverted,
             'created_at' => $now,
@@ -991,6 +1030,7 @@ try {
     analyticsTrackWriteLegacyTables($db, [
         'session_uuid' => $sessionUuid,
         'ip_hash' => $ipHash,
+        'masked_ip' => $maskedIp !== '' ? $maskedIp : $ipHash,
         'referrer' => $referrer,
         'page_path' => $pagePath,
         'user_agent' => $ua,

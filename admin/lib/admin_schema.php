@@ -33,6 +33,15 @@ if (!function_exists('safeAdminLog')) {
     function safeAdminLog(string $message): void { error_log('[admin] ' . $message); }
 }
 
+if (!function_exists('adminRenderSafeError')) {
+    function adminRenderSafeError(string $pageTitle, string $logMessage): void {
+        safeAdminLog($logMessage);
+        http_response_code(500);
+        $safeTitle = htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8');
+        echo '<!DOCTYPE html><html lang="fa-IR" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>' . $safeTitle . '</title></head><body style="font-family:Tahoma,sans-serif;background:#f5f6fa;color:#343a40;direction:rtl;padding:32px"><div style="max-width:720px;margin:0 auto;background:#fff;border-radius:10px;padding:24px;box-shadow:0 2px 12px rgba(0,0,0,.08)"><h1 style="color:#004647;margin-bottom:12px">' . $safeTitle . '</h1><p>این بخش در حال حاضر قابل نمایش نیست. جزئیات خطا در لاگ سیستم ثبت شد.</p><a href="dashboard.php" style="display:inline-block;margin-top:16px;color:#004647">بازگشت به داشبورد</a></div></body></html>';
+    }
+}
+
 function adminDb(): PDO {
     return Database::getInstance()->getConnection();
 }
@@ -703,6 +712,7 @@ function ensureAdminSchema(): array {
         `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
         `title` varchar(100) NOT NULL,
         `icon` varchar(50) NOT NULL,
+        `icon_image` varchar(255) DEFAULT NULL,
         `url` varchar(500) NOT NULL,
         `sort_order` int(11) NOT NULL DEFAULT 0,
         `active` tinyint(1) NOT NULL DEFAULT 1,
@@ -711,6 +721,10 @@ function ensureAdminSchema(): array {
         PRIMARY KEY (`id`),
         KEY `idx_social_active_order` (`active`, `sort_order`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table social_links');
+
+    ensureTableColumns('social_links', [
+        'icon_image' => 'varchar(255) DEFAULT NULL AFTER `icon`',
+    ]);
 
     $socials = [
         ['Instagram', '📷', 'https://instagram.com/keyrestaurant', 10],
@@ -869,6 +883,7 @@ function ensureAdminSchema(): array {
         `full_name` varchar(255) DEFAULT NULL,
         `mobile` varchar(20) NOT NULL,
         `pool_name` varchar(100) DEFAULT NULL,
+        `customer_type` varchar(100) DEFAULT NULL,
         `acquisition_source` varchar(100) DEFAULT NULL,
         `notes` text DEFAULT NULL,
         `status` enum('new','contacted','converted','rejected') NOT NULL DEFAULT 'new',
@@ -877,6 +892,7 @@ function ensureAdminSchema(): array {
         PRIMARY KEY (`id`),
         KEY `idx_pool_mobile` (`mobile`),
         KEY `idx_pool_leads_pool_name` (`pool_name`),
+        KEY `idx_pool_leads_customer_type` (`customer_type`),
         KEY `idx_pool_source` (`acquisition_source`),
         KEY `idx_pool_status` (`status`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table pool_leads');
@@ -884,9 +900,13 @@ function ensureAdminSchema(): array {
     if (adminTableExists('pool_leads')) {
         ensureTableColumns('pool_leads', [
             'pool_name' => 'varchar(100) DEFAULT NULL AFTER `mobile`',
+            'customer_type' => 'varchar(100) DEFAULT NULL AFTER `pool_name`',
         ]);
         if (!adminIndexExists('pool_leads', 'idx_pool_leads_pool_name')) {
             $run("ALTER TABLE `pool_leads` ADD INDEX `idx_pool_leads_pool_name` (`pool_name`)", 'ایندکس استخر لیدها');
+        }
+        if (!adminIndexExists('pool_leads', 'idx_pool_leads_customer_type')) {
+            $run("ALTER TABLE `pool_leads` ADD INDEX `idx_pool_leads_customer_type` (`customer_type`)", 'ایندکس نوع مشتری لیدها');
         }
     }
 
@@ -1102,16 +1122,18 @@ function adminModuleDefinitions(): array {
             'columns' => ['id','title','team_one_display','team_two_display','match_start_display','prediction_start_display','prediction_end_display','status','points_reward_display','prediction_count','winner_count','match_finished','created_at'],
         ],
         'predictions' => [
-            'title' => 'پیش‌بینی‌ها', 'min_role' => 'manager', 'table' => 'predictions', 'readonly_create' => true, 'allow_delete' => false, 'search' => ['customer_name','customer_last_name','mobile','customer_mobile'], 'filters' => ['match_id','status','is_winner','wants_reservation','customer_exists','crm_match'], 'date_column' => 'submitted_at',
+            'title' => 'پیش‌بینی‌ها', 'min_role' => 'manager', 'table' => 'predictions', 'allow_delete' => false, 'search' => ['customer_name','customer_last_name','mobile','customer_mobile'], 'filters' => ['match_id','status','is_winner','wants_reservation','customer_exists','crm_match'], 'date_column' => 'submitted_at',
             'filter_fields' => [
                 'match_id' => ['label'=>'مسابقه','type'=>'match'],
             ],
             'fields' => [
+                'match_id' => ['label'=>'مسابقه','type'=>'match'], 'customer_name' => ['label'=>'نام مشتری','type'=>'text'], 'customer_last_name' => ['label'=>'نام خانوادگی','type'=>'text'], 'customer_mobile' => ['label'=>'موبایل مشتری','type'=>'mobile'],
+                'predicted_team_one_score' => ['label'=>'گل تیم اول','type'=>'number'], 'predicted_team_two_score' => ['label'=>'گل تیم دوم','type'=>'number'],
                 'status' => ['label'=>'وضعیت','type'=>'select','options'=>['pending'=>'در انتظار','approved'=>'تایید','rejected'=>'رد']], 'is_winner' => ['label'=>'برنده','type'=>'checkbox'], 'points_awarded' => ['label'=>'امتیاز اعطا شده','type'=>'number'], 'wants_reservation' => ['label'=>'علاقه‌مند به رزرو','type'=>'checkbox'], 'crm_follow_up' => ['label'=>'ارسال به CRM','type'=>'checkbox'],
                 'crm_match' => ['label'=>'تطابق CRM','type'=>'checkbox'], 'attended_match' => ['label'=>'حضور در مسابقه','type'=>'checkbox'], 'is_correct_prediction' => ['label'=>'پیش‌بینی صحیح','type'=>'checkbox'],
             ],
             'join' => 'SELECT p.*, CONCAT(COALESCE(m.team_one_name, m.team_a), " - ", COALESCE(m.team_two_name, m.team_b)) AS match_title, COALESCE(p.team_one_name, m.team_one_name, m.team_a) AS prediction_team_one, COALESCE(p.team_two_name, m.team_two_name, m.team_b) AS prediction_team_two, COALESCE(p.predicted_team_one_score, p.predicted_score_team_a) AS prediction_score_one, COALESCE(p.predicted_team_two_score, p.predicted_score_team_b) AS prediction_score_two, COALESCE(m.final_team_one_score, m.final_score_team_a) AS final_score_one, COALESCE(m.final_team_two_score, m.final_score_team_b) AS final_score_two, CASE WHEN c.id IS NULL THEN "missing" ELSE "exists" END AS crm_status FROM predictions p LEFT JOIN matches m ON p.match_id = m.id LEFT JOIN crm_customers c ON c.mobile = COALESCE(p.customer_mobile, p.mobile)', 'alias' => 'p', 'required_tables' => ['matches','crm_customers'],
-            'columns' => ['id','match_title','prediction_team_one','prediction_team_two','prediction_score_one','prediction_score_two','final_score_one','final_score_two','customer_name','customer_last_name','customer_mobile','wants_reservation','is_winner','crm_status','submitted_at'],
+            'columns' => ['id','match_title','prediction_team_one','prediction_team_two','predicted_team_one_score','predicted_team_two_score','final_score_one','final_score_two','customer_name','customer_last_name','customer_mobile','wants_reservation','is_winner','crm_status','submitted_at'],
         ],
         'banners' => [
             'title' => 'بنرهای اصلی', 'min_role' => 'manager', 'table' => 'hero_banners', 'search' => ['title','subtitle'], 'filters' => ['active_status'], 'date_column' => 'created_at',
@@ -1148,23 +1170,23 @@ function adminModuleDefinitions(): array {
             'columns' => ['id','category_title','name_fa','price','campaign_price','availability_status','visible_qr_menu','visible_website','is_featured','sort_order'],
         ],
         'surveys' => [
-            'title' => 'فرم‌های نظرسنجی', 'min_role' => 'admin', 'table' => 'dynamic_forms', 'unique' => 'form_name', 'search' => ['form_name','form_title_fa'], 'filters' => ['is_active','branch_id'], 'date_column' => 'created_at',
+            'title' => 'فرم‌های نظرسنجی', 'min_role' => 'admin', 'table' => 'dynamic_forms', 'unique' => 'form_name', 'search' => ['form_name','form_title_fa'], 'filters' => ['is_active','related_page','branch_id'], 'date_column' => 'created_at',
             'fields' => [
                 'form_name' => ['label'=>'نام سیستمی','type'=>'text','required'=>true], 'form_title_fa' => ['label'=>'عنوان فارسی','type'=>'text','required'=>true], 'form_title_en' => ['label'=>'عنوان انگلیسی','type'=>'text'],
                 'form_description_fa' => ['label'=>'توضیح فارسی','type'=>'textarea'], 'form_description_en' => ['label'=>'توضیح انگلیسی','type'=>'textarea'], 'form_schema' => ['label'=>'ساختار فرم JSON','type'=>'json','default'=>'{"fields":[]}','required'=>true],
-                'start_date' => ['label'=>'شروع انتشار','type'=>'datetime'], 'end_date' => ['label'=>'پایان انتشار','type'=>'datetime'], 'publishing_channels' => ['label'=>'کانال‌های انتشار','type'=>'text'], 'branch_id' => ['label'=>'شعبه','type'=>'number'], 'survey_version' => ['label'=>'نسخه','type'=>'number'],
+                'related_page' => ['label'=>'صفحه مرتبط','type'=>'text'], 'start_date' => ['label'=>'شروع انتشار','type'=>'datetime'], 'end_date' => ['label'=>'پایان انتشار','type'=>'datetime'], 'publishing_channels' => ['label'=>'کانال‌های انتشار','type'=>'text'], 'branch_id' => ['label'=>'شعبه','type'=>'number'], 'survey_version' => ['label'=>'نسخه','type'=>'text'],
                 'is_active' => ['label'=>'فعال','type'=>'checkbox'], 'display_order' => ['label'=>'ترتیب','type'=>'number'],
             ],
-            'columns' => ['id','form_name','form_title_fa','is_active','publishing_channels','branch_id','survey_version','display_order','created_at'],
+            'columns' => ['id','form_name','form_title_fa','related_page','is_active','publishing_channels','branch_id','survey_version','display_order','created_at'],
         ],
         'survey-responses' => [
-            'title' => 'پاسخ‌های نظرسنجی', 'min_role' => 'manager', 'table' => 'survey_responses', 'readonly_create' => true, 'search' => ['customer_name','customer_phone','customer_email'], 'filters' => ['form_id','branch_id','is_dissatisfied','crm_follow_up'], 'date_column' => 'submitted_at',
-            'join' => 'SELECT sr.*, df.form_title_fa AS form_title, u.phone AS user_phone, u.full_name AS user_full_name, o.order_number, o.total AS order_total FROM survey_responses sr LEFT JOIN dynamic_forms df ON sr.form_id = df.id LEFT JOIN users u ON sr.user_id = u.id LEFT JOIN orders o ON sr.order_id = o.id', 'alias' => 'sr', 'required_tables' => ['dynamic_forms','users','orders'],
+            'title' => 'پاسخ‌های نظرسنجی', 'min_role' => 'manager', 'table' => 'survey_responses', 'readonly_create' => true, 'search' => ['customer_name','customer_mobile','customer_email'], 'filters' => ['form_id','branch_id','is_dissatisfied','crm_follow_up'], 'date_column' => 'submitted_at',
+            'join' => 'SELECT sr.*, df.form_title_fa AS form_title FROM survey_responses sr LEFT JOIN dynamic_forms df ON sr.form_id = df.id', 'alias' => 'sr', 'required_tables' => ['dynamic_forms'],
             'fields' => [
-                'form_id' => ['label'=>'فرم','type'=>'survey_form','required'=>true], 'customer_name' => ['label'=>'نام مشتری','type'=>'text'], 'customer_phone' => ['label'=>'موبایل','type'=>'mobile'], 'customer_email' => ['label'=>'ایمیل','type'=>'text'], 'response_data' => ['label'=>'داده پاسخ JSON','type'=>'textarea','default'=>'{}'],
+                'form_id' => ['label'=>'فرم','type'=>'survey_form','required'=>true], 'customer_name' => ['label'=>'نام مشتری','type'=>'text'], 'customer_mobile' => ['label'=>'موبایل','type'=>'mobile'], 'customer_email' => ['label'=>'ایمیل','type'=>'text'], 'response_data' => ['label'=>'داده پاسخ JSON','type'=>'textarea','default'=>'{}'],
                 'branch_id' => ['label'=>'شعبه','type'=>'number'], 'satisfaction_score' => ['label'=>'امتیاز رضایت','type'=>'number'], 'is_dissatisfied' => ['label'=>'مشتری ناراضی','type'=>'checkbox'], 'crm_follow_up' => ['label'=>'پیگیری CRM','type'=>'checkbox'],
             ],
-            'columns' => ['id','form_title','customer_name','customer_phone','user_phone','order_number','satisfaction_score','is_dissatisfied','crm_follow_up','submitted_at'],
+            'columns' => ['id','form_title','customer_name','customer_mobile','satisfaction_score','is_dissatisfied','crm_follow_up','submitted_at'],
         ],
     ];
 }
@@ -1187,6 +1209,8 @@ function adminModuleLabel(array $config, string $column): string {
         'winner_count'=>'تعداد برنده',
         'prediction_team_one'=>'تیم اول',
         'prediction_team_two'=>'تیم دوم',
+        'predicted_team_one_score'=>'گل تیم اول',
+        'predicted_team_two_score'=>'گل تیم دوم',
         'prediction_score_one'=>'گل پیش‌بینی تیم اول',
         'prediction_score_two'=>'گل پیش‌بینی تیم دوم',
         'final_score_one'=>'گل نهایی تیم اول',
@@ -1306,17 +1330,38 @@ function adminModuleOptionalColumns(): array {
             'sepid_last_sync_at' => "datetime DEFAULT NULL",
         ],
         'dynamic_forms' => [
+            'form_name' => "varchar(150) NOT NULL DEFAULT ''",
+            'form_title_fa' => "varchar(255) NOT NULL DEFAULT ''",
+            'form_title_en' => "varchar(255) DEFAULT NULL",
+            'form_description_fa' => "text DEFAULT NULL",
+            'form_description_en' => "text DEFAULT NULL",
+            'form_schema' => "longtext DEFAULT NULL",
+            'related_page' => "varchar(100) DEFAULT 'survey'",
+            'is_active' => "tinyint(1) NOT NULL DEFAULT 1",
+            'display_order' => "int(11) NOT NULL DEFAULT 0",
             'start_date' => "datetime DEFAULT NULL",
             'end_date' => "datetime DEFAULT NULL",
             'publishing_channels' => "varchar(255) DEFAULT NULL",
             'branch_id' => "int(11) UNSIGNED DEFAULT NULL",
-            'survey_version' => "int(11) NOT NULL DEFAULT 1",
+            'survey_version' => "varchar(50) DEFAULT NULL",
+            'created_by' => "int(11) UNSIGNED DEFAULT NULL",
+            'created_at' => "timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP",
+            'updated_at' => "timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
         ],
         'survey_responses' => [
+            'form_id' => "int(11) UNSIGNED NOT NULL DEFAULT 0",
+            'response_data' => "longtext DEFAULT NULL",
+            'customer_name' => "varchar(150) DEFAULT NULL",
+            'customer_mobile' => "varchar(20) DEFAULT NULL",
+            'customer_email' => "varchar(150) DEFAULT NULL",
             'branch_id' => "int(11) UNSIGNED DEFAULT NULL",
-            'satisfaction_score' => "decimal(5,2) DEFAULT NULL",
+            'satisfaction_score' => "tinyint DEFAULT NULL",
             'is_dissatisfied' => "tinyint(1) NOT NULL DEFAULT 0",
             'crm_follow_up' => "tinyint(1) NOT NULL DEFAULT 0",
+            'ip_address' => "varchar(45) DEFAULT NULL",
+            'user_agent' => "varchar(255) DEFAULT NULL",
+            'submitted_at' => "timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP",
+            'created_at' => "timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP",
         ],
         'crm_customers' => [
             'email' => "varchar(150) DEFAULT NULL",
@@ -1356,6 +1401,28 @@ function adminEnsureModuleTables(array $config): void {
     }
     foreach (adminModuleRequiredTables($config) as $table) {
         adminEnsureModuleOptionalColumns($table);
+    }
+    foreach (adminModuleRequiredTables($config) as $table) {
+        if ($table === 'dynamic_forms') {
+            adminEnsureIndexes('dynamic_forms', [
+                'idx_dynamic_forms_active_page' => 'INDEX `idx_dynamic_forms_active_page` (`is_active`, `related_page`, `display_order`)',
+                'idx_dynamic_forms_dates' => 'INDEX `idx_dynamic_forms_dates` (`start_date`, `end_date`)',
+            ]);
+            if (adminColumnExists('dynamic_forms', 'related_page')) {
+                try {
+                    adminDb()->exec("UPDATE `dynamic_forms` SET `related_page` = 'survey' WHERE `related_page` IS NULL OR `related_page` = ''");
+                } catch (Throwable $e) {
+                    safeAdminLog('Dynamic forms related_page normalization failed: ' . $e->getMessage());
+                }
+            }
+        }
+        if ($table === 'survey_responses') {
+            adminEnsureIndexes('survey_responses', [
+                'idx_survey_responses_form' => 'INDEX `idx_survey_responses_form` (`form_id`)',
+                'idx_survey_responses_submitted' => 'INDEX `idx_survey_responses_submitted` (`submitted_at`)',
+                'idx_survey_responses_mobile' => 'INDEX `idx_survey_responses_mobile` (`customer_mobile`)',
+            ]);
+        }
     }
     $audit = adminModuleSchemaAudit($config);
     if (!empty($audit['missing_fields'])) {
@@ -1594,11 +1661,11 @@ function adminModulePrepareData(array $config, array $data, array $current = [])
         }
 
         if (!empty($data['match_start_at'])) {
-            $timestamp = strtotime((string)$data['match_start_at']);
-            if ($timestamp) {
-                if (adminColumnExists('matches', 'match_date')) $data['match_date'] = date('Y-m-d', $timestamp);
-                if (adminColumnExists('matches', 'kickoff_time')) $data['kickoff_time'] = date('H:i:s', $timestamp);
-                if (adminColumnExists('matches', 'broadcast_time') && empty($data['broadcast_time'])) $data['broadcast_time'] = date('H:i:s', $timestamp);
+            $matchStart = parseStoredDateTime($data['match_start_at']);
+            if ($matchStart) {
+                if (adminColumnExists('matches', 'match_date')) $data['match_date'] = $matchStart->format('Y-m-d');
+                if (adminColumnExists('matches', 'kickoff_time')) $data['kickoff_time'] = $matchStart->format('H:i:s');
+                if (adminColumnExists('matches', 'broadcast_time') && empty($data['broadcast_time'])) $data['broadcast_time'] = $matchStart->format('H:i:s');
             }
         } elseif (!empty($data['match_date']) && !empty($data['kickoff_time']) && adminColumnExists('matches', 'match_start_at')) {
             $data['match_start_at'] = trim((string)$data['match_date'] . ' ' . (string)$data['kickoff_time']);
@@ -1804,6 +1871,9 @@ function adminModuleRenderField(string $name, array $meta, $value = null): void 
 
 function adminModuleFormatValue(string $column, $value): string {
     if ($value === null || $value === '') return '';
+    if (in_array($column, ['predicted_team_one_score', 'predicted_team_two_score', 'prediction_score_one', 'prediction_score_two', 'final_score_one', 'final_score_two'], true)) {
+        return (string)$value;
+    }
     if ($column === 'crm_status') {
         return (string)$value === 'exists' ? 'موجود در CRM' : ((string)$value === 'missing' ? 'ثبت نشده در CRM' : (string)$value);
     }
@@ -1924,6 +1994,8 @@ function ensureAdminAnalyticsSchema(): void {
         `visitor_uuid` varchar(64) NOT NULL,
         `first_seen_at` datetime NOT NULL,
         `last_seen_at` datetime NOT NULL,
+        `ip_address` varchar(45) DEFAULT NULL,
+        `masked_ip` varchar(64) DEFAULT NULL,
         `ip_hash` char(64) DEFAULT NULL,
         `user_agent` text DEFAULT NULL,
         `browser` varchar(100) DEFAULT NULL,
@@ -2110,6 +2182,8 @@ function ensureAdminAnalyticsSchema(): void {
         'visitor_uuid' => "varchar(64) NOT NULL DEFAULT ''",
         'first_seen_at' => 'datetime NOT NULL DEFAULT CURRENT_TIMESTAMP',
         'last_seen_at' => 'datetime NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'ip_address' => 'varchar(45) DEFAULT NULL',
+        'masked_ip' => 'varchar(64) DEFAULT NULL',
         'ip_hash' => 'char(64) DEFAULT NULL',
         'user_agent' => 'text DEFAULT NULL',
         'browser' => 'varchar(100) DEFAULT NULL',

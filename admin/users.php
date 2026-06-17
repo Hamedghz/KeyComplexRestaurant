@@ -16,7 +16,12 @@ $permissionCatalog = [
     'media' => 'Media Library',
     'settings' => 'Settings',
     'employee_evaluations' => 'Peer Evaluations',
+    'employee_evaluation_settings' => 'Evaluation Settings',
     'employee_performance' => 'Employee Performance',
+    'employee_recalculate_scores' => 'Recalculate Employee Scores',
+    'employee_closed_period_override' => 'Closed Period Override',
+    'employee_assessment_catalog' => 'Assessment Catalog',
+    'employee_assessment_results' => 'Assessment Results',
     'analytics' => 'Analytics',
     'system_update' => 'System Update',
 ];

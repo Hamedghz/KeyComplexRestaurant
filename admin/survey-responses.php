@@ -6,158 +6,210 @@ if (!$config) {
     http_response_code(404);
     exit('Module not found.');
 }
-$currentAdmin = adminGuard($config['min_role'] ?? 'employee');
+
+adminGuard($config['min_role'] ?? 'manager');
 ensureAdminSchema();
+adminEnsureModuleTables($config);
 $db = adminDb();
-$pageTitle = $config['title'];
-$message = '';
+$pageTitle = 'پاسخ‌های نظرسنجی';
 $error = '';
 
-try {
-    adminEnsureModuleTables($config);
-    $config = adminModuleNormalizeConfig($config);
-    if (empty($config['fields'])) {
-        $config['readonly_create'] = true;
-        safeAdminLog('Admin module has no editable fields after schema normalization (' . basename($_SERVER['PHP_SELF']) . ' -> ' . ($config['table'] ?? 'unknown') . ')');
+function surveyResultsDecodeJson($value): array {
+    $decoded = json_decode((string)$value, true);
+    return is_array($decoded) ? $decoded : [];
+}
+
+function surveyResultsFieldsByKey($schema): array {
+    $decoded = surveyResultsDecodeJson($schema);
+    $labels = [];
+    foreach (($decoded['fields'] ?? []) as $index => $field) {
+        if (!is_array($field)) continue;
+        $key = (string)($field['key'] ?? $field['id'] ?? 'field_' . ($index + 1));
+        $labels[$key] = (string)($field['label'] ?? $field['label_fa'] ?? $key);
     }
+    return $labels;
+}
+
+function surveyResultsDate($value): string {
+    $value = trim((string)$value);
+    if ($value === '') return '';
+    $timestamp = strtotime($value);
+    return $timestamp ? date('Y/m/d H:i', $timestamp) : $value;
+}
+
+function surveyResultsCsv(array $rows): void {
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="survey-responses-' . date('Ymd-His') . '.csv"');
+    $out = fopen('php://output', 'w');
+    fprintf($out, chr(0xEF) . chr(0xBB) . chr(0xBF));
+    fputcsv($out, ['id', 'survey title', 'customer_name', 'customer_mobile', 'satisfaction_score', 'is_dissatisfied', 'submitted_at', 'response_data']);
+    foreach ($rows as $row) {
+        fputcsv($out, [
+            $row['id'] ?? '',
+            $row['form_title'] ?? '',
+            $row['customer_name'] ?? '',
+            $row['customer_mobile_display'] ?? $row['customer_mobile'] ?? '',
+            $row['satisfaction_score'] ?? '',
+            $row['is_dissatisfied'] ?? '',
+            $row['submitted_at'] ?? '',
+            $row['response_data'] ?? '',
+        ]);
+    }
+    exit;
+}
+
+function surveyResultsRows(PDO $db, array $filters): array {
+    $where = [];
+    $params = [];
+    $mobileExpr = adminColumnExists('survey_responses', 'customer_phone')
+        ? "COALESCE(NULLIF(sr.customer_mobile, ''), sr.customer_phone)"
+        : 'sr.customer_mobile';
+
+    if (($filters['form_id'] ?? '') !== '') {
+        $where[] = 'sr.form_id = :form_id';
+        $params['form_id'] = (int)$filters['form_id'];
+    }
+    if (($filters['date_from'] ?? '') !== '') {
+        $where[] = 'sr.submitted_at >= :date_from';
+        $params['date_from'] = $filters['date_from'] . ' 00:00:00';
+    }
+    if (($filters['date_to'] ?? '') !== '') {
+        $where[] = 'sr.submitted_at <= :date_to';
+        $params['date_to'] = $filters['date_to'] . ' 23:59:59';
+    }
+    if (($filters['satisfaction_score'] ?? '') !== '') {
+        $where[] = 'sr.satisfaction_score = :satisfaction_score';
+        $params['satisfaction_score'] = (int)$filters['satisfaction_score'];
+    }
+    if (($filters['is_dissatisfied'] ?? '') !== '') {
+        $where[] = 'sr.is_dissatisfied = :is_dissatisfied';
+        $params['is_dissatisfied'] = (int)$filters['is_dissatisfied'];
+    }
+    if (($filters['q'] ?? '') !== '') {
+        $where[] = '(' . $mobileExpr . ' LIKE :q OR sr.customer_name LIKE :q OR sr.response_data LIKE :q)';
+        $params['q'] = '%' . $filters['q'] . '%';
+    }
+
+    $sql = "
+        SELECT sr.*, {$mobileExpr} AS customer_mobile_display, df.form_title_fa AS form_title, df.form_schema
+        FROM survey_responses sr
+        LEFT JOIN dynamic_forms df ON sr.form_id = df.id
+    ";
+    if ($where) $sql .= ' WHERE ' . implode(' AND ', $where);
+    $sql .= ' ORDER BY sr.submitted_at DESC, sr.id DESC';
+
+    $stmt = $db->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
+$filters = [
+    'form_id' => $_GET['form_id'] ?? '',
+    'date_from' => $_GET['date_from'] ?? '',
+    'date_to' => $_GET['date_to'] ?? '',
+    'satisfaction_score' => $_GET['satisfaction_score'] ?? '',
+    'is_dissatisfied' => $_GET['is_dissatisfied'] ?? '',
+    'q' => $_GET['q'] ?? '',
+];
+
+$rows = [];
+$detail = null;
+try {
+    $rows = surveyResultsRows($db, $filters);
     if (($_GET['export'] ?? '') === 'csv') {
-        adminModuleExportCsv($config);
+        surveyResultsCsv($rows);
+    }
+    if (isset($_GET['view']) && ctype_digit((string)$_GET['view'])) {
+        $mobileExpr = adminColumnExists('survey_responses', 'customer_phone')
+            ? "COALESCE(NULLIF(sr.customer_mobile, ''), sr.customer_phone)"
+            : 'sr.customer_mobile';
+        $stmt = $db->prepare("SELECT sr.*, {$mobileExpr} AS customer_mobile_display, df.form_title_fa AS form_title, df.form_schema FROM survey_responses sr LEFT JOIN dynamic_forms df ON sr.form_id = df.id WHERE sr.id = ? LIMIT 1");
+        $stmt->execute([(int)$_GET['view']]);
+        $detail = $stmt->fetch() ?: null;
     }
 } catch (Throwable $e) {
-    $error = 'آماده‌سازی ساختار داده انجام نشد. جزئیات خطا در لاگ سیستم ثبت شد.';
-    safeAdminLog('Admin module bootstrap failed (survey-responses): ' . $e->getMessage());
-}
-
-$action = $_GET['action'] ?? 'list';
-if ($action === 'add' && !empty($config['readonly_create'])) {
-    $action = 'list';
-}
-if (in_array($action, ['add', 'edit'], true) && empty($config['fields'])) {
-    $error = 'فرم این صفحه با ستون‌های واقعی جدول همگام نیست.';
-    $action = 'list';
-}
-$editRow = null;
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
-    try {
-        requireValidCsrf();
-        $crudAction = $_POST['crud_action'] ?? '';
-        if ($crudAction === 'delete') {
-            adminModuleDelete($config, (int)($_POST['id'] ?? 0));
-            redirectTo(basename($_SERVER['PHP_SELF']) . '?deleted=1');
-        }
-        if ($crudAction === 'save') {
-            $id = (int)($_POST['id'] ?? 0);
-            if (!$id && !empty($config['readonly_create'])) {
-                throw new RuntimeException('ایجاد رکورد جدید برای این صفحه فعال نیست.');
-            }
-            if (empty($config['fields'])) {
-                throw new RuntimeException('فرم این صفحه با ستون‌های واقعی جدول همگام نیست.');
-            }
-            $current = $id ? (adminModuleFetchRow($config, $id) ?: []) : [];
-            $data = adminModuleCollectData($config, $current, $currentAdmin);
-            $savedId = adminModuleSave($config, $data, $id);
-            if ($config['table'] === 'matches') {
-                adminRecalculatePredictionsForMatch($savedId);
-            }
-            redirectTo(basename($_SERVER['PHP_SELF']) . '?saved=1');
-        }
-    } catch (Throwable $e) {
-        $error = $e->getMessage();
-    }
-}
-
-if ($action === 'edit' && !$error) {
-    $editRow = adminModuleFetchRow($config, (int)($_GET['id'] ?? 0));
-    if (!$editRow) {
-        $error = 'رکورد مورد نظر یافت نشد.';
-        $action = 'list';
-    }
-}
-
-try {
-    $data = (!$error && $action === 'list') ? adminModuleRows($config) : ['rows'=>[], 'page'=>1, 'perPage'=>20, 'total'=>0];
-} catch (Throwable $e) {
-    $data = ['rows'=>[], 'page'=>1, 'perPage'=>20, 'total'=>0];
     $error = 'داده‌ها قابل نمایش نیستند. جزئیات خطا در لاگ سیستم ثبت شد.';
-    safeAdminLog('Admin module rows failed (survey-responses): ' . $e->getMessage());
+    safeAdminLog('Survey results failed: ' . $e->getMessage());
 }
+
+$forms = adminOptionRows('survey_form');
 
 include __DIR__ . '/includes/header.php';
 ?>
-<?php if (!empty($_GET['saved'])): ?><div class="alert alert-info">تغییرات ذخیره شد.</div><?php endif; ?>
-<?php if (!empty($_GET['deleted'])): ?><div class="alert alert-info">رکورد حذف شد.</div><?php endif; ?>
-<?php if ($message): ?><div class="alert alert-info"><?php echo h($message); ?></div><?php endif; ?>
 <?php if ($error): ?><div class="alert" style="background:#f8d7da;color:#721c24"><?php echo h($error); ?></div><?php endif; ?>
 
-<?php if (in_array($action, ['add', 'edit'], true) && !$error): ?>
-    <form method="post" enctype="multipart/form-data">
-        <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>">
-        <input type="hidden" name="crud_action" value="save">
-        <input type="hidden" name="id" value="<?php echo h($editRow['id'] ?? 0); ?>">
-        <div class="card">
-            <div class="card-header"><h2><?php echo h($action === 'edit' ? 'ویرایش ' . $config['title'] : 'افزودن ' . $config['title']); ?></h2></div>
-            <div class="card-body">
-                <?php foreach ($config['fields'] as $field => $meta): ?>
-                    <?php adminModuleRenderField($field, $meta, $editRow[$field] ?? null); ?>
-                <?php endforeach; ?>
-            </div>
-        </div>
-        <button class="btn btn-success" type="submit">ذخیره</button>
-        <a class="btn" href="<?php echo h(basename($_SERVER['PHP_SELF'])); ?>">بازگشت</a>
-    </form>
-<?php else: ?>
+<?php if ($detail): ?>
+    <?php $answers = surveyResultsDecodeJson($detail['response_data'] ?? ''); $labels = surveyResultsFieldsByKey($detail['form_schema'] ?? ''); ?>
     <div class="card">
         <div class="card-header">
-            <h2><?php echo h($config['title']); ?></h2>
-            <div>
-                <?php if (empty($config['readonly_create'])): ?><a class="btn btn-primary" href="?action=add">افزودن</a><?php endif; ?> <a class="btn" href="?<?php echo h(http_build_query(array_merge($_GET, ['export' => 'csv']))); ?>">خروجی CSV</a>
-            </div>
+            <h2>جزئیات پاسخ #<?php echo h($detail['id']); ?></h2>
+            <a class="btn" href="survey-responses.php?<?php echo h(http_build_query($filters)); ?>">بازگشت</a>
         </div>
         <div class="card-body">
-            <form class="admin-filter" method="get">
-                <input class="form-control" name="q" placeholder="جستجو" value="<?php echo h($_GET['q'] ?? ''); ?>">
-                <input class="form-control" name="date_from" placeholder="از تاریخ" value="<?php echo h($_GET['date_from'] ?? ''); ?>">
-                <input class="form-control" name="date_to" placeholder="تا تاریخ" value="<?php echo h($_GET['date_to'] ?? ''); ?>">
-                <?php foreach (($config['filters'] ?? []) as $filter): $field = $config['fields'][$filter] ?? ['label' => adminModuleLabel($config, $filter), 'type' => 'checkbox']; $value = $_GET[$filter] ?? ''; ?>
-                    <?php if (($field['type'] ?? '') === 'select'): ?>
-                        <select class="form-control" name="<?php echo h($filter); ?>"><option value=""><?php echo h($field['label']); ?></option><?php foreach (($field['options'] ?? []) as $key => $label): ?><option value="<?php echo h($key); ?>" <?php echo (string)$value === (string)$key ? 'selected' : ''; ?>><?php echo h($label); ?></option><?php endforeach; ?></select>
-                    <?php elseif (in_array(($field['type'] ?? ''), ['category','match','survey_form'], true)): ?>
-                        <select class="form-control" name="<?php echo h($filter); ?>"><option value=""><?php echo h($field['label']); ?></option><?php foreach (adminOptionRows($field['type']) as $option): ?><option value="<?php echo h($option['id']); ?>" <?php echo (string)$value === (string)$option['id'] ? 'selected' : ''; ?>><?php echo h($option['title']); ?></option><?php endforeach; ?></select>
-                    <?php else: ?>
-                        <select class="form-control" name="<?php echo h($filter); ?>"><option value=""><?php echo h(adminModuleLabel($config, $filter)); ?></option><option value="1" <?php echo (string)$value === '1' ? 'selected' : ''; ?>>بله</option><option value="0" <?php echo (string)$value === '0' ? 'selected' : ''; ?>>خیر</option></select>
-                    <?php endif; ?>
-                <?php endforeach; ?>
-                <button class="btn btn-primary" type="submit">فیلتر</button>
-            </form>
+            <p><strong>نظرسنجی:</strong> <?php echo h($detail['form_title'] ?? ''); ?></p>
+            <p><strong>تاریخ ثبت:</strong> <?php echo h(surveyResultsDate($detail['submitted_at'] ?? '')); ?></p>
+            <p><strong>نام:</strong> <?php echo h($detail['customer_name'] ?? ''); ?> | <strong>موبایل:</strong> <?php echo h($detail['customer_mobile_display'] ?? $detail['customer_mobile'] ?? ''); ?> | <strong>امتیاز:</strong> <?php echo h($detail['satisfaction_score'] ?? ''); ?></p>
             <div class="table-responsive">
                 <table class="table table-striped">
-                    <thead><tr><?php foreach ($config['columns'] as $column): ?><th><a href="?<?php echo h(http_build_query(array_merge($_GET, ['sort' => $column, 'order' => (($_GET['sort'] ?? '') === $column && ($_GET['order'] ?? 'desc') === 'desc') ? 'asc' : 'desc']))); ?>"><?php echo h(adminModuleLabel($config, $column)); ?></a></th><?php endforeach; ?><th>عملیات</th></tr></thead>
+                    <thead><tr><th>پرسش</th><th>پاسخ</th></tr></thead>
                     <tbody>
-                    <?php foreach ($data['rows'] as $row): ?>
-                        <tr>
-                            <?php foreach ($config['columns'] as $column): ?><td><?php echo h(adminModuleFormatValue($column, $row[$column] ?? '')); ?></td><?php endforeach; ?>
-                            <td>
-                                <a class="btn btn-sm btn-info" href="?action=edit&id=<?php echo h($row['id']); ?>">ویرایش</a>
-                                <form method="post" style="display:inline">
-                                    <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>">
-                                    <input type="hidden" name="crud_action" value="delete">
-                                    <input type="hidden" name="id" value="<?php echo h($row['id']); ?>">
-                                    <button class="btn btn-sm btn-danger" type="submit" onclick="return confirm('آیا مطمئنید؟')">حذف</button>
-                                </form>
-                            </td>
-                        </tr>
+                    <?php foreach ($answers as $key => $answer): ?>
+                        <tr><td><?php echo h($labels[$key] ?? $key); ?></td><td><?php echo h(is_scalar($answer) ? (string)$answer : json_encode($answer, JSON_UNESCAPED_UNICODE)); ?></td></tr>
                     <?php endforeach; ?>
-                    <?php if (!$data['rows']): ?><tr><td colspan="<?php echo count($config['columns']) + 1; ?>" class="text-center text-muted">رکوردی یافت نشد.</td></tr><?php endif; ?>
+                    <?php if (!$answers): ?><tr><td colspan="2" class="text-muted">داده پاسخ قابل خواندن نیست.</td></tr><?php endif; ?>
                     </tbody>
                 </table>
             </div>
-            <?php $pages = max(1, (int)ceil($data['total'] / $data['perPage'])); ?>
-            <p class="text-muted">صفحه <?php echo h($data['page']); ?> از <?php echo h($pages); ?> (کل: <?php echo h($data['total']); ?> رکورد)</p>
-            <?php if ($data['page'] > 1): ?><a class="btn" href="?page=1">اول</a> <a class="btn" href="?page=<?php echo h($data['page'] - 1); ?>">قبلی</a><?php endif; ?>
-            <?php if ($data['page'] < $pages): ?><a class="btn" href="?page=<?php echo h($data['page'] + 1); ?>">بعدی</a> <a class="btn" href="?page=<?php echo h($pages); ?>">آخر</a><?php endif; ?>
+            <p class="text-muted"><strong>IP:</strong> <?php echo h($detail['ip_address'] ?? ''); ?></p>
+            <p class="text-muted"><strong>User Agent:</strong> <?php echo h($detail['user_agent'] ?? ''); ?></p>
         </div>
     </div>
 <?php endif; ?>
+
+<div class="card">
+    <div class="card-header">
+        <h2>پاسخ‌های نظرسنجی</h2>
+        <a class="btn" href="?<?php echo h(http_build_query(array_merge($filters, ['export' => 'csv']))); ?>">خروجی CSV</a>
+    </div>
+    <div class="card-body">
+        <form class="admin-filter" method="get">
+            <select class="form-control" name="form_id">
+                <option value="">همه نظرسنجی‌ها</option>
+                <?php foreach ($forms as $form): ?><option value="<?php echo h($form['id']); ?>" <?php echo (string)$filters['form_id'] === (string)$form['id'] ? 'selected' : ''; ?>><?php echo h($form['title']); ?></option><?php endforeach; ?>
+            </select>
+            <input class="form-control" type="date" name="date_from" value="<?php echo h($filters['date_from']); ?>" placeholder="از تاریخ">
+            <input class="form-control" type="date" name="date_to" value="<?php echo h($filters['date_to']); ?>" placeholder="تا تاریخ">
+            <input class="form-control" type="number" min="1" max="5" name="satisfaction_score" value="<?php echo h($filters['satisfaction_score']); ?>" placeholder="امتیاز">
+            <select class="form-control" name="is_dissatisfied">
+                <option value="">وضعیت نارضایتی</option>
+                <option value="1" <?php echo (string)$filters['is_dissatisfied'] === '1' ? 'selected' : ''; ?>>ناراضی</option>
+                <option value="0" <?php echo (string)$filters['is_dissatisfied'] === '0' ? 'selected' : ''; ?>>غیرناراضی</option>
+            </select>
+            <input class="form-control" name="q" value="<?php echo h($filters['q']); ?>" placeholder="جستجوی موبایل/نام">
+            <button class="btn btn-primary" type="submit">فیلتر</button>
+        </form>
+
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead><tr><th>شناسه</th><th>عنوان نظرسنجی</th><th>نام</th><th>شماره تماس</th><th>امتیاز</th><th>وضعیت نارضایتی</th><th>تاریخ ثبت</th><th>مشاهده پاسخ‌ها</th></tr></thead>
+                <tbody>
+                <?php foreach ($rows as $row): ?>
+                    <tr>
+                        <td><?php echo h($row['id']); ?></td>
+                        <td><?php echo h($row['form_title'] ?? ''); ?></td>
+                        <td><?php echo h($row['customer_name'] ?? ''); ?></td>
+                        <td><?php echo h($row['customer_mobile_display'] ?? $row['customer_mobile'] ?? ''); ?></td>
+                        <td><?php echo h($row['satisfaction_score'] ?? ''); ?></td>
+                        <td><?php echo (int)($row['is_dissatisfied'] ?? 0) === 1 ? 'ناراضی' : 'عادی'; ?></td>
+                        <td><?php echo h(surveyResultsDate($row['submitted_at'] ?? '')); ?></td>
+                        <td><a class="btn btn-sm btn-info" href="?<?php echo h(http_build_query(array_merge($filters, ['view' => $row['id']]))); ?>">مشاهده</a></td>
+                    </tr>
+                <?php endforeach; ?>
+                <?php if (!$rows): ?><tr><td colspan="8" class="text-center text-muted">پاسخی یافت نشد.</td></tr><?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
 
 <?php include __DIR__ . '/includes/footer.php'; ?>

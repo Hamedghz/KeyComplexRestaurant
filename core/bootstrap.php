@@ -74,8 +74,9 @@ define('ITEMS_PER_PAGE', 20);
 define('SITE_NAME', 'KEY Restaurant & Coffeehouse');
 define('SITE_NAME_FA', 'KEY رستوران و کافه');
 define('ADMIN_SESSION_DURATION', 7200);
+define('APP_TIMEZONE', 'Asia/Tehran');
 
-date_default_timezone_set($app['timezone'] ?? 'Asia/Tehran');
+date_default_timezone_set(APP_TIMEZONE);
 
 error_reporting(E_ALL);
 ini_set('display_errors', APP_DEBUG ? '1' : '0');
@@ -386,14 +387,61 @@ if (!function_exists('jalaliToGregorianParts')) {
     }
 }
 
+if (!function_exists('appTimeZone')) {
+    function appTimeZone(): DateTimeZone {
+        static $timezone = null;
+        if ($timezone === null) {
+            $timezone = new DateTimeZone(APP_TIMEZONE);
+        }
+        return $timezone;
+    }
+}
+
+if (!function_exists('appNow')) {
+    function appNow(): DateTimeImmutable {
+        return new DateTimeImmutable('now', appTimeZone());
+    }
+}
+
+if (!function_exists('appMysqlDateTime')) {
+    function appMysqlDateTime(?DateTimeImmutable $dateTime = null): string {
+        return ($dateTime ?: appNow())->setTimezone(appTimeZone())->format('Y-m-d H:i:s');
+    }
+}
+
+if (!function_exists('parseStoredDateTime')) {
+    function parseStoredDateTime($value): ?DateTimeImmutable {
+        $value = trim((string)$value);
+        if ($value === '' || $value === '0000-00-00 00:00:00') {
+            return null;
+        }
+
+        $formats = ['Y-m-d H:i:s', 'Y-m-d H:i', 'Y-m-d'];
+        foreach ($formats as $format) {
+            $dateTime = DateTimeImmutable::createFromFormat('!' . $format, $value, appTimeZone());
+            $errors = DateTimeImmutable::getLastErrors();
+            if ($dateTime instanceof DateTimeImmutable && ($errors === false || ((int)$errors['warning_count'] === 0 && (int)$errors['error_count'] === 0))) {
+                return $dateTime;
+            }
+        }
+
+        try {
+            return new DateTimeImmutable($value, appTimeZone());
+        } catch (Throwable $e) {
+            return null;
+        }
+    }
+}
+
 if (!function_exists('formatJalaliDateTime')) {
     function formatJalaliDateTime($datetime, $includeTime = true) {
         if (empty($datetime)) return '';
-        $timestamp = strtotime((string)$datetime);
-        if (!$timestamp) return '';
-        [$jy, $jm, $jd] = gregorianToJalaliParts((int)date('Y', $timestamp), (int)date('n', $timestamp), (int)date('j', $timestamp));
+        $dateTime = parseStoredDateTime($datetime);
+        if (!$dateTime) return '';
+        $dateTime = $dateTime->setTimezone(appTimeZone());
+        [$jy, $jm, $jd] = gregorianToJalaliParts((int)$dateTime->format('Y'), (int)$dateTime->format('n'), (int)$dateTime->format('j'));
         $date = sprintf('%04d/%02d/%02d', $jy, $jm, $jd);
-        return $includeTime ? $date . ' ' . date('H:i', $timestamp) : $date;
+        return $includeTime ? $date . ' ' . $dateTime->format('H:i') : $date;
     }
 }
 
@@ -430,7 +478,14 @@ if (!function_exists('parsePersianDate')) {
         $d = (int)$matches[3];
 
         if ($y >= 1300 && $y <= 1599) {
+            if ($m < 1 || $m > 12 || $d < 1 || $d > ($m <= 6 ? 31 : 30)) {
+                return $value;
+            }
             [$gy, $gm, $gd] = jalaliToGregorianParts($y, $m, $d);
+            [$checkY, $checkM, $checkD] = gregorianToJalaliParts($gy, $gm, $gd);
+            if ($checkY !== $y || $checkM !== $m || $checkD !== $d) {
+                return $value;
+            }
         } else {
             [$gy, $gm, $gd] = [$y, $m, $d];
         }
@@ -444,7 +499,51 @@ if (!function_exists('parsePersianDate')) {
             return $value;
         }
 
-        return sprintf('%04d-%02d-%02d%s', $gy, $gm, $gd, $withTime ? ' ' . $time : '');
+        $dateTime = DateTimeImmutable::createFromFormat('!Y-n-j H:i:s', sprintf('%04d-%d-%d %s', $gy, $gm, $gd, $time), appTimeZone());
+        $errors = DateTimeImmutable::getLastErrors();
+        if (!$dateTime || ($errors !== false && ((int)$errors['warning_count'] > 0 || (int)$errors['error_count'] > 0))) {
+            return $value;
+        }
+
+        return $withTime ? $dateTime->format('Y-m-d H:i:s') : $dateTime->format('Y-m-d');
+    }
+}
+
+if (!function_exists('isMatchOpenForPrediction')) {
+    function isMatchOpenForPrediction(array $match, ?DateTimeImmutable $now = null): bool {
+        $now = $now ? $now->setTimezone(appTimeZone()) : appNow();
+        $predictionStart = parseStoredDateTime($match['prediction_start_at'] ?? $match['prediction_open_at'] ?? null);
+        $predictionEnd = parseStoredDateTime($match['prediction_end_at'] ?? $match['prediction_close_at'] ?? null);
+
+        return (int)($match['is_active'] ?? 0) === 1
+            && (int)($match['active_for_prediction'] ?? 0) === 1
+            && $predictionStart instanceof DateTimeImmutable
+            && $predictionEnd instanceof DateTimeImmutable
+            && $predictionStart <= $now
+            && $predictionEnd >= $now;
+    }
+}
+
+if (!function_exists('matchPredictionAvailabilityError')) {
+    function matchPredictionAvailabilityError(array $match, ?DateTimeImmutable $now = null): ?string {
+        $now = $now ? $now->setTimezone(appTimeZone()) : appNow();
+        if ((int)($match['is_active'] ?? 0) !== 1 || (int)($match['active_for_prediction'] ?? 0) !== 1) {
+            return 'این مسابقه برای پیش‌بینی فعال نیست.';
+        }
+
+        $predictionStart = parseStoredDateTime($match['prediction_start_at'] ?? $match['prediction_open_at'] ?? null);
+        $predictionEnd = parseStoredDateTime($match['prediction_end_at'] ?? $match['prediction_close_at'] ?? null);
+        if (!$predictionStart || !$predictionEnd) {
+            return 'بازه زمانی پیش‌بینی برای این مسابقه معتبر نیست.';
+        }
+        if ($predictionStart > $now) {
+            return 'مهلت ثبت پیش‌بینی برای این مسابقه هنوز آغاز نشده است.';
+        }
+        if ($predictionEnd < $now) {
+            return 'مهلت ثبت پیش‌بینی برای این مسابقه به پایان رسیده است.';
+        }
+
+        return null;
     }
 }
 
@@ -463,6 +562,7 @@ class Database {
             ];
 
             $this->connection = new PDO($dsn, DB_USER, DB_PASS, $options);
+            $this->connection->exec("SET time_zone = '" . appNow()->format('P') . "'");
         } catch (PDOException $e) {
             error_log('Database Connection Error: ' . $e->getMessage());
             jsonResponse([
