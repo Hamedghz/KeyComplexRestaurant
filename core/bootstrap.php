@@ -78,6 +78,8 @@ define('APP_TIMEZONE', 'Asia/Tehran');
 
 date_default_timezone_set(APP_TIMEZONE);
 
+require_once __DIR__ . '/i18n.php';
+
 error_reporting(E_ALL);
 ini_set('display_errors', APP_DEBUG ? '1' : '0');
 ini_set('log_errors', '1');

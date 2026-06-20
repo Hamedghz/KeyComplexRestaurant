@@ -8,6 +8,8 @@ require_once __DIR__ . '/core/bootstrap.php';
 require_once __DIR__ . '/core/models/Setting.php';
 require_once __DIR__ . '/core/models/MenuItem.php';
 
+if (isset($_GET['lang'])) set_lang((string)$_GET['lang']);
+
 $settingModel = new Setting();
 $menuModel = new MenuItem();
 
@@ -501,12 +503,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_name'] ?? '') === 'ne
 
 // Get settings
 $legacyHeroTitle = $settingModel->get('hero_title_fa', 'KEY رستوران و کافه');
+$legacyHeroTitleEn = $settingModel->get('hero_title_en', 'KEY Restaurant & Coffeehouse');
 $legacyHeroSubtitle = $settingModel->get('hero_subtitle_fa', 'تجربه‌ای بی‌نظیر از غذا و نوشیدنی');
-$siteName = trim((string)$settingModel->get('site_name_fa', '')) ?: $legacyHeroTitle;
+$legacyHeroSubtitleEn = $settingModel->get('hero_subtitle_en', '');
+$siteNameFa = trim((string)$settingModel->get('site_name_fa', '')) ?: $legacyHeroTitle;
 $siteNameEn = $settingModel->get('site_name_en', 'KEY Restaurant & Coffeehouse');
-$siteDescription = trim((string)$settingModel->get('site_description_fa', '')) ?: $legacyHeroSubtitle;
+$siteName = get_content($siteNameFa, $siteNameEn ?: $legacyHeroTitleEn);
+$siteDescriptionFa = trim((string)$settingModel->get('site_description_fa', '')) ?: $legacyHeroSubtitle;
+$siteDescriptionEn = trim((string)$settingModel->get('site_description_en', '')) ?: $legacyHeroSubtitleEn;
+$siteDescription = get_content($siteDescriptionFa, $siteDescriptionEn);
 $brandLogoImage = normalizeAssetPath($settingModel->get('lotus_logo_image', ''));
-$ctaText = trim((string)$settingModel->get('hero_cta_text_fa', '')) ?: 'مشاهده منو';
+$ctaTextFa = trim((string)$settingModel->get('hero_cta_text_fa', '')) ?: 'مشاهده منو';
+$ctaTextEn = trim((string)$settingModel->get('hero_cta_text_en', ''));
+$ctaText = get_content($ctaTextFa, $ctaTextEn);
 $primaryColor = homeCssColor($settingModel->get('primary_color', '#004647'), '#004647');
 $accentColor = homeCssColor($settingModel->get('accent_color', '#D4AF37'), '#D4AF37');
 $menuTitle = $settingModel->get('featured_menu_title_fa', 'منوی ویژه');
@@ -615,7 +624,7 @@ try {
 $featuredItems = $menuModel->getFeatured(6);
 ?>
 <!DOCTYPE html>
-<html lang="fa-IR" dir="rtl">
+<html lang="<?php echo homeEscape(current_lang()); ?>" dir="<?php echo is_rtl() ? 'rtl' : 'ltr'; ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -642,7 +651,7 @@ $featuredItems = $menuModel->getFeatured(6);
             font-family: Vazirmatn, Tahoma, sans-serif;
             background: var(--black);
             color: var(--white);
-            direction: rtl;
+            direction: <?php echo is_rtl() ? 'rtl' : 'ltr'; ?>;
             overflow-x: hidden;
             padding-bottom: env(safe-area-inset-bottom);
         }
@@ -1649,13 +1658,14 @@ $featuredItems = $menuModel->getFeatured(6);
                 <span><?php echo homeEscape($siteName); ?></span>
             </a>
             <nav class="header-nav">
-                <a href="#hero-section">خانه</a>
-                <a href="#menu">منو</a>
-                <a href="#about">درباره ما</a>
-                <a href="#location">نقشه</a>
-                <a href="#hours">ساعات کاری</a>
-                <a href="#newsletter">باشگاه مشتریان</a>
-                <a href="/survey.php">نظرسنجی</a>
+                <a href="#hero-section"><?php echo homeEscape(t('home')); ?></a>
+                <a href="#menu"><?php echo homeEscape(t('menu')); ?></a>
+                <a href="#about"><?php echo homeEscape(t('about_us')); ?></a>
+                <a href="#location"><?php echo homeEscape(t('location')); ?></a>
+                <a href="#hours"><?php echo homeEscape(t('opening_hours')); ?></a>
+                <a href="#newsletter"><?php echo homeEscape(t('customer_club')); ?></a>
+                <a href="/survey.php"><?php echo homeEscape(t('survey')); ?></a>
+                <a href="?lang=<?php echo current_lang() === 'fa' ? 'en' : 'fa'; ?>"><?php echo current_lang() === 'fa' ? 'EN' : 'فا'; ?></a>
             </nav>
         </div>
     </header>
@@ -1669,14 +1679,14 @@ $featuredItems = $menuModel->getFeatured(6);
             <div class="hero-banner-slider" data-hero-slider>
                 <?php foreach ($heroBanners as $index => $banner): ?>
                     <?php
-                        $bannerTitle = trim((string)($banner['title'] ?? '')) ?: $siteName;
-                        $bannerSubtitle = trim((string)($banner['subtitle'] ?? ''));
-                        $bannerDescription = trim((string)($banner['description'] ?? ''));
+                        $bannerTitle = get_content($banner['title'] ?? '', $banner['title_en'] ?? '') ?: $siteName;
+                        $bannerSubtitle = get_content($banner['subtitle'] ?? '', $banner['subtitle_en'] ?? '');
+                        $bannerDescription = get_content($banner['description'] ?? '', $banner['description_en'] ?? '');
                         $bannerLead = $bannerSubtitle !== '' ? $bannerSubtitle : ($bannerDescription !== '' ? $bannerDescription : $siteDescription);
                         $bannerExtraDescription = $bannerSubtitle !== '' ? $bannerDescription : '';
                         $bannerImage = homeBannerImageSrc($banner['image'] ?? '');
                         $bannerMobileImage = homeBannerImageSrc($banner['mobile_image'] ?? '');
-                        $bannerButtonText = trim((string)($banner['button_text'] ?? ''));
+                        $bannerButtonText = get_content($banner['button_text'] ?? '', $banner['button_text_en'] ?? '');
                         $bannerButtonLink = trim((string)($banner['button_link'] ?? '')) ?: '#menu';
                     ?>
                     <div class="hero-banner-slide <?php echo $index === 0 ? 'active' : ''; ?>" data-hero-slide>
@@ -1705,7 +1715,7 @@ $featuredItems = $menuModel->getFeatured(6);
             <?php endif; ?>
 
             <?php if (!empty($heroBanners) && count($heroBanners) > 1): ?>
-                <div class="hero-banner-dots" aria-label="انتخاب بنر">
+                <div class="hero-banner-dots" aria-label="<?php echo homeEscape(t('select_banner')); ?>">
                     <?php foreach ($heroBanners as $index => $banner): ?><button type="button" class="<?php echo $index === 0 ? 'active' : ''; ?>" data-hero-dot="<?php echo $index; ?>"></button><?php endforeach; ?>
                 </div>
             <?php endif; ?>
@@ -1727,7 +1737,7 @@ $featuredItems = $menuModel->getFeatured(6);
             <a href="<?php echo homeEscape($social['url']); ?>" class="social-link" target="_blank" rel="noopener" aria-label="<?php echo homeEscape($social['title']); ?>"><?php echo homeRenderSocialIcon($social); ?></a>
         <?php endforeach; ?>
         <?php if ($telLink !== ''): ?>
-            <a href="tel:<?php echo homeEscape($telLink); ?>" class="social-link" aria-label="Call">📞</a>
+            <a href="tel:<?php echo homeEscape($telLink); ?>" class="social-link" aria-label="<?php echo homeEscape(t('call')); ?>">📞</a>
         <?php endif; ?>
     </div>
     
@@ -1763,7 +1773,7 @@ $featuredItems = $menuModel->getFeatured(6);
                             <?php endforeach; ?>
                         </div>
                         <?php if (count($categoryItems) > 3): ?>
-                            <button type="button" class="glass-button show-more-items" data-show-more-items="cat-<?php echo (int)$category['id']; ?>">Show More</button>
+                            <button type="button" class="glass-button show-more-items" data-show-more-items="cat-<?php echo (int)$category['id']; ?>"><?php echo homeEscape(t('show_more')); ?></button>
                         <?php endif; ?>
                     </div>
                 <?php endforeach; ?>

@@ -124,6 +124,11 @@ function systemUpdateRunPendingMigrations(PDO $db): array {
         }
         try {
             foreach (systemUpdateSplitSql($sql) as $statement) {
+                if (preg_match('/^\s*(?:INSERT(?:\s+IGNORE)?|REPLACE)\s+INTO\s+`?([a-zA-Z0-9_]+)`?/i', $statement, $seedMatch)
+                    && adminTableHasRows($seedMatch[1])) {
+                    safeAdminLog('SEED SKIPPED: ' . $seedMatch[1] . ' already contains data');
+                    continue;
+                }
                 $db->exec($statement);
             }
             $stmt = $db->prepare('INSERT INTO schema_migrations (migration_name) VALUES (:name)');
@@ -187,7 +192,7 @@ try {
 include __DIR__ . '/includes/header.php';
 ?>
 <div class="card">
-    <div class="card-header"><h2>System Update</h2></div>
+    <div class="card-header"><h2>به‌روزرسانی سیستم</h2></div>
     <div class="card-body">
         <?php if ($message): ?><div class="alert alert-info"><?php echo h($message); ?></div><?php endif; ?>
         <?php if ($error): ?><div class="alert" style="background:#f8d7da;color:#721c24"><?php echo h($error); ?></div><?php endif; ?>
@@ -210,7 +215,7 @@ include __DIR__ . '/includes/header.php';
     </div>
 </div>
 <div class="card">
-    <div class="card-header"><h2>Migration Status</h2></div>
+    <div class="card-header"><h2>وضعیت مهاجرت‌های پایگاه داده</h2></div>
     <div class="card-body">
         <p>مسیر migration: <?php echo h($migrationStatus['directory']); ?></p>
         <h3>Pending</h3>

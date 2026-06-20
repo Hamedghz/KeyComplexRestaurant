@@ -39,10 +39,10 @@ if ($type === 'device') {
     ];
 }
 if (!isset($exports[$type])) {
-    $pageTitle = 'Export Center';
+    $pageTitle = 'مرکز خروجی';
     include __DIR__ . '/includes/header.php';
     ?>
-    <div class="card"><div class="card-header"><h2>Export Center</h2></div><div class="card-body"><p>Choose an export:</p><div class="quick-actions"><a class="quick-action-btn" href="?type=visitor_logs"><span class="icon">📈</span><span>Visitor Analytics</span></a><a class="quick-action-btn" href="?type=traffic_sources"><span class="icon">🧭</span><span>Traffic Sources</span></a><a class="quick-action-btn" href="?type=geographic"><span class="icon">🌍</span><span>Geographic</span></a><a class="quick-action-btn" href="?type=device"><span class="icon">📱</span><span>Device</span></a></div></div></div>
+    <div class="card"><div class="card-header"><h2>مرکز خروجی</h2></div><div class="card-body"><p>نوع خروجی را انتخاب کنید:</p><div class="quick-actions"><a class="quick-action-btn" href="?type=visitor_logs"><span class="icon">📈</span><span>تحلیل بازدیدکنندگان</span></a><a class="quick-action-btn" href="?type=traffic_sources"><span class="icon">🧭</span><span>منابع ترافیک</span></a><a class="quick-action-btn" href="?type=geographic"><span class="icon">🌍</span><span>جغرافیایی</span></a><a class="quick-action-btn" href="?type=device"><span class="icon">📱</span><span>دستگاه‌ها</span></a></div></div></div>
     <?php include __DIR__ . '/includes/footer.php'; exit;
 }
 $config = $exports[$type];

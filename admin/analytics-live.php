@@ -3,7 +3,7 @@ require_once __DIR__ . '/lib/admin_schema.php';
 $currentAdmin = adminGuard('manager');
 ensureAdminSchema();
 $db = adminDb();
-$pageTitle = 'Live Visitors';
+$pageTitle = 'بازدیدکنندگان آنلاین';
 $error = '';
 $emptyState = 'هنوز داده‌ای ثبت نشده است. صفحه عمومی سایت را باز کنید تا اولین بازدید ثبت شود.';
 $from = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['date_from'] ?? '')) ? (string)$_GET['date_from'] : date('Y-m-d');
@@ -56,9 +56,9 @@ if ($export) {
 include __DIR__ . '/includes/header.php';
 ?>
 <meta http-equiv="refresh" content="5">
-<div class="card"><div class="card-header"><h2>Live Visitors</h2><a class="btn btn-primary" href="?<?php echo h(http_build_query(array_merge($_GET, ['export'=>'csv']))); ?>">Export CSV</a></div><div class="card-body">
+<div class="card"><div class="card-header"><h2>بازدیدکنندگان آنلاین</h2><a class="btn btn-primary" href="?<?php echo h(http_build_query(array_merge($_GET, ['export'=>'csv']))); ?>">خروجی CSV</a></div><div class="card-body">
 <?php if ($error): ?><div class="alert" style="background:#f8d7da;color:#721c24"><?php echo h($error); ?></div><?php endif; ?>
-<form class="admin-filter" method="get"><input class="form-control" name="q" placeholder="Search" value="<?php echo h($q); ?>"><input class="form-control" name="source_type" placeholder="Source" value="<?php echo h($sourceType); ?>"><input class="form-control" name="device_type" placeholder="Device" value="<?php echo h($deviceType); ?>"><input class="form-control" type="date" name="date_from" value="<?php echo h($from); ?>"><input class="form-control" type="date" name="date_to" value="<?php echo h($to); ?>"><button class="btn btn-primary">Filter</button></form>
+<form class="admin-filter" method="get"><input class="form-control" name="q" placeholder="جستجو" value="<?php echo h($q); ?>"><input class="form-control" name="source_type" placeholder="منبع" value="<?php echo h($sourceType); ?>"><input class="form-control" name="device_type" placeholder="دستگاه" value="<?php echo h($deviceType); ?>"><input class="form-control" type="date" name="date_from" value="<?php echo h($from); ?>"><input class="form-control" type="date" name="date_to" value="<?php echo h($to); ?>"><button class="btn btn-primary">فیلتر</button></form>
 <div class="stats-row"><div class="stat-card stat-success"><div class="stat-content"><h3><?php echo h((string)count($rows)); ?></h3><p>Active sessions</p></div></div></div>
 <div class="table-responsive"><table class="table"><thead><tr><th>Session</th><th>Current Page</th><th>Source</th><th>Device</th><th>Browser</th><th>OS</th><th>Started</th><th>Last Activity</th></tr></thead><tbody>
 <?php if (!$rows): ?><tr><td colspan="8" class="text-muted"><?php echo h($emptyState); ?></td></tr><?php endif; ?>

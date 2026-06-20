@@ -59,7 +59,7 @@ class MigrationRunner {
         $this->recordVersion($versionName, $status);
     }
 
-    public function executeSqlFile(string $file): void {
+    public function executeSqlFile(string $file, ?bool $allowSeedStatements = null): void {
         self::configureBufferedConnection($this->pdo);
 
         $sql = file_get_contents($file);
@@ -69,7 +69,35 @@ class MigrationRunner {
         }
 
         foreach ($this->splitSqlStatements($sql) as $statement) {
+            $isSeed = $this->isSeedStatement($statement);
+            $table = $isSeed ? $this->seedStatementTable($statement) : '';
+            $skipSeed = $isSeed && ($allowSeedStatements === false
+                || ($allowSeedStatements === null && $table !== '' && $this->databaseTableHasRows($table)));
+            if ($skipSeed) {
+                error_log($table !== '' ? 'SEED SKIPPED: ' . $table . ' already contains data' : 'SEED SKIPPED: production data exists');
+                continue;
+            }
             $this->executeStatement($statement);
+        }
+    }
+
+    private function isSeedStatement(string $statement): bool {
+        return (bool)preg_match('/^\s*(INSERT|REPLACE)\s+/i', $statement);
+    }
+
+    private function seedStatementTable(string $statement): string {
+        return preg_match('/^\s*(?:INSERT(?:\s+IGNORE)?|REPLACE)\s+INTO\s+`?([a-zA-Z0-9_]+)`?/i', $statement, $match)
+            ? $match[1]
+            : '';
+    }
+
+    private function databaseTableHasRows(string $table): bool {
+        if (!preg_match('/^[a-zA-Z0-9_]+$/', $table) || !schemaTableExists($this->pdo, $table)) return false;
+        $stmt = $this->pdo->query('SELECT 1 FROM `' . $table . '` LIMIT 1');
+        try {
+            return (bool)$stmt->fetchColumn();
+        } finally {
+            $stmt->closeCursor();
         }
     }
 

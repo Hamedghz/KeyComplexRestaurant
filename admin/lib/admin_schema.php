@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../../core/Auth.php';
 require_once __DIR__ . '/../../core/SchemaSynchronizer.php';
+require_once __DIR__ . '/../../core/i18n.php';
 
 
 if (!function_exists('adminGuard')) {
@@ -38,7 +39,7 @@ if (!function_exists('adminRenderSafeError')) {
         safeAdminLog($logMessage);
         http_response_code(500);
         $safeTitle = htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8');
-        echo '<!DOCTYPE html><html lang="fa-IR" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>' . $safeTitle . '</title></head><body style="font-family:Tahoma,sans-serif;background:#f5f6fa;color:#343a40;direction:rtl;padding:32px"><div style="max-width:720px;margin:0 auto;background:#fff;border-radius:10px;padding:24px;box-shadow:0 2px 12px rgba(0,0,0,.08)"><h1 style="color:#004647;margin-bottom:12px">' . $safeTitle . '</h1><p>این بخش در حال حاضر قابل نمایش نیست. جزئیات خطا در لاگ سیستم ثبت شد.</p><a href="dashboard.php" style="display:inline-block;margin-top:16px;color:#004647">بازگشت به داشبورد</a></div></body></html>';
+        echo '<!DOCTYPE html><html lang="' . h(current_lang()) . '" dir="' . (is_rtl() ? 'rtl' : 'ltr') . '"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>' . $safeTitle . '</title></head><body style="font-family:Tahoma,sans-serif;background:#f5f6fa;color:#343a40;direction:' . (is_rtl() ? 'rtl' : 'ltr') . ';padding:32px"><div style="max-width:720px;margin:0 auto;background:#fff;border-radius:10px;padding:24px;box-shadow:0 2px 12px rgba(0,0,0,.08)"><h1 style="color:#004647;margin-bottom:12px">' . $safeTitle . '</h1><p>این بخش در حال حاضر قابل نمایش نیست. جزئیات خطا در لاگ سیستم ثبت شد.</p><a href="dashboard.php" style="display:inline-block;margin-top:16px;color:#004647">بازگشت به داشبورد</a></div></body></html>';
     }
 }
 
@@ -153,6 +154,11 @@ function adminIndexExists(...$args): bool {
         safeAdminLog('adminIndexExists failed: ' . $e->getMessage());
         return false;
     }
+}
+
+function adminTableHasRows(string $table): bool {
+    if (!preg_match('/^[a-zA-Z0-9_]+$/', $table) || !adminTableExists($table)) return false;
+    return (bool)adminDb()->query('SELECT 1 FROM `' . $table . '` LIMIT 1')->fetchColumn();
 }
 
 function ensureTableColumns(string $table, array $columns): void {
@@ -496,6 +502,7 @@ function ensureAdminCanonicalTables(PDO $db, array $requestedTables = []): array
     // able to repair their own tables from database/schema.sql.
     $canonicalOrder = [
         'admins',
+        'admin_navigation_items',
         'admin_sessions',
         'activity_log',
         'users',
@@ -666,6 +673,12 @@ function ensureAdminSchema(): array {
     }
 
     if (adminTableExists('crm_customers')) {
+        $crmColumnStmt = $db->query("SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'crm_customers' AND COLUMN_NAME IN ('mobile','tags','customer_status')");
+        $crmColumnMeta = [];
+        foreach ($crmColumnStmt->fetchAll() as $columnMeta) $crmColumnMeta[$columnMeta['COLUMN_NAME']] = $columnMeta;
+        if (($crmColumnMeta['mobile']['IS_NULLABLE'] ?? 'NO') !== 'YES') $run("ALTER TABLE `crm_customers` MODIFY `mobile` varchar(20) DEFAULT NULL", 'اجازه ثبت CRM بدون موبایل');
+        if (!str_starts_with(strtolower((string)($crmColumnMeta['tags']['COLUMN_TYPE'] ?? '')), 'text')) $run("ALTER TABLE `crm_customers` MODIFY `tags` text DEFAULT NULL", 'افزایش ظرفیت برچسب‌های CRM');
+        if (!str_starts_with(strtolower((string)($crmColumnMeta['customer_status']['COLUMN_TYPE'] ?? '')), 'varchar')) $run("ALTER TABLE `crm_customers` MODIFY `customer_status` varchar(100) NOT NULL DEFAULT 'new_customer'", 'پویاسازی وضعیت مشتری CRM');
         if (!adminColumnExists('crm_customers', 'email')) {
             $run("ALTER TABLE `crm_customers` ADD COLUMN `email` varchar(150) DEFAULT NULL AFTER `mobile`", 'افزودن email به CRM');
         }
@@ -684,6 +697,9 @@ function ensureAdminSchema(): array {
         if (!adminIndexExists('crm_customers', 'idx_crm_attended')) {
             $run("ALTER TABLE `crm_customers` ADD INDEX `idx_crm_attended` (`attended_match_event`)", 'ایندکس حضور مسابقه CRM');
         }
+        if (!adminIndexExists('crm_customers', 'idx_crm_customer_status')) {
+            $run("ALTER TABLE `crm_customers` ADD INDEX `idx_crm_customer_status` (`customer_status`)", 'ایندکس وضعیت مشتری CRM');
+        }
     }
 
     $run("CREATE TABLE IF NOT EXISTS `acquisition_sources` (
@@ -698,7 +714,7 @@ function ensureAdminSchema(): array {
         KEY `idx_acquisition_active_order` (`active`, `sort_order`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table acquisition_sources');
 
-    $sources = ['Instagram','Telegram','Google','Balad','Friend Referral','Walk-in','Website','Advertisement','Other'];
+    $sources = adminTableHasRows('acquisition_sources') ? [] : ['Instagram','Telegram','Google','Balad','Friend Referral','Walk-in','Website','Advertisement','Other'];
     foreach ($sources as $i => $source) {
         try {
             $stmt = $db->prepare('INSERT INTO acquisition_sources (title, sort_order, active) VALUES (?, ?, 1) ON DUPLICATE KEY UPDATE title = title');
@@ -726,7 +742,7 @@ function ensureAdminSchema(): array {
         'icon_image' => 'varchar(255) DEFAULT NULL AFTER `icon`',
     ]);
 
-    $socials = [
+    $socials = adminTableHasRows('social_links') ? [] : [
         ['Instagram', '📷', 'https://instagram.com/keyrestaurant', 10],
         ['Telegram', '✈️', 'https://t.me/keyrestaurant', 20],
         ['WhatsApp', '💬', 'https://wa.me/989121234567', 30],
@@ -910,6 +926,34 @@ function ensureAdminSchema(): array {
         }
     }
 
+    $run("CREATE TABLE IF NOT EXISTS `crm_customer_statuses` (
+        `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        `title_fa` varchar(100) NOT NULL,
+        `title_en` varchar(100) NOT NULL,
+        `color` varchar(7) DEFAULT NULL,
+        `sort_order` int(11) NOT NULL DEFAULT 0,
+        `is_active` tinyint(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`id`),
+        UNIQUE KEY `uniq_crm_status_title_en` (`title_en`),
+        KEY `idx_crm_status_active_order` (`is_active`, `sort_order`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", 'ensure table crm_customer_statuses');
+
+    $defaultStatuses = adminTableHasRows('crm_customer_statuses') ? [] : [
+        ['مشتری جدید', 'new_customer', '#0d6efd', 10],
+        ['وفادار', 'loyal_customer', '#198754', 20],
+        ['VIP', 'vip', '#6f42c1', 30],
+        ['ناراضی', 'dissatisfied_customer', '#dc3545', 40],
+        ['ریسک ریزش', 'churn_risk', '#fd7e14', 50],
+    ];
+    foreach ($defaultStatuses as $status) {
+        try {
+            $stmt = $db->prepare('INSERT INTO crm_customer_statuses (title_fa, title_en, color, sort_order, is_active) VALUES (?, ?, ?, ?, 1) ON DUPLICATE KEY UPDATE title_en = title_en');
+            $stmt->execute($status);
+        } catch (Throwable $e) {
+            safeAdminLog('Default CRM customer status failed for ' . $status[1] . ': ' . $e->getMessage());
+        }
+    }
+
     $run("CREATE TABLE IF NOT EXISTS `traffic_logs` (
         `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
         `session_id` varchar(64) NOT NULL,
@@ -991,7 +1035,7 @@ function ensureAdminSchema(): array {
 
     ensureAdminAnalyticsSchema();
 
-    $settings = [
+    $settings = adminTableHasRows('settings') ? [] : [
         ['site_description_fa', 'تجربه‌ای لوکس از غذا و نوشیدنی', 'text', 'general', 1],
         ['logo_image', '', 'url', 'general', 1],
         ['seo_title_fa', 'KEY رستوران و کافه', 'text', 'seo', 1],
@@ -1082,10 +1126,10 @@ function adminModuleDefinitions(): array {
     return [
         'crm' => [
             'title' => 'CRM مشتریان', 'min_role' => 'manager', 'table' => 'crm_customers', 'unique' => 'mobile',
-            'search' => ['full_name','mobile','email','tags','acquisition_source'], 'filters' => ['acquisition_source','customer_status','attended_match_event'], 'date_column' => 'created_at',
+            'search' => ['full_name','mobile','email'], 'filters' => ['acquisition_source','customer_status'], 'date_column' => 'last_visit_date',
             'fields' => [
-                'full_name' => ['label'=>'نام کامل','type'=>'text','required'=>true],
-                'mobile' => ['label'=>'موبایل','type'=>'mobile','required'=>true],
+                'full_name' => ['label'=>'نام کامل','type'=>'text'],
+                'mobile' => ['label'=>'موبایل','type'=>'mobile'],
                 'email' => ['label'=>'ایمیل','type'=>'text'],
                 'birth_date' => ['label'=>'تولد','type'=>'date'],
                 'first_purchase_date' => ['label'=>'اولین خرید','type'=>'date'],
@@ -1097,7 +1141,7 @@ function adminModuleDefinitions(): array {
                 'surveys_completed_count' => ['label'=>'تعداد نظرسنجی','type'=>'number'],
                 'last_visit_date' => ['label'=>'آخرین مراجعه','type'=>'date'],
                 'tags' => ['label'=>'برچسب‌ها','type'=>'text'],
-                'customer_status' => ['label'=>'وضعیت مشتری','type'=>'select','options'=>['new_customer'=>'مشتری جدید','loyal_customer'=>'وفادار','vip'=>'VIP','dissatisfied_customer'=>'ناراضی','churn_risk'=>'ریسک ریزش']],
+                'customer_status' => ['label'=>'وضعیت مشتری','type'=>'select','options'=>function_exists('crmCustomerStatusOptions') ? crmCustomerStatusOptions(false) : []],
                 'points_balance' => ['label'=>'امتیازها','type'=>'number'],
                 'rewards_notes' => ['label'=>'یادداشت پاداش‌ها','type'=>'textarea'],
                 'follow_up_notes' => ['label'=>'یادداشت پیگیری اپراتور','type'=>'textarea'],
@@ -1197,7 +1241,7 @@ function adminModuleDefinition(string $key): ?array {
 }
 
 function adminModuleLabel(array $config, string $column): string {
-    return $config['fields'][$column]['label'] ?? [
+    $label = $config['fields'][$column]['label'] ?? [
         'id'=>'شناسه',
         'created_at'=>'ایجاد',
         'updated_at'=>'ویرایش',
@@ -1227,6 +1271,7 @@ function adminModuleLabel(array $config, string $column): string {
         'order_number'=>'شماره سفارش',
         'order_total'=>'مبلغ سفارش',
     ][$column] ?? $column;
+    return t((string)$label);
 }
 
 function adminModuleRequiredTables(array $config): array {
@@ -1844,20 +1889,20 @@ function adminModuleRows(array $config, int $perPage = 20): array {
 function adminModuleRenderField(string $name, array $meta, $value = null): void {
     $type = $meta['type'];
     if (in_array($type, ['date','datetime'], true) && $value) $value = formatJalaliDateTime($value, $type === 'datetime');
-    echo '<div class="form-group"><label>' . h($meta['label']) . (!empty($meta['required']) ? ' *' : '') . '</label>';
+    echo '<div class="form-group"><label>' . h(t((string)($meta['label'] ?? $name))) . (!empty($meta['required']) ? ' *' : '') . '</label>';
     $required = !empty($meta['required']) ? 'required' : '';
     if ($type === 'textarea' || $type === 'json') {
         echo '<textarea class="form-control" name="' . h($name) . '" ' . $required . '>' . h($value ?? $meta['default'] ?? '') . '</textarea>';
     } elseif ($type === 'select') {
         echo '<select class="form-control" name="' . h($name) . '" ' . $required . '>';
-        foreach (($meta['options'] ?? []) as $key => $label) echo '<option value="' . h($key) . '" ' . ((string)$value === (string)$key ? 'selected' : '') . '>' . h($label) . '</option>';
+        foreach (($meta['options'] ?? []) as $key => $label) echo '<option value="' . h($key) . '" ' . ((string)$value === (string)$key ? 'selected' : '') . '>' . h(t((string)$label)) . '</option>';
         echo '</select>';
     } elseif (in_array($type, ['category','match','survey_form','banner','menu_item'], true)) {
-        echo '<select class="form-control" name="' . h($name) . '" ' . $required . '><option value="">انتخاب کنید</option>';
-        foreach (adminOptionRows($type) as $option) echo '<option value="' . h($option['id']) . '" ' . ((string)$value === (string)$option['id'] ? 'selected' : '') . '>' . h($option['title']) . '</option>';
+        echo '<select class="form-control" name="' . h($name) . '" ' . $required . '><option value="">' . h(t('select')) . '</option>';
+        foreach (adminOptionRows($type) as $option) echo '<option value="' . h($option['id']) . '" ' . ((string)$value === (string)$option['id'] ? 'selected' : '') . '>' . h(t((string)$option['title'])) . '</option>';
         echo '</select>';
     } elseif ($type === 'checkbox') {
-        echo '<label><input type="checkbox" name="' . h($name) . '" value="1" ' . ($value ? 'checked' : '') . '> فعال</label>';
+        echo '<label><input type="checkbox" name="' . h($name) . '" value="1" ' . ($value ? 'checked' : '') . '> ' . h(t('active')) . '</label>';
     } elseif ($type === 'image') {
         echo '<input class="form-control" type="file" name="' . h($name) . '" accept="image/*">';
         if ($value) echo '<p><img src="' . h(adminModuleImageSrc($value, $meta['folder'] ?? 'admin')) . '" style="max-width:140px;border-radius:8px"></p>';
@@ -1882,8 +1927,9 @@ function adminModuleFormatValue(string $column, $value): string {
     }
     if (str_ends_with($column, '_date')) return formatJalaliDateTime($value, false);
     if (str_ends_with($column, '_at') || $column === 'submitted_at') return formatJalaliDateTime($value, true);
-    if ((string)$value === '1') return 'بله';
-    if ((string)$value === '0') return 'خیر';
+    if ((string)$value === '1') return t('yes');
+    if ((string)$value === '0') return t('no');
+    if (preg_match('/^[a-z][a-z0-9_-]*$/i', (string)$value)) return t((string)$value);
     return (string)$value;
 }
 

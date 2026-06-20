@@ -2,7 +2,7 @@
 require_once __DIR__ . '/lib/hr_evaluation_service.php';
 
 $currentAdmin = adminGuard('employee');
-$pageTitle = 'Assessment Results';
+$pageTitle = 'نتایج ارزیابی';
 $message = '';
 $error = '';
 
@@ -198,7 +198,7 @@ include __DIR__ . '/includes/header.php';
 <div class="card">
     <div class="card-header">
         <h2>نتایج آزمون ها و سنجش های سازمانی</h2>
-        <?php if (adminPermissionAllows($currentAdmin, 'employee_evaluation_settings', ['admin','super_admin'])): ?><a class="btn btn-sm btn-primary" href="evaluation-builder.php">Build</a><?php endif; ?>
+        <?php if (adminPermissionAllows($currentAdmin, 'employee_evaluation_settings', ['admin','super_admin'])): ?><a class="btn btn-sm btn-primary" href="evaluation-builder.php">ساخت</a><?php endif; ?>
     </div>
     <div class="card-body">
         <form method="get" class="admin-filter">

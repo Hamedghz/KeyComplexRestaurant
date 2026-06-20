@@ -41,6 +41,7 @@ if (file_exists($lockPath) || file_exists($configPath)) {
 
 $errors = [];
 $success = false;
+$installMode = '';
 $detectedBaseUrl = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -84,14 +85,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo = connectInstallerDatabase($dbHost, $dbName, $dbUser, $dbPass);
             $runner = new MigrationRunner($pdo, []);
 
+            $isFreshDatabase = !installerDatabaseHasData($pdo);
+            $installMode = $isFreshDatabase ? 'FRESH' : 'MIGRATION ONLY';
+            error_log('INSTALL MODE: ' . $installMode);
+            if (!$isFreshDatabase) error_log('SEED SKIPPED: production data exists');
+
             // 1. Execute main schema
-            $runner->executeSqlFile($schemaPath);
+            $runner->executeSqlFile($schemaPath, $isFreshDatabase);
 
             // 2. Execute all migration files in dependency order
             $migrations = collectMigrationFiles($migrationsDir);
             foreach ($migrations as $migrationFile) {
                 try {
-                    $runner->executeSqlFile($migrationFile);
+                    $runner->executeSqlFile($migrationFile, $isFreshDatabase);
                 } catch (Throwable $e) {
                     error_log('Migration ' . basename($migrationFile) . ' warning: ' . $e->getMessage());
                     // Continue on non-critical migration errors (tables may already exist)
@@ -99,21 +105,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             // 3. Create first administrator
-            $adminStmt = $pdo->prepare(
-                'INSERT INTO `admins` (`username`, `email`, `password`, `full_name`, `role`, `is_active`)
-                 VALUES (:username, :email, :password, :full_name, :role, 1)
-                 ON DUPLICATE KEY UPDATE `email` = VALUES(`email`), `password` = VALUES(`password`), `full_name` = VALUES(`full_name`), `role` = VALUES(`role`), `is_active` = 1'
-            );
-            try {
-                $adminStmt->execute([
-                    'username' => $adminUsername,
-                    'email' => $adminEmail,
-                    'password' => password_hash($adminPassword, PASSWORD_DEFAULT),
-                    'full_name' => $adminName !== '' ? $adminName : $adminUsername,
-                    'role' => 'super_admin',
-                ]);
-            } finally {
-                $adminStmt->closeCursor();
+            if ($isFreshDatabase) {
+                $adminStmt = $pdo->prepare(
+                    'INSERT INTO `admins` (`username`, `email`, `password`, `full_name`, `role`, `is_active`)
+                     VALUES (:username, :email, :password, :full_name, :role, 1)'
+                );
+                try {
+                    $adminStmt->execute([
+                        'username' => $adminUsername,
+                        'email' => $adminEmail,
+                        'password' => password_hash($adminPassword, PASSWORD_DEFAULT),
+                        'full_name' => $adminName !== '' ? $adminName : $adminUsername,
+                        'role' => 'super_admin',
+                    ]);
+                } finally {
+                    $adminStmt->closeCursor();
+                }
             }
 
             // 4. Create upload directories
@@ -201,6 +208,22 @@ function connectInstallerDatabase(string $host, string $name, string $user, stri
     return $pdo;
 }
 
+function tableHasRows(PDO $pdo, string $table): bool {
+    if (!preg_match('/^[a-zA-Z0-9_]+$/', $table)) throw new InvalidArgumentException('Invalid table name.');
+    $exists = $pdo->prepare('SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table AND TABLE_TYPE = \'BASE TABLE\' LIMIT 1');
+    $exists->execute(['table' => $table]);
+    if (!$exists->fetchColumn()) return false;
+    return (bool)$pdo->query('SELECT 1 FROM `' . $table . '` LIMIT 1')->fetchColumn();
+}
+
+function installerDatabaseHasData(PDO $pdo): bool {
+    $stmt = $pdo->query("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE'");
+    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $table) {
+        if (tableHasRows($pdo, (string)$table)) return true;
+    }
+    return false;
+}
+
 function writeInstallerConfig(string $path, array $config): void {
     $configContent = "<?php\n";
     $configContent .= "/**\n * Generated application configuration.\n * Do not expose or commit production credentials.\n */\n";
@@ -237,6 +260,7 @@ function installValue(string $name, string $default = ''): string {
     <?php if ($success): ?>
         <div class="alert success">
             <strong>Installation complete.</strong> Remove install.php or keep it protected by installed.lock, then sign in to /admin with your administrator account.
+            <br><strong>INSTALL MODE: <?php echo htmlspecialchars($installMode, ENT_QUOTES, 'UTF-8'); ?></strong>
         </div>
     <?php else: ?>
         <?php if ($errors): ?>

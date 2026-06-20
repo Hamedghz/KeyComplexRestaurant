@@ -41,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 ?>
 <!DOCTYPE html>
-<html lang="fa-IR" dir="rtl">
+<html lang="<?php echo htmlspecialchars(current_lang(), ENT_QUOTES, 'UTF-8'); ?>" dir="<?php echo is_rtl() ? 'rtl' : 'ltr'; ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -61,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             display: flex;
             align-items: center;
             justify-content: center;
-            direction: rtl;
+            direction: <?php echo is_rtl() ? 'rtl' : 'ltr'; ?>;
         }
         
         .login-container {
@@ -110,7 +110,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border-radius: 10px;
             font-size: 14px;
             transition: all 0.3s;
-            direction: rtl;
+            direction: <?php echo is_rtl() ? 'rtl' : 'ltr'; ?>;
         }
         
         .form-group input:focus {

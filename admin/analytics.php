@@ -3,7 +3,7 @@ require_once __DIR__ . '/lib/admin_schema.php';
 $currentAdmin = adminGuard('manager');
 ensureAdminSchema();
 $db = adminDb();
-$pageTitle = 'Visitor Logs';
+$pageTitle = 'گزارش بازدیدکنندگان';
 $error = '';
 $emptyState = 'هنوز داده‌ای ثبت نشده است. صفحه عمومی سایت را باز کنید تا اولین بازدید ثبت شود.';
 
@@ -71,7 +71,7 @@ if ($export) {
 $pages = max(1, (int)ceil($total / $perPage));
 include __DIR__ . '/includes/header.php';
 ?>
-<div class="card"><div class="card-header"><h2>Visitor Logs</h2><a class="btn btn-primary" href="?<?php echo h(http_build_query(array_merge($_GET, ['export'=>'csv', 'page'=>null]))); ?>">Export CSV</a></div><div class="card-body">
+<div class="card"><div class="card-header"><h2>گزارش بازدیدکنندگان</h2><a class="btn btn-primary" href="?<?php echo h(http_build_query(array_merge($_GET, ['export'=>'csv', 'page'=>null]))); ?>">خروجی CSV</a></div><div class="card-body">
 <?php if ($error): ?><div class="alert" style="background:#f8d7da;color:#721c24"><?php echo h($error); ?></div><?php endif; ?>
 <form method="get" class="admin-filter">
   <input class="form-control" name="q" placeholder="Search" value="<?php echo h($q); ?>">
@@ -79,7 +79,7 @@ include __DIR__ . '/includes/header.php';
   <input class="form-control" type="date" name="date_to" value="<?php echo h($dateTo); ?>">
   <input class="form-control" name="source_type" placeholder="Source type" value="<?php echo h($sourceType); ?>">
   <input class="form-control" name="device_type" placeholder="Device" value="<?php echo h($deviceType); ?>">
-  <button class="btn btn-primary">Filter</button>
+  <button class="btn btn-primary">فیلتر</button>
 </form>
 <div class="table-responsive"><table class="table"><thead><tr><th>Time</th><th>Session</th><th>Page</th><th>Referrer / Source</th><th>Event</th><th>Target</th><th>Device</th><th>Browser</th><th>OS</th></tr></thead><tbody>
 <?php if (!$rows): ?><tr><td colspan="9" class="text-muted"><?php echo h($emptyState); ?></td></tr><?php endif; ?>

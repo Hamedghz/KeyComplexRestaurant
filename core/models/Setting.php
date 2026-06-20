@@ -8,6 +8,12 @@ require_once __DIR__ . '/Model.php';
 class Setting extends Model {
     protected $table = 'settings';
     private static $cache = [];
+
+    public static function isCriticalSystemSetting(string $key): bool {
+        return in_array($key, ['site_name_fa', 'site_description_fa', 'logo_image', 'lotus_logo_image'], true)
+            || str_starts_with($key, 'hero_')
+            || str_starts_with($key, 'logo_');
+    }
     
     /**
      * Get setting value by key
@@ -91,7 +97,7 @@ class Setting extends Model {
     /**
      * Update multiple settings
      */
-    public function updateMultiple($settings) {
+    public function updateMultiple($settings, bool $forceOverwrite = false) {
         try {
             $this->beginTransaction();
             
@@ -103,6 +109,15 @@ class Setting extends Model {
                 
                 if ($result) {
                     $type = $result['setting_type'];
+                    $current = $this->get($key, null);
+                    if (self::isCriticalSystemSetting((string)$key) && !$forceOverwrite) {
+                        if ($value === null || $value === '' || $value === []) {
+                            continue;
+                        }
+                        if (is_array($current) && is_array($value)) {
+                            $value = array_replace_recursive($current, $value);
+                        }
+                    }
                     $this->set($key, $value, $type);
                 }
             }
@@ -114,6 +129,12 @@ class Setting extends Model {
             $this->rollback();
             return false;
         }
+    }
+
+    /** Bulk-import entry point. Critical values use merge/preserve semantics by default. */
+    public function importMultiple(array $settings, array $options = []): bool {
+        $forceOverwrite = filter_var($options['force_overwrite'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        return $this->updateMultiple($settings, $forceOverwrite);
     }
     
     /**

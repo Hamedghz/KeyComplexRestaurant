@@ -98,7 +98,7 @@ include __DIR__ . '/includes/header.php';
 </div>
 
 <div class="card">
-    <div class="card-header"><h2>فیلتر دوره</h2><a class="btn btn-primary" href="employee-evaluations.php">Evaluate</a></div>
+    <div class="card-header"><h2>فیلتر دوره</h2><a class="btn btn-primary" href="employee-evaluations.php">ارزیابی</a></div>
     <div class="card-body">
         <form method="get" class="admin-filter">
             <select class="form-control" name="period_id"><?php foreach ($periods as $period): ?><option value="<?php echo h($period['id']); ?>" <?php echo (int)$period['id'] === $periodId ? 'selected' : ''; ?>><?php echo h($period['title'] . ' - ' . ($period['period_key'] ?: $period['status'])); ?></option><?php endforeach; ?></select>

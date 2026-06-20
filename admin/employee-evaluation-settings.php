@@ -5,7 +5,7 @@ if (!defined('HR_EVALUATION_BUILD_PAGE')) {
     redirectTo('evaluation-builder.php' . ($query !== '' ? '?' . $query : ''));
 }
 $currentAdmin = adminGuard('admin');
-$pageTitle = 'Build Evaluation';
+$pageTitle = 'ساخت ارزیابی';
 $message = '';
 $error = '';
 
@@ -315,10 +315,10 @@ include __DIR__ . '/includes/header.php';
 
 <div class="card">
     <div class="card-header">
-        <h2>Build / Evaluate / View</h2>
+        <h2>ساخت، ارزیابی و مشاهده</h2>
         <div>
-            <a class="btn btn-sm btn-primary" href="employee-evaluations.php">Evaluate</a>
-            <a class="btn btn-sm" href="employee-performance.php">View</a>
+            <a class="btn btn-sm btn-primary" href="employee-evaluations.php">ارزیابی</a>
+            <a class="btn btn-sm" href="employee-performance.php">مشاهده</a>
         </div>
     </div>
     <div class="card-body text-muted">

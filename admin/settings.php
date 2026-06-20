@@ -10,37 +10,37 @@ $message = '';
 $error = '';
 
 $catalog = [
-    'general' => ['title' => 'General', 'fields' => [
+    'general' => ['title' => t('general'), 'fields' => [
         'site_name_fa' => ['label' => 'عنوان سایت', 'type' => 'text'],
         'site_description_fa' => ['label' => 'توضیح سایت', 'type' => 'textarea'],
         'default_language' => ['label' => 'زبان پیش‌فرض', 'type' => 'text'],
         'jalali_calendar_enabled' => ['label' => 'تقویم جلالی فعال', 'type' => 'boolean'],
     ]],
-    'branding' => ['title' => 'Branding', 'fields' => [
+    'branding' => ['title' => t('branding'), 'fields' => [
         'logo_image' => ['label' => 'لوگو', 'type' => 'image'],
         'primary_color' => ['label' => 'رنگ اصلی', 'type' => 'text'],
         'accent_color' => ['label' => 'رنگ مکمل', 'type' => 'text'],
         'lotus_logo_image' => ['label' => 'تصویر لوگو', 'type' => 'image'],
         'lotus_title_fa' => ['label' => 'عنوان', 'type' => 'text'],
     ]],
-    'social_networks' => ['title' => 'Social Networks', 'fields' => []],
-    'seo' => ['title' => 'SEO', 'fields' => [
+    'social_networks' => ['title' => t('social_networks'), 'fields' => []],
+    'seo' => ['title' => t('seo'), 'fields' => [
         'seo_title_fa' => ['label' => 'عنوان SEO', 'type' => 'text'],
         'seo_description_fa' => ['label' => 'توضیح SEO', 'type' => 'textarea'],
     ]],
-    'contact' => ['title' => 'Contact', 'fields' => [
+    'contact' => ['title' => t('contact'), 'fields' => [
         'phone_number' => ['label' => 'تلفن', 'type' => 'text'],
         'email' => ['label' => 'ایمیل', 'type' => 'email'],
         'address_fa' => ['label' => 'آدرس فارسی', 'type' => 'textarea'],
         'address_en' => ['label' => 'آدرس انگلیسی', 'type' => 'textarea'],
         'opening_hours' => ['label' => 'ساعت کاری JSON', 'type' => 'textarea'],
     ]],
-    'map' => ['title' => 'Map', 'fields' => [
+    'map' => ['title' => t('map'), 'fields' => [
         'balad_map_url' => ['label' => 'لینک نقشه بلد', 'type' => 'url'],
-        'location_lat' => ['label' => 'Latitude', 'type' => 'text'],
-        'location_lng' => ['label' => 'Longitude', 'type' => 'text'],
+        'location_lat' => ['label' => 'عرض جغرافیایی', 'type' => 'text'],
+        'location_lng' => ['label' => 'طول جغرافیایی', 'type' => 'text'],
     ]],
-    'advanced' => ['title' => 'Advanced', 'fields' => [
+    'advanced' => ['title' => t('advanced'), 'fields' => [
         'footer_quick_links_title_fa' => ['label' => 'عنوان لینک سریع فوتر', 'type' => 'text'],
         'footer_contact_title_fa' => ['label' => 'عنوان تماس فوتر', 'type' => 'text'],
         'footer_copyright_fa' => ['label' => 'متن کپی‌رایت', 'type' => 'text'],
@@ -50,6 +50,8 @@ $catalog = [
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         requireValidCsrf();
+        $forceOverwrite = (string)($currentAdmin['role'] ?? '') === 'super_admin'
+            && isset($_POST['force_overwrite']) && $_POST['force_overwrite'] === 'true';
         foreach ($catalog as $category => $group) {
             foreach ($group['fields'] as $key => $meta) {
                 $value = $settingModel->get($key, '');
@@ -59,6 +61,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $value = isset($_POST[$key]) ? '1' : '0';
                 } else {
                     $value = trim((string)($_POST[$key] ?? ''));
+                }
+                if (Setting::isCriticalSystemSetting($key) && !$forceOverwrite && ($value === '' || $value === null)) {
+                    continue;
                 }
                 $type = in_array($meta['type'], ['url','email'], true) ? $meta['type'] : ($meta['type'] === 'boolean' ? 'boolean' : ($key === 'opening_hours' ? 'json' : 'text'));
                 $stmt = $db->prepare('INSERT INTO settings (setting_key, setting_value, setting_type, category, is_public) VALUES (:k,:v,:t,:c,1) ON DUPLICATE KEY UPDATE setting_value=:update_v, setting_type=:update_t, category=:update_c');
@@ -86,7 +91,7 @@ include __DIR__ . '/includes/header.php';
                 <?php endif; ?>
                 <?php foreach ($group['fields'] as $key => $meta): $value = $settingModel->get($key, ''); ?>
                     <div class="form-group">
-                        <label><?php echo h($meta['label']); ?> <small class="text-muted">(<?php echo h($key); ?>)</small></label>
+                        <label><?php echo h($meta['label']); ?></label>
                         <?php if ($meta['type'] === 'textarea'): ?>
                             <textarea class="form-control" name="<?php echo h($key); ?>"><?php echo h(is_array($value) ? json_encode($value, JSON_UNESCAPED_UNICODE) : $value); ?></textarea>
                         <?php elseif ($meta['type'] === 'boolean'): ?>
@@ -102,6 +107,10 @@ include __DIR__ . '/includes/header.php';
             </div>
         </div>
     <?php endforeach; ?>
+    <?php if ((string)($currentAdmin['role'] ?? '') === 'super_admin'): ?><div class="card"><div class="card-header"><h2><?php echo h(t('advanced')); ?></h2></div><div class="card-body">
+        <label><input type="checkbox" name="force_overwrite" value="true"> اجازه پاک‌کردن تنظیمات حیاتی سایت، هیرو و لوگو</label>
+        <p class="text-muted">در حالت عادی مقدار خالی، تنظیمات حیاتی موجود را تغییر نمی‌دهد.</p>
+    </div></div><?php endif; ?>
     <button class="btn btn-success" type="submit">ذخیره تنظیمات</button>
 </form>
 <?php include __DIR__ . '/includes/footer.php'; ?>

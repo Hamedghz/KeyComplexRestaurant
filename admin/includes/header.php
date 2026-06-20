@@ -1,4 +1,8 @@
 <?php
+// Some entry points (notably dashboard.php) include the shared header without
+// loading admin_schema.php first. The navigation loader needs adminDb(),
+// adminTableExists() and adminTableHasRows(), so make the header self-contained.
+require_once __DIR__ . '/../lib/admin_schema.php';
 $adminCurrentPage = basename(parse_url($_SERVER['REQUEST_URI'] ?? ($_SERVER['PHP_SELF'] ?? ''), PHP_URL_PATH) ?: ($_SERVER['PHP_SELF'] ?? ''));
 
 if (!function_exists('adminMenuCanAccessRole')) {
@@ -24,103 +28,75 @@ if (!function_exists('adminMenuIsActive')) {
     }
 }
 
-$adminMenuGroups = [
-    [
-        'title' => 'داشبورد',
-        'items' => [
-            ['url' => 'dashboard.php', 'icon' => '📊', 'title' => 'داشبورد', 'role' => 'employee'],
-            ['url' => 'employee-dashboard.php', 'icon' => '🧑‍💼', 'title' => 'داشبورد کارمند', 'role' => 'employee'],
-        ],
-    ],
-    [
-        'title' => 'مشتریان و CRM',
-        'items' => [
-            ['url' => 'crm.php', 'icon' => '👤', 'title' => 'CRM', 'role' => 'manager'],
-            ['url' => 'crm-reports.php', 'icon' => '📣', 'title' => 'گزارش منابع جذب', 'role' => 'manager'],
-            ['url' => 'acquisition-sources.php', 'icon' => '🧲', 'title' => 'منابع جذب', 'role' => 'manager'],
-            ['url' => 'orders.php', 'icon' => '📋', 'title' => 'سفارشات', 'role' => 'employee'],
-        ],
-    ],
-    [
-        'title' => 'مسابقات و پیش‌بینی',
-        'items' => [
-            ['url' => 'matches.php', 'icon' => '⚽', 'title' => 'مسابقات', 'role' => 'manager'],
-            ['url' => 'predictions.php', 'icon' => '🏆', 'title' => 'پیش‌بینی', 'role' => 'manager'],
-        ],
-    ],
-    [
-        'title' => 'سایت و محتوا',
-        'items' => [
-            ['url' => 'banners.php', 'icon' => '🖼️', 'title' => 'بنر اصلی', 'role' => 'manager'],
-            ['url' => 'social-links.php', 'icon' => '🔗', 'title' => 'شبکه‌های اجتماعی', 'role' => 'admin'],
-            ['url' => 'key-story.php', 'icon' => '📖', 'title' => 'مدیریت داستان KEY', 'role' => 'manager'],
-        ],
-    ],
-    [
-        'title' => 'منو و محصولات',
-        'items' => [
-            ['url' => 'categories.php', 'icon' => '📁', 'title' => 'فیلترهای منو', 'role' => 'manager'],
-            ['url' => 'menu-items.php', 'icon' => '🍽️', 'title' => 'آیتم‌های منو', 'role' => 'manager'],
-        ],
-    ],
-    [
-        'title' => 'نظرسنجی و ارزیابی',
-        'items' => [
-            ['url' => 'surveys.php', 'icon' => '📝', 'title' => 'نظرسنجی‌ها', 'role' => 'admin'],
-            ['url' => 'survey-responses.php', 'icon' => '📨', 'title' => 'پاسخ‌های نظرسنجی', 'role' => 'manager'],
-            ['url' => 'feedback.php', 'icon' => '⭐', 'title' => 'نظرات', 'role' => 'manager'],
-            ['url' => 'evaluation-builder.php', 'icon' => '🧭', 'title' => 'Build Evaluation', 'role' => 'admin', 'active' => ['evaluation-builder.php', 'employee-evaluation-settings.php']],
-            ['url' => 'employee-evaluations.php', 'icon' => '📝', 'title' => 'Evaluate', 'role' => 'employee'],
-            ['url' => 'employee-tests.php', 'icon' => '🧠', 'title' => 'آزمون‌های من', 'role' => 'employee'],
-            ['url' => 'employee-performance.php', 'icon' => '📈', 'title' => 'View', 'role' => 'manager'],
-            ['url' => 'employee-assessments.php', 'icon' => '🧪', 'title' => 'Assessment Results', 'role' => 'manager'],
-        ],
-    ],
-    [
-        'title' => 'استخر و لیدها',
-        'items' => [
-            ['url' => 'pool-leads.php', 'icon' => '🏊', 'title' => 'لیدهای استخر', 'role' => 'manager'],
-        ],
-    ],
-    [
-        'title' => 'آنالیتیکس و گزارش‌ها',
-        'items' => [
-            ['url' => 'analytics.php', 'icon' => '📈', 'title' => 'Visitor Logs', 'role' => 'manager'],
-            ['url' => 'analytics-traffic-sources.php', 'icon' => '🧭', 'title' => 'Traffic Sources', 'role' => 'manager'],
-            ['url' => 'visitor-analytics.php', 'icon' => '🧩', 'title' => 'Visitor Path Analytics', 'role' => 'manager'],
-            ['url' => 'analytics-live.php', 'icon' => '🟢', 'title' => 'Live Visitors', 'role' => 'manager'],
-            ['url' => 'analytics-geographic.php', 'icon' => '🌍', 'title' => 'Geographic Analytics', 'role' => 'manager'],
-            ['url' => 'analytics-device.php', 'icon' => '📱', 'title' => 'Device Analytics', 'role' => 'manager'],
-            ['url' => 'analytics-export.php', 'icon' => '📤', 'title' => 'Export Center', 'role' => 'manager'],
-        ],
-    ],
-    [
-        'title' => 'فایل‌ها و مستندات',
-        'items' => [
-            ['url' => 'media.php', 'icon' => '🗂️', 'title' => 'رسانه‌ها', 'role' => 'manager'],
-        ],
-    ],
-    [
-        'title' => 'کاربران و دسترسی',
-        'items' => [
-            ['url' => 'users.php', 'icon' => '👥', 'title' => 'کاربران', 'role' => 'admin'],
-        ],
-    ],
-    [
-        'title' => 'تنظیمات و سیستم',
-        'items' => [
-            ['url' => 'settings.php', 'icon' => '⚙️', 'title' => 'تنظیمات', 'role' => 'admin'],
-            ['url' => 'system-update.php', 'icon' => '⬆️', 'title' => 'بروزرسانی سیستم', 'role' => 'super_admin'],
-        ],
-    ],
-];
+if (!function_exists('adminMenuGroupsFromRows')) {
+    function adminMenuGroupsFromRows(array $navigationRows): array {
+        $groups = [];
+        foreach ($navigationRows as $navigationRow) {
+            $groupKey = (string)$navigationRow['group_key'];
+            if (!isset($groups[$groupKey])) $groups[$groupKey] = ['title'=>t($groupKey), 'items'=>[]];
+            $activePages = is_array($navigationRow['active_pages'] ?? null)
+                ? $navigationRow['active_pages']
+                : json_decode((string)($navigationRow['active_pages'] ?? ''), true);
+            $groups[$groupKey]['items'][] = [
+                'url'=>(string)$navigationRow['url'],
+                'icon'=>(string)($navigationRow['icon'] ?? ''),
+                'title'=>t((string)$navigationRow['item_key']),
+                'role'=>(string)$navigationRow['min_role'],
+                'active'=>is_array($activePages) ? $activePages : [(string)$navigationRow['url']],
+            ];
+        }
+        return array_values($groups);
+    }
+}
+
+$adminMenuGroups = [];
+try {
+    // Navigation is structural application metadata. A migration-only install
+    // intentionally skips all seed statements, so initialize this one table
+    // lazily only when it is missing or completely empty. Existing/customized
+    // navigation rows are never merged with or overwritten by defaults.
+    if (!function_exists('adminTableExists') || !adminTableExists('admin_navigation_items') || !adminTableHasRows('admin_navigation_items')) {
+        $navigationMigration = dirname(__DIR__, 2) . '/database/migrations/2026_06_18_admin_navigation.sql';
+        if (is_readable($navigationMigration)) {
+            require_once dirname(__DIR__, 2) . '/core/MigrationRunner.php';
+            (new MigrationRunner(adminDb(), []))->executeSqlFile($navigationMigration, true);
+            safeAdminLog('Admin navigation initialized from migration because its table was empty.');
+        }
+    }
+    if (function_exists('adminTableExists') && adminTableExists('admin_navigation_items')) {
+        $navigationRows = adminDb()->query('SELECT group_key, item_key, url, icon, min_role, active_pages FROM admin_navigation_items WHERE is_active = 1 ORDER BY group_order ASC, sort_order ASC, id ASC')->fetchAll();
+        $adminMenuGroups = adminMenuGroupsFromRows($navigationRows);
+    }
+} catch (Throwable $e) {
+    error_log('Admin navigation load failed: ' . $e->getMessage());
+}
+
+// Last-resort read-only fallback: derive the same rows from the canonical SQL
+// migration when the database user cannot create/read the navigation table.
+// This prevents an unusable empty sidebar without restoring a second PHP menu.
+if (!$adminMenuGroups) {
+    $navigationMigration = $navigationMigration ?? dirname(__DIR__, 2) . '/database/migrations/2026_06_18_admin_navigation.sql';
+    $navigationSql = is_readable($navigationMigration) ? file_get_contents($navigationMigration) : false;
+    if (is_string($navigationSql)) {
+        preg_match_all("/\('([^']*)',\s*(\d+),\s*'([^']*)',\s*'([^']*)',\s*'([^']*)',\s*'([^']*)',\s*(\d+),\s*(NULL|'([^']*)')\)/u", $navigationSql, $matches, PREG_SET_ORDER);
+        $fallbackRows = [];
+        foreach ($matches as $match) {
+            $fallbackRows[] = [
+                'group_key'=>$match[1], 'item_key'=>$match[3], 'url'=>$match[4],
+                'icon'=>$match[5], 'min_role'=>$match[6],
+                'active_pages'=>strtoupper($match[8]) === 'NULL' ? null : ($match[9] ?? null),
+            ];
+        }
+        $adminMenuGroups = adminMenuGroupsFromRows($fallbackRows);
+    }
+}
 ?>
 <!DOCTYPE html>
-<html lang="fa-IR" dir="rtl">
+<html lang="<?php echo h(current_lang()); ?>" dir="<?php echo is_rtl() ? 'rtl' : 'ltr'; ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo $pageTitle ?? 'پنل مدیریت'; ?> - KEY Admin</title>
+    <title><?php echo h($pageTitle ?? t('admin_panel')); ?> - KEY</title>
     <?php echo localFontPreloadLinks(); ?>
     <style>
         @font-face { font-family: Vazirmatn; src: url('../assets/fonts/Vazirmatn-Regular.woff2') format('woff2'); font-display: swap; }
@@ -146,7 +122,7 @@ $adminMenuGroups = [
         body {
             font-family: Vazirmatn, Tahoma, sans-serif;
             background: #f5f6fa;
-            direction: rtl;
+            direction: <?php echo is_rtl() ? 'rtl' : 'ltr'; ?>;
         }
         
         /* Sidebar */
@@ -626,7 +602,7 @@ $adminMenuGroups = [
             <p>پنل مدیریت</p>
         </div>
         
-        <nav class="sidebar-menu" aria-label="Admin navigation">
+        <nav class="sidebar-menu" aria-label="<?php echo h(t('admin_panel')); ?>">
             <?php foreach ($adminMenuGroups as $menuGroup): ?>
                 <?php
                 $visibleItems = array_values(array_filter($menuGroup['items'], function ($item) use ($currentAdmin) {
@@ -662,21 +638,21 @@ $adminMenuGroups = [
             <div class="admin-topbar-brand">
                 <div class="admin-topbar-logo" aria-label="KEY logo">K</div>
                 <div class="admin-topbar-title">
-                    <strong>KEY Administrator</strong>
-                    <small><?php echo htmlspecialchars($pageTitle ?? 'Admin Panel', ENT_QUOTES, 'UTF-8'); ?></small>
+                    <strong>مدیریت KEY</strong>
+                    <small><?php echo h($pageTitle ?? t('admin_panel')); ?></small>
                 </div>
             </div>
             <div class="admin-topbar-user">
                 <div>
                     <strong><?php echo htmlspecialchars($currentAdmin['username'] ?? $currentAdmin['full_name'] ?? 'admin', ENT_QUOTES, 'UTF-8'); ?></strong>
-                    <small><?php echo htmlspecialchars($currentAdmin['role'] ?? 'super_admin', ENT_QUOTES, 'UTF-8'); ?></small>
+                    <small><?php echo h(t((string)($currentAdmin['role'] ?? 'super_admin'))); ?></small>
                 </div>
-                <a class="admin-profile-menu" href="users.php?action=edit&id=<?php echo urlencode((string)($currentAdmin['id'] ?? '')); ?>">Profile menu</a>
-                <a class="admin-logout-inline" href="logout.php">Logout</a>
+                <a class="admin-profile-menu" href="users.php?action=edit&id=<?php echo urlencode((string)($currentAdmin['id'] ?? '')); ?>"><?php echo h(t('profile_menu')); ?></a>
+                <a class="admin-logout-inline" href="logout.php"><?php echo h(t('logout')); ?></a>
             </div>
         </header>
         <div class="page-header">
-            <h1><?php echo $pageTitle ?? 'پنل مدیریت'; ?></h1>
+            <h1><?php echo h($pageTitle ?? t('admin_panel')); ?></h1>
             <div class="breadcrumb">
                 KEY Restaurant & Coffeehouse
             </div>

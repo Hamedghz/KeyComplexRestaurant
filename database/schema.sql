@@ -466,6 +466,57 @@ CREATE TABLE IF NOT EXISTS `dynamic_forms` (
   CONSTRAINT `fk_forms_admin` FOREIGN KEY (`created_by`) REFERENCES `admins` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `admin_navigation_items` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `group_key` varchar(100) NOT NULL,
+  `group_order` int(11) NOT NULL DEFAULT 0,
+  `item_key` varchar(100) NOT NULL,
+  `url` varchar(190) NOT NULL,
+  `icon` varchar(20) DEFAULT NULL,
+  `min_role` enum('employee','manager','admin','super_admin') NOT NULL DEFAULT 'employee',
+  `sort_order` int(11) NOT NULL DEFAULT 0,
+  `active_pages` JSON DEFAULT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_admin_navigation_item_key` (`item_key`),
+  KEY `idx_admin_navigation_order` (`is_active`, `group_order`, `sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO `admin_navigation_items` (`group_key`,`group_order`,`item_key`,`url`,`icon`,`min_role`,`sort_order`,`active_pages`) VALUES
+('dashboard',10,'dashboard','dashboard.php','📊','employee',10,NULL),
+('dashboard',10,'employee_dashboard','employee-dashboard.php','🧑‍💼','employee',20,NULL),
+('customers_crm',20,'crm','crm.php','👤','manager',10,NULL),
+('customers_crm',20,'crm_reports','crm-reports.php','📣','manager',20,NULL),
+('customers_crm',20,'acquisition_sources','acquisition-sources.php','🧲','manager',30,NULL),
+('customers_crm',20,'orders','orders.php','📋','employee',40,NULL),
+('matches_predictions',30,'matches','matches.php','⚽','manager',10,NULL),
+('matches_predictions',30,'predictions','predictions.php','🏆','manager',20,NULL),
+('site_content',40,'banners','banners.php','🖼️','manager',10,NULL),
+('site_content',40,'social_links','social-links.php','🔗','admin',20,NULL),
+('site_content',40,'key_story','key-story.php','📖','manager',30,NULL),
+('menu_products',50,'categories','categories.php','📁','manager',10,NULL),
+('menu_products',50,'menu_items','menu-items.php','🍽️','manager',20,NULL),
+('surveys_evaluation',60,'surveys','surveys.php','📝','admin',10,NULL),
+('surveys_evaluation',60,'survey_responses','survey-responses.php','📨','manager',20,NULL),
+('surveys_evaluation',60,'feedback','feedback.php','⭐','manager',30,NULL),
+('surveys_evaluation',60,'evaluation_builder','evaluation-builder.php','🧭','admin',40,'["evaluation-builder.php","employee-evaluation-settings.php"]'),
+('surveys_evaluation',60,'employee_evaluations','employee-evaluations.php','📝','employee',50,NULL),
+('surveys_evaluation',60,'employee_tests','employee-tests.php','🧠','employee',60,NULL),
+('surveys_evaluation',60,'employee_performance','employee-performance.php','📈','manager',70,NULL),
+('surveys_evaluation',60,'employee_assessments','employee-assessments.php','🧪','manager',80,NULL),
+('pool_leads_group',70,'pool_leads','pool-leads.php','🏊','manager',10,NULL),
+('analytics_reports',80,'analytics','analytics.php','📈','manager',10,NULL),
+('analytics_reports',80,'analytics_traffic_sources','analytics-traffic-sources.php','🧭','manager',20,NULL),
+('analytics_reports',80,'visitor_analytics','visitor-analytics.php','🧩','manager',30,NULL),
+('analytics_reports',80,'analytics_live','analytics-live.php','🟢','manager',40,NULL),
+('analytics_reports',80,'analytics_geographic','analytics-geographic.php','🌍','manager',50,NULL),
+('analytics_reports',80,'analytics_device','analytics-device.php','📱','manager',60,NULL),
+('analytics_reports',80,'analytics_export','analytics-export.php','📤','manager',70,NULL),
+('files_documents',90,'media','media.php','🗂️','manager',10,NULL),
+('users_access',100,'users','users.php','👥','admin',10,NULL),
+('settings_system',110,'settings','settings.php','⚙️','admin',10,NULL),
+('settings_system',110,'system_update','system-update.php','⬆️','super_admin',20,NULL);
+
 -- ============================================
 -- SURVEY RESPONSES TABLE
 -- ============================================
@@ -594,7 +645,7 @@ CREATE TABLE IF NOT EXISTS `crm_customers` (
   `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
   `user_id` int(11) UNSIGNED DEFAULT NULL,
   `full_name` varchar(150) NOT NULL,
-  `mobile` varchar(20) NOT NULL,
+  `mobile` varchar(20) DEFAULT NULL,
   `email` varchar(150) DEFAULT NULL,
   `birth_date` date DEFAULT NULL,
   `first_purchase_date` date DEFAULT NULL,
@@ -605,9 +656,9 @@ CREATE TABLE IF NOT EXISTS `crm_customers` (
   `notes` text DEFAULT NULL,
   `surveys_completed_count` int(11) NOT NULL DEFAULT 0,
   `last_visit_date` date DEFAULT NULL,
-  `tags` varchar(255) DEFAULT NULL,
+  `tags` text DEFAULT NULL,
   `attended_match_event` tinyint(1) NOT NULL DEFAULT 0,
-  `customer_status` enum('new_customer','loyal_customer','vip','dissatisfied_customer','churn_risk') NOT NULL DEFAULT 'new_customer',
+  `customer_status` varchar(100) NOT NULL DEFAULT 'new_customer',
   `points_balance` int(11) NOT NULL DEFAULT 0,
   `rewards_notes` text DEFAULT NULL,
   `follow_up_notes` text DEFAULT NULL,
@@ -623,6 +674,7 @@ CREATE TABLE IF NOT EXISTS `crm_customers` (
   KEY `idx_crm_last_visit_date` (`last_visit_date`),
   KEY `idx_crm_created_at` (`created_at`),
   KEY `idx_crm_attended` (`attended_match_event`),
+  KEY `idx_crm_customer_status` (`customer_status`),
   CONSTRAINT `fk_crm_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -822,6 +874,18 @@ CREATE TABLE IF NOT EXISTS `social_links` (
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_social_active_order` (`active`, `sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `crm_customer_statuses` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `title_fa` varchar(100) NOT NULL,
+  `title_en` varchar(100) NOT NULL,
+  `color` varchar(7) DEFAULT NULL,
+  `sort_order` int(11) NOT NULL DEFAULT 0,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_crm_status_title_en` (`title_en`),
+  KEY `idx_crm_status_active_order` (`is_active`, `sort_order`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `hr_evaluation_categories` (
@@ -1378,6 +1442,9 @@ INSERT IGNORE INTO `settings` (`setting_key`, `setting_value`, `setting_type`, `
 
 INSERT IGNORE INTO `acquisition_sources` (`title`, `sort_order`, `active`) VALUES
 ('Instagram',10,1),('Telegram',20,1),('Google',30,1),('Balad',40,1),('Friend Referral',50,1),('Walk-in',60,1),('Website',70,1),('Advertisement',80,1),('Other',90,1);
+
+INSERT IGNORE INTO `crm_customer_statuses` (`title_fa`, `title_en`, `color`, `sort_order`, `is_active`) VALUES
+('مشتری جدید','new_customer','#0d6efd',10,1),('وفادار','loyal_customer','#198754',20,1),('VIP','vip','#6f42c1',30,1),('ناراضی','dissatisfied_customer','#dc3545',40,1),('ریسک ریزش','churn_risk','#fd7e14',50,1);
 
 INSERT INTO `social_links` (`title`, `icon`, `url`, `sort_order`, `active`)
 SELECT 'Instagram','📷','https://instagram.com/keyrestaurant',10,1 WHERE NOT EXISTS (SELECT 1 FROM `social_links` WHERE `title`='Instagram');

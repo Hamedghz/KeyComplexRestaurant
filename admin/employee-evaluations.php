@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/lib/hr_evaluation_service.php';
 $currentAdmin = adminGuard('employee');
-$pageTitle = 'Evaluate';
+$pageTitle = 'ارزیابی کارکنان';
 $message = '';
 $error = '';
 
@@ -88,7 +88,7 @@ include __DIR__ . '/includes/header.php';
 <div class="card">
     <div class="card-header">
         <h2>انتخاب دوره و فرم ارزیابی</h2>
-        <?php if (adminPermissionAllows($currentAdmin, 'employee_evaluation_settings', ['admin','super_admin'])): ?><a class="btn btn-primary" href="evaluation-builder.php">Build Evaluation</a><?php endif; ?>
+        <?php if (adminPermissionAllows($currentAdmin, 'employee_evaluation_settings', ['admin','super_admin'])): ?><a class="btn btn-primary" href="evaluation-builder.php">ساخت ارزیابی</a><?php endif; ?>
     </div>
     <div class="card-body">
         <form method="get" class="admin-filter">

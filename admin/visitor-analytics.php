@@ -4,7 +4,7 @@ $currentAdmin = adminGuard('manager');
 ensureAdminSchema();
 ensureAdminVisitorAnalyticsSchema();
 $db = adminDb();
-$pageTitle = 'Visitor Path Analytics';
+$pageTitle = 'تحلیل مسیر بازدیدکنندگان';
 $error = '';
 $emptyState = 'هنوز داده‌ای ثبت نشده است. صفحه عمومی سایت را باز کنید تا اولین بازدید ثبت شود.';
 $from = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['date_from'] ?? '')) ? (string)$_GET['date_from'] : date('Y-m-d', strtotime('-30 days'));
@@ -59,14 +59,14 @@ include __DIR__ . '/includes/header.php';
 ?>
 <?php if ($error): ?><div class="alert" style="background:#f8d7da;color:#721c24"><?php echo h($error); ?></div><?php endif; ?>
 <div class="stats-row"><div class="stat-card"><div class="stat-content"><h3><?php echo h(number_format((int)($summary['sessions'] ?? 0))); ?></h3><p>Sessions</p></div></div><div class="stat-card"><div class="stat-content"><h3><?php echo h(number_format((int)($summary['pageviews'] ?? 0))); ?></h3><p>Path rows</p></div></div></div>
-<div class="card"><div class="card-header"><h2>Visitor Path Analytics</h2><a class="btn btn-primary" href="?<?php echo h(http_build_query(array_merge($_GET, ['export'=>'csv', 'page'=>null]))); ?>">Export CSV</a></div><div class="card-body">
+<div class="card"><div class="card-header"><h2>تحلیل مسیر بازدیدکنندگان</h2><a class="btn btn-primary" href="?<?php echo h(http_build_query(array_merge($_GET, ['export'=>'csv', 'page'=>null]))); ?>">خروجی CSV</a></div><div class="card-body">
 <form class="admin-filter" method="get">
     <input class="form-control" name="q" placeholder="Search" value="<?php echo h($q); ?>">
     <input class="form-control" name="source_type" placeholder="Source type" value="<?php echo h($sourceType); ?>">
     <input class="form-control" name="device_type" placeholder="Device" value="<?php echo h($deviceType); ?>">
     <input class="form-control" type="date" name="date_from" value="<?php echo h($from); ?>">
     <input class="form-control" type="date" name="date_to" value="<?php echo h($to); ?>">
-    <button class="btn btn-primary">Filter</button>
+    <button class="btn btn-primary">فیلتر</button>
 </form>
 <div class="table-responsive"><table class="table"><thead><tr><th>Session</th><th>Landing Page</th><th>Current Page</th><th>Next Page</th><th>Duration</th><th>Related Module</th><th>Target Action</th><th>Time</th></tr></thead><tbody>
 <?php if (!$rows): ?><tr><td colspan="8" class="text-muted"><?php echo h($emptyState); ?></td></tr><?php endif; ?>
