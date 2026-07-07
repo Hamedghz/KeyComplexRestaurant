@@ -12,7 +12,7 @@ return [
     'survey_responses'=>'پاسخ‌های نظرسنجی', 'feedback'=>'نظرات',
     'evaluation_builder'=>'ساخت ارزیابی', 'employee_evaluations'=>'ارزیابی کارکنان',
     'employee_tests'=>'آزمون‌های من', 'employee_performance'=>'عملکرد کارکنان',
-    'employee_assessments'=>'نتایج ارزیابی', 'pool_leads_group'=>'استخر و لیدها', 'pool_leads'=>'لیدهای استخر',
+    'employee_assessments'=>'نتایج ارزیابی', 'hr_test_report'=>'گزارش آزمون‌های پرسنل', 'pool_leads_group'=>'استخر و لیدها', 'pool_leads'=>'لیدهای استخر',
     'analytics_reports'=>'تحلیل و گزارش‌ها', 'analytics'=>'گزارش بازدیدکنندگان',
     'analytics_traffic_sources'=>'منابع ترافیک', 'visitor_analytics'=>'مسیر بازدیدکنندگان',
     'analytics_live'=>'بازدیدکنندگان آنلاین', 'analytics_geographic'=>'تحلیل جغرافیایی',

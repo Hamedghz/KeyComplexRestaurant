@@ -11,7 +11,7 @@ return [
     'surveys'=>'Surveys', 'survey_responses'=>'Survey Responses', 'feedback'=>'Feedback',
     'evaluation_builder'=>'Build Evaluation', 'employee_evaluations'=>'Employee Evaluations',
     'employee_tests'=>'My Tests', 'employee_performance'=>'Employee Performance',
-    'employee_assessments'=>'Assessment Results', 'pool_leads_group'=>'Pool & Leads', 'pool_leads'=>'Pool Leads',
+    'employee_assessments'=>'Assessment Results', 'hr_test_report'=>'Personnel Test Reports', 'pool_leads_group'=>'Pool & Leads', 'pool_leads'=>'Pool Leads',
     'analytics_reports'=>'Analytics & Reports', 'analytics'=>'Visitor Reports',
     'analytics_traffic_sources'=>'Traffic Sources', 'visitor_analytics'=>'Visitor Paths',
     'analytics_live'=>'Live Visitors', 'analytics_geographic'=>'Geographic Analytics',

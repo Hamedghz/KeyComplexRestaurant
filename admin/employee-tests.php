@@ -33,12 +33,18 @@ if (!$selectedAssignment && $assignments) {
     $assignmentId = (int)$selectedAssignment['id'];
 }
 
-$questions = $selectedAssignment ? hrFetchTestQuestions($db, (int)$selectedAssignment['test_id'], true) : [];
+$questions = $selectedAssignment ? array_values(array_filter(hrFetchTestQuestions($db, (int)$selectedAssignment['test_id'], true), static fn($question) => hrQuestionVisibleToRole($question, (string)($employee['role'] ?? 'employee')))) : [];
 $savedAnswers = [];
+$selectedResult = null;
 if ($selectedAssignment && !empty($selectedAssignment['response_id'])) {
     $stmt = $db->prepare('SELECT answers_json FROM hr_test_responses WHERE id = ? AND employee_id = ? LIMIT 1');
     $stmt->execute([(int)$selectedAssignment['response_id'], $employeeId]);
     $savedAnswers = hrJsonDecode($stmt->fetchColumn() ?: '');
+    if ((int)($selectedAssignment['show_result_to_employee'] ?? 0) === 1) {
+        $resultStmt = $db->prepare('SELECT * FROM hr_test_results WHERE assignment_id=? AND employee_id=? AND status="final" AND deleted_at IS NULL ORDER BY id DESC LIMIT 1');
+        $resultStmt->execute([$assignmentId,$employeeId]);
+        $selectedResult = $resultStmt->fetch() ?: null;
+    }
 }
 
 try {
@@ -80,7 +86,7 @@ include __DIR__ . '/includes/header.php';
                 <td><?php echo h($assignment['title']); ?><br><small class="text-muted"><?php echo h($assignment['test_code']); ?></small></td>
                 <td><?php echo h($assignment['due_date'] ?: '-'); ?></td>
                 <td><?php echo h($assignment['response_status'] ?: 'در انتظار شروع'); ?></td>
-                <td><?php echo h(trim((string)($assignment['normalized_score'] ?? '') . ' ' . (string)($assignment['profile_output'] ?? '')) ?: '-'); ?></td>
+                <td><?php echo (int)($assignment['show_result_to_employee'] ?? 0) === 1 ? h(trim((string)($assignment['normalized_score'] ?? '') . ' ' . (string)($assignment['profile_output'] ?? '')) ?: '-') : '<span class="text-muted">نمایش برای پرسنل غیرفعال است</span>'; ?></td>
                 <td><a class="btn btn-sm btn-primary" href="?assignment_id=<?php echo h($assignment['id']); ?>"><?php echo ($assignment['response_status'] ?? '') === 'in_progress' ? 'ادامه' : 'شروع'; ?></a></td>
             </tr>
         <?php endforeach; ?>
@@ -109,6 +115,8 @@ include __DIR__ . '/includes/header.php';
                         <label><?php echo h(($index + 1) . '. ' . $question['question_text']); ?></label>
                         <?php if ($question['answer_type'] === 'text'): ?>
                             <textarea class="form-control" name="answer[<?php echo h($question['id']); ?>]"><?php echo h($answer); ?></textarea>
+                        <?php elseif ($question['answer_type'] === 'multi_choice'): $options = hrTestQuestionOptions($question); $selectedValues=is_array($answer)?$answer:[]; ?>
+                            <?php foreach ($options as $optionIndex => $option): ?><label style="display:block"><input type="checkbox" name="answer[<?php echo h($question['id']); ?>][]" value="<?php echo h($optionIndex); ?>" <?php echo in_array((string)$optionIndex,array_map('strval',$selectedValues),true)?'checked':''; ?>> <?php echo h($option['label']); ?></label><?php endforeach; ?>
                         <?php else: $options = hrTestQuestionOptions($question); ?>
                             <select class="form-control" name="answer[<?php echo h($question['id']); ?>]" required>
                                 <option value="">انتخاب پاسخ</option>
@@ -122,6 +130,21 @@ include __DIR__ . '/includes/header.php';
                 <button class="btn btn-success" name="test_action" value="submit" onclick="return confirm('ثبت نهایی شود؟')">ثبت نهایی</button>
             </form>
         <?php endif; ?>
+    </div>
+</div>
+<?php endif; ?>
+
+<?php if ($selectedResult): $dimensionResults=hrJsonDecode($selectedResult['dimension_scores_json'] ?? ''); ?>
+<div class="card">
+    <div class="card-header"><h2>گزارش فردی آزمون</h2><span class="badge badge-info"><?php echo h($selectedResult['result_level'] ?: '-'); ?></span></div>
+    <div class="card-body">
+        <p><strong>امتیاز کل:</strong> <?php echo h($selectedResult['overall_score']); ?>٪ &nbsp; <strong>پروفایل:</strong> <?php echo h($selectedResult['profile_code'] ?: '-'); ?></p>
+        <?php foreach ($dimensionResults as $dimension): $score=(float)($dimension['score'] ?? 0); ?>
+            <div style="margin:10px 0"><div style="display:flex;justify-content:space-between"><span><?php echo h($dimension['title'] ?? '-'); ?></span><span><?php echo h(number_format($score,1)); ?>٪</span></div><div style="height:10px;background:#e9ecef;border-radius:8px;overflow:hidden"><div style="height:100%;width:<?php echo h($score); ?>%;background:#0d6efd"></div></div></div>
+        <?php endforeach; ?>
+        <?php $recommendations=hrJsonDecode($selectedResult['recommendations_json'] ?? ''); if ($recommendations): ?><h3>پیشنهادهای آموزشی</h3><ul><?php foreach ($recommendations as $item): ?><li><?php echo h($item); ?></li><?php endforeach; ?></ul><?php endif; ?>
+        <?php $warnings=hrJsonDecode($selectedResult['warnings_json'] ?? ''); if ($warnings): ?><div class="alert" style="background:#fff3cd;color:#664d03"><strong>هشدار آموزشی:</strong><ul><?php foreach ($warnings as $item): ?><li><?php echo h($item); ?></li><?php endforeach; ?></ul></div><?php endif; ?>
+        <p class="text-muted"><?php echo h($selectedResult['analysis_disclaimer'] ?: hrAssessmentDisclaimer()); ?></p>
     </div>
 </div>
 <?php endif; ?>

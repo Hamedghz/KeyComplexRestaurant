@@ -38,6 +38,12 @@ try {
         requireValidCsrf();
         $action = (string)($_POST['settings_action'] ?? '');
 
+        if ($action === 'seed_restaurant_hr_tests') {
+            $seedResult = hrSeedRestaurantProfessionalTests($db, (int)$currentAdmin['id']);
+            hrSyncAssessmentCatalogToForms($db);
+            hrRedirectSettings('seeded=1&tests=' . urlencode((string)$seedResult['tests']) . '&questions=' . urlencode((string)$seedResult['questions']));
+        }
+
         if ($action === 'save_hr_settings') {
             $value = isset($_POST['hr_allow_self_evaluation']) ? '1' : '0';
             $db->prepare('INSERT INTO settings (setting_key, setting_value, setting_type, category, is_public) VALUES (?,?,?,?,0) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value), setting_type=VALUES(setting_type), category=VALUES(category)')
@@ -169,6 +175,7 @@ try {
             $testCode = hrNormalizeAssessmentCode((string)($_POST['test_code'] ?? ''), $title);
             $category = isset($assessmentCategories[$_POST['category'] ?? 'other']) ? (string)$_POST['category'] : 'other';
             $scoringMethod = isset($assessmentScoringMethods[$_POST['scoring_method_type'] ?? 'manual']) ? (string)$_POST['scoring_method_type'] : 'manual';
+            $analysisType = in_array((string)($_POST['analysis_type'] ?? 'positive'), ['positive','risk'], true) ? (string)$_POST['analysis_type'] : 'positive';
             if ($title === '') {
                 throw new RuntimeException('عنوان آزمون الزامی است.');
             }
@@ -183,18 +190,21 @@ try {
                 'source_url' => trim((string)($_POST['source_url'] ?? '')) ?: null,
                 'source_license' => trim((string)($_POST['source_license'] ?? '')) ?: null,
                 'scoring_method_type' => $scoringMethod,
+                'analysis_type' => $analysisType,
                 'intended_use' => trim((string)($_POST['intended_use'] ?? '')) ?: null,
                 'is_active' => isset($_POST['is_active']) ? 1 : 0,
                 'sort_order' => (int)($_POST['sort_order'] ?? 0),
             ];
             if ($id > 0) {
                 $data['id'] = $id;
-                $db->prepare('UPDATE hr_assessment_tests SET title=:title,test_code=:test_code,category=:category,age_guidance=:age_guidance,question_count=:question_count,description=:description,external_link=:external_link,source_url=:source_url,source_license=:source_license,scoring_method_type=:scoring_method_type,intended_use=:intended_use,is_active=:is_active,sort_order=:sort_order WHERE id=:id')
-                    ->execute($data);
+                $db->prepare('UPDATE hr_assessment_tests SET title=:title,test_code=:test_code,category=:category,age_guidance=:age_guidance,question_count=:question_count,description=:description,external_link=:external_link,source_url=:source_url,source_license=:source_license,scoring_method_type=:scoring_method_type,analysis_type=:analysis_type,intended_use=:intended_use,is_active=:is_active,sort_order=:sort_order,updated_by=:updated_by WHERE id=:id')
+                    ->execute($data + ['updated_by'=>(int)$currentAdmin['id']]);
             } else {
-                $db->prepare('INSERT INTO hr_assessment_tests (title,test_code,category,age_guidance,question_count,description,external_link,source_url,source_license,scoring_method_type,intended_use,is_active,sort_order) VALUES (:title,:test_code,:category,:age_guidance,:question_count,:description,:external_link,:source_url,:source_license,:scoring_method_type,:intended_use,:is_active,:sort_order)')
-                    ->execute($data);
+                $db->prepare('INSERT INTO hr_assessment_tests (title,test_code,category,age_guidance,question_count,description,external_link,source_url,source_license,scoring_method_type,analysis_type,intended_use,is_active,sort_order,created_by,updated_by) VALUES (:title,:test_code,:category,:age_guidance,:question_count,:description,:external_link,:source_url,:source_license,:scoring_method_type,:analysis_type,:intended_use,:is_active,:sort_order,:created_by,:updated_by)')
+                    ->execute($data + ['created_by'=>(int)$currentAdmin['id'],'updated_by'=>(int)$currentAdmin['id']]);
+                $id = (int)$db->lastInsertId();
             }
+            hrTestAudit($db, 'save', 'test', $id, ['test_code'=>$testCode], (int)$currentAdmin['id']);
             hrSyncAssessmentCatalogToForms($db);
             hrRedirectSettings('saved=1');
         }
@@ -225,6 +235,9 @@ try {
                     trim((string)($_POST['negative_label'] ?? '')) ?: null,
                     (int)($_POST['sort_order'] ?? 0),
                 ]);
+            $dimensionAuditStmt=$db->prepare('SELECT id FROM hr_test_dimensions WHERE test_id=? AND code=? LIMIT 1');
+            $dimensionAuditStmt->execute([$testId,$code]);
+            hrTestAudit($db, 'save', 'dimension', (int)$dimensionAuditStmt->fetchColumn(), ['test_id'=>$testId], (int)$currentAdmin['id']);
             hrRedirectSettings('saved=1&test_id=' . urlencode((string)$testId));
         }
 
@@ -238,19 +251,31 @@ try {
             if (!$testId || $code === '' || $text === '') {
                 throw new RuntimeException('آزمون، کد و متن سوال الزامی است.');
             }
-            $db->prepare('INSERT INTO hr_test_questions (test_id,dimension_id,code,question_text,answer_type,options_json,weight,scoring_direction,is_active,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE dimension_id=VALUES(dimension_id),question_text=VALUES(question_text),answer_type=VALUES(answer_type),options_json=VALUES(options_json),weight=VALUES(weight),scoring_direction=VALUES(scoring_direction),is_active=VALUES(is_active),sort_order=VALUES(sort_order)')
+            $db->prepare('INSERT INTO hr_test_questions (test_id,dimension_id,code,question_text,answer_type,question_type,options_json,weight,scoring_direction,score_direction,is_reverse_scored,is_required,is_critical,role_visibility,is_active,status,sort_order,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE dimension_id=VALUES(dimension_id),question_text=VALUES(question_text),answer_type=VALUES(answer_type),question_type=VALUES(question_type),options_json=VALUES(options_json),weight=VALUES(weight),scoring_direction=VALUES(scoring_direction),score_direction=VALUES(score_direction),is_reverse_scored=VALUES(is_reverse_scored),is_required=VALUES(is_required),is_critical=VALUES(is_critical),role_visibility=VALUES(role_visibility),is_active=VALUES(is_active),status=VALUES(status),sort_order=VALUES(sort_order),updated_by=VALUES(updated_by)')
                 ->execute([
                     $testId,
                     $dimensionId ?: null,
                     $code,
                     $text,
                     $answerType,
+                    $answerType,
                     hrNormalizeCriterionOptions((string)($_POST['options_json'] ?? '')) ?: null,
                     max(0, (float)($_POST['weight'] ?? 1)),
                     $direction,
+                    $direction,
+                    $direction === 'negative' ? 1 : 0,
+                    isset($_POST['is_required']) ? 1 : 0,
+                    isset($_POST['is_critical']) ? 1 : 0,
+                    trim((string)($_POST['role_visibility'] ?? '')) ?: null,
                     isset($_POST['is_active']) ? 1 : 0,
+                    isset($_POST['is_active']) ? 'active' : 'inactive',
                     (int)($_POST['sort_order'] ?? 0),
+                    (int)$currentAdmin['id'],
+                    (int)$currentAdmin['id'],
                 ]);
+            $questionIdStmt=$db->prepare('SELECT id FROM hr_test_questions WHERE test_id=? AND code=? LIMIT 1');
+            $questionIdStmt->execute([$testId,$code]);
+            hrTestAudit($db, 'save', 'question', (int)$questionIdStmt->fetchColumn(), ['test_id'=>$testId], (int)$currentAdmin['id']);
             hrRedirectSettings('saved=1&test_id=' . urlencode((string)$testId));
         }
     }
@@ -266,6 +291,9 @@ if (isset($_GET['saved'])) {
 }
 if (isset($_GET['imported'])) {
     $message = 'کاتالوگ آزمون با رعایت محدودیت کپی رایت وارد و به فرم ارزیابی تبدیل شد.';
+}
+if (isset($_GET['seeded'])) {
+    $message = 'Seed حرفه‌ای با موفقیت همگام شد: ' . (int)($_GET['tests'] ?? 0) . ' آزمون و ' . (int)($_GET['questions'] ?? 0) . ' سؤال.';
 }
 
 $categories = hrFetchCategories($db);
@@ -396,6 +424,12 @@ include __DIR__ . '/includes/header.php';
 <div class="card">
     <div class="card-header"><h2><?php echo $editAssessmentTest ? 'ویرایش کاتالوگ آزمون' : 'کاتالوگ آزمون های سازمانی'; ?></h2></div>
     <div class="card-body">
+        <form method="post" class="admin-filter" onsubmit="return confirm('Seed حرفه‌ای با کدهای پایدار همگام شود؟ داده‌ای حذف نخواهد شد.');">
+            <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>">
+            <input type="hidden" name="settings_action" value="seed_restaurant_hr_tests">
+            <button class="btn btn-primary" type="submit">همگام‌سازی ۱۴ آزمون حرفه‌ای رستوران</button>
+            <span class="text-muted">عملیات idempotent است؛ رکوردهای موجود حذف نمی‌شوند.</span>
+        </form>
         <form method="post">
             <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>">
             <input type="hidden" name="settings_action" value="save_assessment_test">
@@ -405,6 +439,7 @@ include __DIR__ . '/includes/header.php';
                 <input class="form-control" name="test_code" placeholder="کد آزمون" value="<?php echo h($editAssessmentTest['test_code'] ?? ''); ?>">
                 <select class="form-control" name="category"><?php foreach ($assessmentCategories as $key => $label): ?><option value="<?php echo h($key); ?>" <?php echo (string)($editAssessmentTest['category'] ?? 'other') === $key ? 'selected' : ''; ?>><?php echo h($label); ?></option><?php endforeach; ?></select>
                 <select class="form-control" name="scoring_method_type"><?php foreach ($assessmentScoringMethods as $key => $label): ?><option value="<?php echo h($key); ?>" <?php echo (string)($editAssessmentTest['scoring_method_type'] ?? 'manual') === $key ? 'selected' : ''; ?>><?php echo h($label); ?></option><?php endforeach; ?></select>
+                <select class="form-control" name="analysis_type"><option value="positive" <?php echo ($editAssessmentTest['analysis_type'] ?? 'positive') === 'positive' ? 'selected' : ''; ?>>مثبت‌محور</option><option value="risk" <?php echo ($editAssessmentTest['analysis_type'] ?? '') === 'risk' ? 'selected' : ''; ?>>ریسک‌محور</option></select>
                 <input class="form-control" name="age_guidance" placeholder="راهنمای سن" value="<?php echo h($editAssessmentTest['age_guidance'] ?? ''); ?>">
                 <input class="form-control" type="number" min="0" name="question_count" placeholder="تعداد سوال" value="<?php echo h($editAssessmentTest['question_count'] ?? ''); ?>">
                 <input class="form-control" name="intended_use" placeholder="کاربرد: استخدام / توسعه / آموزش / HR insight" value="<?php echo h($editAssessmentTest['intended_use'] ?? ''); ?>">
@@ -489,6 +524,9 @@ include __DIR__ . '/includes/header.php';
                     <textarea class="form-control" name="options_json" placeholder="برای چندگزینه‌ای: هر خط «برچسب|امتیاز»"></textarea>
                     <input class="form-control" type="number" step="0.01" min="0" name="weight" value="1" placeholder="وزن">
                     <select class="form-control" name="scoring_direction"><option value="positive">مثبت</option><option value="negative">معکوس</option></select>
+                    <input class="form-control" name="role_visibility" placeholder="نقش‌های مجاز، با کاما (اختیاری)">
+                    <label><input type="checkbox" name="is_required" value="1" checked> الزامی</label>
+                    <label><input type="checkbox" name="is_critical" value="1"> بحرانی</label>
                     <input class="form-control" type="number" name="sort_order" placeholder="ترتیب">
                     <label><input type="checkbox" name="is_active" value="1" checked> فعال</label>
                     <button class="btn btn-success">افزودن سوال</button>

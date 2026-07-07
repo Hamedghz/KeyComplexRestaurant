@@ -108,6 +108,140 @@ function systemUpdateSplitSql(string $sql): array {
     return $statements;
 }
 
+function systemUpdateQuoteIdentifier(string $identifier): string {
+    return '`' . str_replace('`', '``', $identifier) . '`';
+}
+
+function systemUpdateReplaceDatabase(PDO $db): int {
+    $stmt = $db->query(
+        "SELECT TABLE_NAME, TABLE_TYPE
+         FROM INFORMATION_SCHEMA.TABLES
+         WHERE TABLE_SCHEMA = DATABASE()
+         ORDER BY CASE WHEN TABLE_TYPE = 'VIEW' THEN 0 ELSE 1 END, TABLE_NAME"
+    );
+    $objects = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+    $dropped = 0;
+
+    foreach ($objects as $object) {
+        $name = (string)($object['TABLE_NAME'] ?? '');
+        if ($name === '') {
+            continue;
+        }
+        $type = strtoupper((string)($object['TABLE_TYPE'] ?? '')) === 'VIEW' ? 'VIEW' : 'TABLE';
+        $db->exec('DROP ' . $type . ' IF EXISTS ' . systemUpdateQuoteIdentifier($name));
+        $dropped++;
+    }
+
+    return $dropped;
+}
+
+function systemUpdateImportSqlFile(PDO $db, array $file, bool $replaceDatabase = false): array {
+    $uploadError = (int)($file['error'] ?? UPLOAD_ERR_NO_FILE);
+    if ($uploadError !== UPLOAD_ERR_OK) {
+        $messages = [
+            UPLOAD_ERR_INI_SIZE => 'حجم فایل از محدودیت تنظیم‌شده روی سرور بیشتر است.',
+            UPLOAD_ERR_FORM_SIZE => 'حجم فایل از حداکثر مجاز بیشتر است.',
+            UPLOAD_ERR_PARTIAL => 'آپلود فایل کامل نشده است؛ دوباره تلاش کنید.',
+            UPLOAD_ERR_NO_FILE => 'لطفاً یک فایل SQL انتخاب کنید.',
+        ];
+        throw new RuntimeException($messages[$uploadError] ?? 'آپلود فایل SQL ناموفق بود.');
+    }
+
+    $originalName = basename((string)($file['name'] ?? ''));
+    $name = preg_replace('/[\x00-\x1F\x7F]+/u', '', $originalName) ?? $originalName;
+    $tmpPath = (string)($file['tmp_name'] ?? '');
+    $maxSize = 10 * 1024 * 1024;
+
+    if ($name === '' || strtolower(pathinfo($name, PATHINFO_EXTENSION)) !== 'sql') {
+        throw new RuntimeException('فقط فایل با پسوند .sql پذیرفته می‌شود.');
+    }
+    if ($tmpPath === '' || !is_uploaded_file($tmpPath) || !is_readable($tmpPath)) {
+        throw new RuntimeException('فایل آپلودشده معتبر یا قابل خواندن نیست.');
+    }
+    $size = filesize($tmpPath);
+    if ($size === false || $size <= 0 || $size > $maxSize) {
+        throw new RuntimeException('فایل SQL باید غیرخالی و حداکثر ۱۰ مگابایت باشد.');
+    }
+
+    $sql = file_get_contents($tmpPath);
+    if ($sql === false || trim($sql) === '') {
+        throw new RuntimeException('فایل SQL خالی یا قابل خواندن نیست.');
+    }
+
+    return systemUpdateExecuteSql($db, $sql, $name, $replaceDatabase);
+}
+
+function systemUpdateImportServerFile(PDO $db, bool $replaceDatabase = false): array {
+    $path = ROOT_PATH . '/storage/database-import.sql';
+    $maxSize = 10 * 1024 * 1024;
+
+    if (!is_file($path) || !is_readable($path)) {
+        throw new RuntimeException('فایل storage/database-import.sql روی سرور پیدا نشد یا قابل خواندن نیست.');
+    }
+    $size = filesize($path);
+    if ($size === false || $size <= 0 || $size > $maxSize) {
+        throw new RuntimeException('فایل SQL روی سرور باید غیرخالی و حداکثر ۱۰ مگابایت باشد.');
+    }
+    $sql = file_get_contents($path);
+    if ($sql === false || trim($sql) === '') {
+        throw new RuntimeException('فایل SQL روی سرور خالی یا قابل خواندن نیست.');
+    }
+
+    $result = systemUpdateExecuteSql($db, $sql, basename($path), $replaceDatabase);
+    if (!@unlink($path)) {
+        safeAdminLog('Imported SQL file could not be removed: ' . $path);
+        $result['cleanup_warning'] = true;
+    }
+    return $result;
+}
+
+function systemUpdateExecuteSql(PDO $db, string $sql, string $name, bool $replaceDatabase = false): array {
+    $statements = systemUpdateSplitSql($sql);
+    if (!$statements) {
+        throw new RuntimeException('هیچ دستور SQL قابل اجرایی در فایل پیدا نشد.');
+    }
+
+    if ($replaceDatabase && !preg_match('/\bCREATE\s+TABLE\b/i', $sql)) {
+        throw new RuntimeException('حالت جایگزینی فقط برای بکاپ کامل شامل CREATE TABLE مجاز است.');
+    }
+
+    $foreignKeyChecks = (int)$db->query('SELECT @@SESSION.FOREIGN_KEY_CHECKS')->fetchColumn();
+    $droppedObjects = 0;
+
+    try {
+        if ($replaceDatabase) {
+            $db->exec('SET SESSION FOREIGN_KEY_CHECKS = 0');
+            $droppedObjects = systemUpdateReplaceDatabase($db);
+        }
+
+        foreach ($statements as $index => $statement) {
+            $db->exec($statement);
+        }
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        $failedStatement = isset($index) ? $index + 1 : 0;
+        safeAdminLog('Manual SQL import failed for ' . $name . ' at statement ' . $failedStatement . ': ' . $e->getMessage());
+        $detail = trim(preg_replace('/\s+/', ' ', $e->getMessage()) ?? '');
+        throw new RuntimeException(
+            'اجرای دستور شماره ' . $failedStatement . ' ناموفق بود: ' . $detail
+            . ' دستورهای قبلی ممکن است اجرا شده باشند.'
+        );
+    } finally {
+        $db->exec('SET SESSION FOREIGN_KEY_CHECKS = ' . ($foreignKeyChecks === 0 ? '0' : '1'));
+    }
+
+    $mode = $replaceDatabase ? 'replace' : 'merge';
+    safeAdminLog('Manual SQL import completed: ' . $name . ' (' . count($statements) . ' statements, mode: ' . $mode . ')');
+    return [
+        'name' => $name,
+        'statement_count' => count($statements),
+        'mode' => $mode,
+        'dropped_objects' => $droppedObjects,
+    ];
+}
+
 function systemUpdateRunPendingMigrations(PDO $db): array {
     systemUpdateEnsureMigrationTable($db);
     $executed = array_flip(systemUpdateExecutedMigrations($db));
@@ -160,6 +294,7 @@ function systemUpdateMigrationStatus(PDO $db): array {
 $message = '';
 $error = '';
 $runResults = ['ran' => [], 'errors' => []];
+$importResult = null;
 $limitedModeMessage = 'تابع exec یا توابع مشابه روی هاست غیرفعال است؛ عملیات وابسته به git/tar/mysqldump اجرا نمی‌شود و سیستم در حالت محدود اجرا می‌شود.';
 $disabledFunctions = systemUpdateDisabledFunctions();
 $version = systemUpdateVersion();
@@ -174,9 +309,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($runResults['errors']) {
                 $error = implode(' ', $runResults['errors']);
             }
+        } elseif ($action === 'import_sql') {
+            if (($_POST['confirm_sql_import'] ?? '') !== '1') {
+                throw new RuntimeException('برای اجرای فایل، تأیید ایمپورت SQL الزامی است.');
+            }
+            $replaceDatabase = ($_POST['replace_database'] ?? '') === '1';
+            if ($replaceDatabase && trim((string)($_POST['replace_confirmation'] ?? '')) !== 'REPLACE') {
+                throw new RuntimeException('برای جایگزینی کامل دیتابیس، عبارت REPLACE را دقیق وارد کنید.');
+            }
+            $importResult = systemUpdateImportSqlFile($db, $_FILES['sql_file'] ?? [], $replaceDatabase);
+            $message = 'فایل «' . $importResult['name'] . '» با موفقیت ایمپورت شد؛ '
+                . $importResult['statement_count'] . ' دستور اجرا شد.';
+            if ($importResult['mode'] === 'replace') {
+                $message .= ' دیتابیس قبلی به‌طور کامل با این بکاپ جایگزین شد.';
+            }
+            if (!empty($importResult['cleanup_warning'])) {
+                $message .= ' فایل SQL را برای امنیت به‌صورت دستی از storage حذف کنید.';
+            }
+        } elseif ($action === 'import_server_sql') {
+            if (($_POST['confirm_sql_import'] ?? '') !== '1') {
+                throw new RuntimeException('برای اجرای فایل، تأیید ایمپورت SQL الزامی است.');
+            }
+            $replaceDatabase = ($_POST['replace_database'] ?? '') === '1';
+            if ($replaceDatabase && trim((string)($_POST['replace_confirmation'] ?? '')) !== 'REPLACE') {
+                throw new RuntimeException('برای جایگزینی کامل دیتابیس، عبارت REPLACE را دقیق وارد کنید.');
+            }
+            $importResult = systemUpdateImportServerFile($db, $replaceDatabase);
+            $message = 'فایل SQL موجود در storage با موفقیت اجرا شد؛ '
+                . $importResult['statement_count'] . ' دستور اجرا شد.';
+            if ($importResult['mode'] === 'replace') {
+                $message .= ' دیتابیس قبلی به‌طور کامل با این بکاپ جایگزین شد.';
+            }
+            if (!empty($importResult['cleanup_warning'])) {
+                $message .= ' فایل SQL را برای امنیت به‌صورت دستی از storage حذف کنید.';
+            }
         }
     } catch (Throwable $e) {
-        $error = 'درخواست قابل انجام نیست؛ لطفاً لاگ سیستم را بررسی کنید.';
+        $error = $e instanceof RuntimeException
+            ? $e->getMessage()
+            : 'درخواست قابل انجام نیست؛ لطفاً لاگ سیستم را بررسی کنید.';
         safeAdminLog('System update request failed: ' . $e->getMessage());
     }
 }
@@ -211,6 +382,60 @@ include __DIR__ . '/includes/header.php';
         <form method="post" class="quick-actions">
             <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>">
             <button class="quick-action-btn" name="update_action" value="run_migrations" type="submit"><span class="icon">🗄️</span><span>Run pending migrations</span></button>
+        </form>
+    </div>
+</div>
+<div class="card">
+    <div class="card-header"><h2>ایمپورت از فایل روی سرور</h2></div>
+    <div class="card-body">
+        <p>اگر آپلود SQL توسط فایروال هاست قطع می‌شود، فایل را با File Manager یا FTP دقیقاً با نام <code>storage/database-import.sql</code> قرار دهید و این فرم را اجرا کنید. فایل پس از ایمپورت موفق حذف می‌شود.</p>
+        <form method="post">
+            <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>">
+            <input type="hidden" name="update_action" value="import_server_sql">
+            <label style="display:flex;align-items:flex-start;gap:8px">
+                <input type="checkbox" name="confirm_sql_import" value="1" required>
+                <span>اجرای فایل <code>storage/database-import.sql</code> را تأیید می‌کنم.</span>
+            </label>
+            <div class="form-group" style="margin-top:12px;padding:14px;border:1px solid #dc3545;border-radius:8px;background:#fff5f5">
+                <label style="display:flex;align-items:flex-start;gap:8px;color:#721c24">
+                    <input type="checkbox" name="replace_database" value="1">
+                    <span><strong>جایگزینی کامل دیتابیس:</strong> همه جدول‌ها و اطلاعات فعلی حذف شوند.</span>
+                </label>
+                <label for="server_replace_confirmation" style="display:block;margin-top:12px">در حالت جایگزینی عبارت <code>REPLACE</code> را وارد کنید:</label>
+                <input id="server_replace_confirmation" name="replace_confirmation" type="text" autocomplete="off" placeholder="REPLACE" style="margin-top:6px">
+            </div>
+            <button class="btn btn-primary" type="submit" onclick="return confirm('فایل SQL موجود روی سرور اجرا شود؟')">اجرای فایل روی سرور</button>
+        </form>
+    </div>
+</div>
+<div class="card">
+    <div class="card-header"><h2>ایمپورت فایل SQL</h2></div>
+    <div class="card-body">
+        <p>یک فایل <code>.sql</code> را مستقیماً روی پایگاه داده فعلی اجرا کنید. حداکثر حجم فایل ۱۰ مگابایت است و فایل پس از اجرا روی سرور ذخیره نمی‌شود.</p>
+        <div class="alert" style="background:#fff3cd;color:#856404">قبل از اجرا از پایگاه داده نسخه پشتیبان تهیه کنید. بعضی دستورهای SQL مانند تغییر ساختار جدول قابل بازگشت نیستند.</div>
+        <form method="post" enctype="multipart/form-data">
+            <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>">
+            <input type="hidden" name="update_action" value="import_sql">
+            <input type="hidden" name="MAX_FILE_SIZE" value="10485760">
+            <div class="form-group">
+                <label for="sql_file">فایل SQL</label>
+                <input id="sql_file" name="sql_file" type="file" accept=".sql,application/sql,text/sql,text/plain" required>
+            </div>
+            <div class="form-group">
+                <label style="display:flex;align-items:flex-start;gap:8px">
+                    <input type="checkbox" name="confirm_sql_import" value="1" required>
+                    <span>تأیید می‌کنم که این فایل روی پایگاه داده فعلی اجرا شود.</span>
+                </label>
+            </div>
+            <div class="form-group" style="padding:14px;border:1px solid #dc3545;border-radius:8px;background:#fff5f5">
+                <label style="display:flex;align-items:flex-start;gap:8px;color:#721c24">
+                    <input id="replace_database" type="checkbox" name="replace_database" value="1">
+                    <span><strong>جایگزینی کامل دیتابیس:</strong> همه جدول‌ها و اطلاعات فعلی حذف و سپس بکاپ وارد شود.</span>
+                </label>
+                <label for="replace_confirmation" style="display:block;margin-top:12px">برای فعال‌کردن این حالت، عبارت <code>REPLACE</code> را وارد کنید:</label>
+                <input id="replace_confirmation" name="replace_confirmation" type="text" autocomplete="off" placeholder="REPLACE" style="margin-top:6px">
+            </div>
+            <button class="btn btn-primary" type="submit" onclick="return confirm('فایل SQL روی پایگاه داده فعلی اجرا شود؟')">ایمپورت و اجرای SQL</button>
         </form>
     </div>
 </div>

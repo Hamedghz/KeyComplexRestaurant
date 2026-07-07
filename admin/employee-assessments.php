@@ -27,6 +27,9 @@ $employeeParams = [];
 if (!$canViewTeamResults) {
     $employeeWhere[] = 'id = ?';
     $employeeParams[] = (int)$currentAdmin['id'];
+} elseif ((string)($currentAdmin['role'] ?? '') === 'manager') {
+    $employeeWhere[] = 'department = ?';
+    $employeeParams[] = (string)($currentAdmin['department'] ?? '');
 }
 $employeeStmt = $db->prepare('SELECT id, username, full_name, role, department FROM admins WHERE ' . implode(' AND ', $employeeWhere) . ' ORDER BY department, full_name, username');
 $employeeStmt->execute($employeeParams);
@@ -51,13 +54,18 @@ try {
                 }
                 $dueDate = parsePersianDate($_POST['due_date'] ?? '', false) ?: null;
                 $periodId = ($_POST['period_id'] ?? '') === '' ? null : (int)$_POST['period_id'];
-                $duplicate = $db->prepare('SELECT id FROM hr_test_assignments WHERE test_id = ? AND COALESCE(employee_id,0) = ? AND COALESCE(department,"") = ? AND COALESCE(role,"") = ? AND status = "active" LIMIT 1');
+                $duplicate = $db->prepare('SELECT id FROM hr_test_assignments WHERE test_id = ? AND COALESCE(employee_id,0) = ? AND COALESCE(department,"") = ? AND COALESCE(role,"") = ? AND status = "active" AND deleted_at IS NULL LIMIT 1');
                 $duplicate->execute([$testId, $employeeId, $department, $role]);
                 if ($duplicate->fetchColumn() && empty($_POST['allow_duplicate'])) {
                     throw new RuntimeException('این آزمون قبلا برای همین محدوده اختصاص داده شده است.');
                 }
-                $db->prepare('INSERT INTO hr_test_assignments (test_id,employee_id,department,role,period_id,due_date,status,allow_retake,assigned_by) VALUES (?,?,?,?,?,?,?,?,?)')
-                    ->execute([$testId, $employeeId ?: null, $department ?: null, $role ?: null, $periodId, $dueDate, 'active', isset($_POST['allow_retake']) ? 1 : 0, (int)$currentAdmin['id']]);
+                $targetType = $employeeId ? 'employee' : ($department !== '' ? 'department' : 'role');
+                $targetId = $employeeId ? (string)$employeeId : ($department !== '' ? $department : $role);
+                $maxAttempts = max(1, min(20, (int)($_POST['max_attempts'] ?? 1)));
+                $db->prepare('INSERT INTO hr_test_assignments (test_id,target_type,target_id,employee_id,department,role,period_id,due_date,status,allow_retake,max_attempts,show_result_to_employee,description,assigned_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+                    ->execute([$testId,$targetType,$targetId,$employeeId ?: null,$department ?: null,$role ?: null,$periodId,$dueDate,'active',isset($_POST['allow_retake']) ? 1 : 0,$maxAttempts,isset($_POST['show_result_to_employee']) ? 1 : 0,trim((string)($_POST['description'] ?? '')) ?: null,(int)$currentAdmin['id']]);
+                $assignmentId = (int)$db->lastInsertId();
+                hrTestAudit($db, 'assign', 'assignment', $assignmentId, ['test_id'=>$testId,'target_type'=>$targetType,'target_id'=>$targetId], (int)$currentAdmin['id']);
                 redirectTo('employee-assessments.php?assigned=1');
             }
             throw new RuntimeException('عملیات درخواستی معتبر نیست.');
@@ -119,7 +127,9 @@ try {
         } else {
             $db->prepare('INSERT INTO hr_assessment_results (employee_id,test_id,completion_date,result_summary,score_value,result_type,attachment_path,hr_notes,visibility,recorded_by) VALUES (:employee_id,:test_id,:completion_date,:result_summary,:score_value,:result_type,:attachment_path,:hr_notes,:visibility,:recorded_by)')
                 ->execute($data);
+            $id = (int)$db->lastInsertId();
         }
+        hrTestAudit($db, 'save_manual_result', 'assessment_result', $id, ['employee_id'=>$employeeId,'test_id'=>$testId], (int)$currentAdmin['id']);
         redirectTo('employee-assessments.php?saved=1&employee_id=' . urlencode((string)$employeeId));
     }
 } catch (RuntimeException $e) {
@@ -143,8 +153,14 @@ $visibilityFilter = trim((string)($_GET['visibility'] ?? ''));
 $editResult = null;
 
 if (($_GET['edit'] ?? '') !== '' && $canManageResults) {
-    $stmt = $db->prepare('SELECT * FROM hr_assessment_results WHERE id = ? LIMIT 1');
-    $stmt->execute([(int)$_GET['edit']]);
+    $editSql = 'SELECT r.* FROM hr_assessment_results r JOIN admins a ON a.id=r.employee_id WHERE r.id = ?';
+    $editParams = [(int)$_GET['edit']];
+    if ((string)($currentAdmin['role'] ?? '') === 'manager') {
+        $editSql .= ' AND a.department = ?';
+        $editParams[] = (string)($currentAdmin['department'] ?? '');
+    }
+    $stmt = $db->prepare($editSql . ' LIMIT 1');
+    $stmt->execute($editParams);
     $editResult = $stmt->fetch() ?: null;
 }
 
@@ -152,6 +168,10 @@ $where = [];
 $params = [];
 if ($canViewTeamResults) {
     $where[] = '1=1';
+    if ((string)($currentAdmin['role'] ?? '') === 'manager') {
+        $where[] = 'a.department = ?';
+        $params[] = (string)($currentAdmin['department'] ?? '');
+    }
 } else {
     $where[] = "r.employee_id = ?";
     $params[] = (int)$currentAdmin['id'];
@@ -224,7 +244,10 @@ include __DIR__ . '/includes/header.php';
             <select class="form-control" name="role"><?php foreach ($roles as $key => $label): ?><option value="<?php echo h($key); ?>"><?php echo h($label); ?></option><?php endforeach; ?></select>
             <select class="form-control" name="period_id"><option value="">بدون دوره</option><?php foreach ($periods as $period): ?><option value="<?php echo h($period['id']); ?>"><?php echo h($period['title']); ?></option><?php endforeach; ?></select>
             <input class="form-control" name="due_date" placeholder="مهلت YYYY-MM-DD">
+            <input class="form-control" type="number" min="1" max="20" name="max_attempts" value="1" placeholder="حداکثر دفعات">
+            <input class="form-control" name="description" placeholder="توضیح تخصیص (اختیاری)">
             <label><input type="checkbox" name="allow_retake" value="1"> اجازه تکرار</label>
+            <label><input type="checkbox" name="show_result_to_employee" value="1"> نمایش نتیجه به پرسنل</label>
             <label><input type="checkbox" name="allow_duplicate" value="1"> ثبت تکراری آگاهانه</label>
             <button class="btn btn-success">اختصاص آزمون</button>
         </form>

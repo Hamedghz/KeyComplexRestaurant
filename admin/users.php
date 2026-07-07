@@ -22,6 +22,8 @@ $permissionCatalog = [
     'employee_closed_period_override' => 'Closed Period Override',
     'employee_assessment_catalog' => 'Assessment Catalog',
     'employee_assessment_results' => 'Assessment Results',
+    'employee_test_assignments' => 'Test Assignments',
+    'employee_test_reports' => 'Test Reports and Export',
     'analytics' => 'Analytics',
     'system_update' => 'System Update',
 ];

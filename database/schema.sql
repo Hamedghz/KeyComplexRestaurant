@@ -504,6 +504,7 @@ INSERT IGNORE INTO `admin_navigation_items` (`group_key`,`group_order`,`item_key
 ('surveys_evaluation',60,'employee_tests','employee-tests.php','🧠','employee',60,NULL),
 ('surveys_evaluation',60,'employee_performance','employee-performance.php','📈','manager',70,NULL),
 ('surveys_evaluation',60,'employee_assessments','employee-assessments.php','🧪','manager',80,NULL),
+('surveys_evaluation',60,'hr_test_report','hr-test-report.php','📊','manager',90,NULL),
 ('pool_leads_group',70,'pool_leads','pool-leads.php','🏊','manager',10,NULL),
 ('analytics_reports',80,'analytics','analytics.php','📈','manager',10,NULL),
 ('analytics_reports',80,'analytics_traffic_sources','analytics-traffic-sources.php','🧭','manager',20,NULL),

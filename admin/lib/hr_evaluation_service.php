@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/admin_schema.php';
+require_once ROOT_PATH . '/database/seeds/seed_restaurant_hr_tests.php';
 
 function hrEvaluationInputTypes(): array {
     return [
@@ -56,6 +57,10 @@ function hrVisibilityLevels(): array {
 
 function hrAssessmentCategories(): array {
     return [
+        'behavioral' => 'رفتاری و سازمانی',
+        'skills' => 'مهارتی رستوران',
+        'knowledge' => 'دانش شغلی و ایمنی',
+        'organizational' => 'نگرش سازمانی',
         'personality' => 'شخصیت و رفتار',
         'commitment' => 'تعهد سازمانی',
         'satisfaction' => 'رضایت شغلی',
@@ -79,9 +84,15 @@ function hrAssessmentScoringMethods(): array {
 function hrTestAnswerTypes(): array {
     return [
         'scale_5' => 'مقیاس ۱ تا ۵',
+        'likert_5' => 'لیکرت پنج گزینه‌ای',
         'scale_7' => 'مقیاس ۱ تا ۷',
         'yes_no' => 'بله / خیر',
+        'true_false' => 'درست / غلط',
+        'single_choice' => 'تک گزینه‌ای',
         'multiple_choice' => 'چند گزینه ای',
+        'multi_choice' => 'چند انتخابی',
+        'scenario' => 'سناریویی',
+        'numeric' => 'عددی',
         'text' => 'متنی',
     ];
 }
@@ -125,6 +136,96 @@ function hrJsonEncode(array $value): string {
 
 function hrClampScore($value, float $min = 0, float $max = 100): float {
     return max($min, min($max, (float)$value));
+}
+
+function hrAssessmentDisclaimer(): string {
+    return 'این نتیجه برای تحلیل سازمانی، آموزشی و مدیریتی استفاده می‌شود و جایگزین ارزیابی تخصصی، پزشکی یا روان‌شناسی نیست.';
+}
+
+function hrTestAudit(PDO $db, string $action, string $entityType, ?int $entityId, array $context = [], ?int $actorId = null): void {
+    try {
+        if (!adminTableExists($db, 'hr_test_audit_logs')) {
+            return;
+        }
+        $ip = trim((string)($_SERVER['REMOTE_ADDR'] ?? ''));
+        $description = trim((string)($context['description'] ?? ''));
+        unset($context['description']);
+        $stmt = $db->prepare('INSERT INTO hr_test_audit_logs (actor_id,action,entity_type,entity_id,description,context_json,ip_hash) VALUES (?,?,?,?,?,?,?)');
+        $stmt->execute([
+            $actorId ?: (int)($_SESSION['admin_id'] ?? 0) ?: null,
+            substr($action, 0, 80),
+            substr($entityType, 0, 80),
+            $entityId ?: null,
+            $description !== '' ? substr($description, 0, 500) : null,
+            $context ? hrJsonEncode($context) : null,
+            $ip !== '' ? hash('sha256', $ip . '|' . (string)hrSetting($db, 'app_key', 'key-restaurant')) : null,
+        ]);
+    } catch (Throwable $e) {
+        safeAdminLog('HR test audit write failed: ' . $e->getMessage());
+    }
+}
+
+function hrEnsureProfessionalTestSchema(PDO $db): void {
+    $migration = ROOT_PATH . '/database/migrations/2026_06_30_professional_hr_tests.sql';
+    if (is_readable($migration)) {
+        $sql = (string)file_get_contents($migration);
+        $sql = preg_replace('/^\s*--.*$/m', '', $sql) ?: $sql;
+        foreach (array_filter(array_map('trim', explode(';', $sql))) as $statement) {
+            try {
+                $db->exec($statement);
+            } catch (Throwable $e) {
+                safeAdminLog('Professional HR schema statement failed: ' . $e->getMessage());
+            }
+        }
+    }
+
+    ensureTableColumns('hr_assessment_tests', [
+        'category_id' => 'int(11) UNSIGNED DEFAULT NULL AFTER `category`',
+        'analysis_type' => "varchar(60) NOT NULL DEFAULT 'positive' AFTER `scoring_method_type`",
+        'show_disclaimer' => 'tinyint(1) NOT NULL DEFAULT 1 AFTER `allow_retake`',
+        'created_by' => 'int(11) UNSIGNED DEFAULT NULL AFTER `show_disclaimer`',
+        'updated_by' => 'int(11) UNSIGNED DEFAULT NULL AFTER `created_by`',
+        'deleted_at' => 'datetime DEFAULT NULL AFTER `updated_at`',
+        'deleted_by' => 'int(11) UNSIGNED DEFAULT NULL AFTER `deleted_at`',
+    ]);
+    ensureTableColumns('hr_test_dimensions', [
+        'status' => "varchar(30) NOT NULL DEFAULT 'active' AFTER `negative_label`",
+        'updated_at' => 'timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER `created_at`',
+        'created_by' => 'int(11) UNSIGNED DEFAULT NULL AFTER `updated_at`',
+        'updated_by' => 'int(11) UNSIGNED DEFAULT NULL AFTER `created_by`',
+        'deleted_at' => 'datetime DEFAULT NULL AFTER `updated_by`',
+        'deleted_by' => 'int(11) UNSIGNED DEFAULT NULL AFTER `deleted_at`',
+    ]);
+    ensureTableColumns('hr_test_questions', [
+        'question_type' => "varchar(40) DEFAULT NULL AFTER `answer_type`",
+        'score_direction' => "varchar(20) DEFAULT NULL AFTER `scoring_direction`",
+        'is_reverse_scored' => 'tinyint(1) NOT NULL DEFAULT 0 AFTER `score_direction`',
+        'is_required' => 'tinyint(1) NOT NULL DEFAULT 1 AFTER `is_reverse_scored`',
+        'is_critical' => 'tinyint(1) NOT NULL DEFAULT 0 AFTER `is_required`',
+        'role_visibility' => 'varchar(500) DEFAULT NULL AFTER `is_critical`',
+        'status' => "varchar(30) NOT NULL DEFAULT 'active' AFTER `is_active`",
+        'created_by' => 'int(11) UNSIGNED DEFAULT NULL AFTER `updated_at`',
+        'updated_by' => 'int(11) UNSIGNED DEFAULT NULL AFTER `created_by`',
+        'deleted_at' => 'datetime DEFAULT NULL AFTER `updated_by`',
+        'deleted_by' => 'int(11) UNSIGNED DEFAULT NULL AFTER `deleted_at`',
+    ]);
+    ensureTableColumns('hr_test_assignments', [
+        'target_type' => "varchar(40) NOT NULL DEFAULT 'employee' AFTER `test_id`",
+        'target_id' => 'varchar(120) DEFAULT NULL AFTER `target_type`',
+        'branch_id' => 'int(11) UNSIGNED DEFAULT NULL AFTER `role`',
+        'shift_code' => 'varchar(100) DEFAULT NULL AFTER `branch_id`',
+        'manager_id' => 'int(11) UNSIGNED DEFAULT NULL AFTER `shift_code`',
+        'max_attempts' => 'int(11) UNSIGNED NOT NULL DEFAULT 1 AFTER `allow_retake`',
+        'show_result_to_employee' => 'tinyint(1) NOT NULL DEFAULT 0 AFTER `max_attempts`',
+        'description' => 'text DEFAULT NULL AFTER `show_result_to_employee`',
+        'deleted_at' => 'datetime DEFAULT NULL AFTER `updated_at`',
+        'deleted_by' => 'int(11) UNSIGNED DEFAULT NULL AFTER `deleted_at`',
+    ]);
+    ensureTableColumns('hr_test_responses', [
+        'attempt_id' => 'int(11) UNSIGNED DEFAULT NULL AFTER `assignment_id`',
+        'deleted_at' => 'datetime DEFAULT NULL AFTER `updated_at`',
+        'deleted_by' => 'int(11) UNSIGNED DEFAULT NULL AFTER `deleted_at`',
+    ]);
 }
 
 function hrPerformanceSourceWeights(PDO $db): array {
@@ -403,15 +504,12 @@ function hrEnsureEvaluationSchema(PDO $db): void {
         'idx_eval_category_group' => 'INDEX `idx_eval_category_group` (`category_group`)',
     ]);
     if (adminIndexExists($db, 'employee_evaluations', 'uniq_eval_once') && !adminIndexExists($db, 'employee_evaluations', 'uniq_eval_once_form')) {
-        try {
-            $db->exec('ALTER TABLE `employee_evaluations` DROP INDEX `uniq_eval_once`');
-        } catch (Throwable $e) {
-            safeAdminLog('Dropping legacy employee_evaluations unique index failed: ' . $e->getMessage());
-        }
+        safeAdminLog('Legacy employee evaluation unique index retained; destructive index replacement is disabled.');
+    } else {
+        adminEnsureIndexes('employee_evaluations', [
+            'uniq_eval_once_form' => 'UNIQUE KEY `uniq_eval_once_form` (`evaluator_id`, `employee_id`, `period_id`, `category_id`, `period_month`)',
+        ]);
     }
-    adminEnsureIndexes('employee_evaluations', [
-        'uniq_eval_once_form' => 'UNIQUE KEY `uniq_eval_once_form` (`evaluator_id`, `employee_id`, `period_id`, `category_id`, `period_month`)',
-    ]);
     adminEnsureIndexes('employee_score_history', [
         'idx_score_period_final' => 'INDEX `idx_score_period_final` (`period_id`, `final_score`)',
     ]);
@@ -419,6 +517,7 @@ function hrEnsureEvaluationSchema(PDO $db): void {
         'idx_employee_performance_period_score' => 'INDEX `idx_employee_performance_period_score` (`period_id`, `score`)',
     ]);
 
+    hrEnsureProfessionalTestSchema($db);
     hrSeedDefaultEvaluationData($db);
     hrSeedDefaultAssessmentTests($db);
 }
@@ -894,22 +993,22 @@ function hrDefaultAssessmentTests(): array {
 }
 
 function hrFetchAssessmentTests(PDO $db, bool $activeOnly = false): array {
-    $sql = 'SELECT * FROM hr_assessment_tests';
+    $sql = 'SELECT * FROM hr_assessment_tests WHERE deleted_at IS NULL';
     if ($activeOnly) {
-        $sql .= ' WHERE is_active = 1';
+        $sql .= ' AND is_active = 1';
     }
     $sql .= ' ORDER BY sort_order ASC, title ASC';
     return $db->query($sql)->fetchAll();
 }
 
 function hrFetchTestDimensions(PDO $db, int $testId): array {
-    $stmt = $db->prepare('SELECT * FROM hr_test_dimensions WHERE test_id = ? ORDER BY sort_order ASC, title ASC');
+    $stmt = $db->prepare('SELECT * FROM hr_test_dimensions WHERE test_id = ? AND deleted_at IS NULL ORDER BY sort_order ASC, title ASC');
     $stmt->execute([$testId]);
     return $stmt->fetchAll();
 }
 
 function hrFetchTestQuestions(PDO $db, int $testId, bool $activeOnly = false): array {
-    $sql = 'SELECT q.*, d.code AS dimension_code, d.title AS dimension_title FROM hr_test_questions q LEFT JOIN hr_test_dimensions d ON d.id = q.dimension_id WHERE q.test_id = ?';
+    $sql = 'SELECT q.*, d.code AS dimension_code, d.title AS dimension_title FROM hr_test_questions q LEFT JOIN hr_test_dimensions d ON d.id = q.dimension_id WHERE q.test_id = ? AND q.deleted_at IS NULL';
     if ($activeOnly) {
         $sql .= ' AND q.is_active = 1';
     }
@@ -928,10 +1027,10 @@ function hrTestQuestionOptions(array $question): array {
     if ($type === 'scale_7') {
         return array_map(static fn($score) => ['label' => (string)$score, 'score' => (float)$score], range(1, 7));
     }
-    if ($type === 'scale_5') {
+    if (in_array($type, ['scale_5', 'likert_5'], true)) {
         return array_map(static fn($score) => ['label' => (string)$score, 'score' => (float)$score], range(1, 5));
     }
-    if ($type === 'yes_no') {
+    if (in_array($type, ['yes_no', 'true_false'], true)) {
         return [['label' => 'بله', 'score' => 1], ['label' => 'خیر', 'score' => 0]];
     }
     return [];
@@ -942,59 +1041,158 @@ function hrNormalizeTestAnswer(array $question, $raw): array {
     if ($type === 'text') {
         return ['value' => trim((string)$raw), 'score' => 0.0, 'scored' => false];
     }
-    if ($type === 'multiple_choice') {
+    if ($type === 'multi_choice') {
+        $options = hrTestQuestionOptions($question);
+        $selectedIndexes = is_array($raw) ? $raw : [];
+        $score = 0.0; $labels = [];
+        foreach ($selectedIndexes as $index) {
+            if (isset($options[(int)$index])) { $score += (float)$options[(int)$index]['score']; $labels[] = (string)$options[(int)$index]['label']; }
+        }
+        return ['value' => $labels, 'score' => $score, 'scored' => true];
+    }
+    if (in_array($type, ['multiple_choice', 'single_choice', 'scenario', 'scale_5', 'likert_5', 'scale_7'], true)) {
         $options = hrTestQuestionOptions($question);
         $index = (int)$raw;
         $selected = $options[$index] ?? null;
         return ['value' => $selected['label'] ?? '', 'score' => (float)($selected['score'] ?? 0), 'scored' => true];
     }
-    if ($type === 'yes_no') {
-        $value = in_array((string)$raw, ['1', 'yes', 'بله', '0'], true) ? (string)$raw : 'no';
-        $yes = in_array($value, ['1', 'yes', 'بله', '0'], true);
+    if (in_array($type, ['yes_no', 'true_false'], true)) {
+        $value = in_array((string)$raw, ['1', 'yes', 'بله', 'true', 'درست'], true) ? (string)$raw : 'no';
+        $yes = in_array($value, ['1', 'yes', 'بله', 'true', 'درست'], true);
         return ['value' => $yes ? 'yes' : 'no', 'score' => $yes ? 1.0 : 0.0, 'scored' => true];
     }
-    $max = $type === 'scale_7' ? 7.0 : 5.0;
+    $max = $type === 'scale_7' ? 7.0 : ($type === 'numeric' ? 100.0 : 5.0);
     $value = hrClampScore($raw, 1, $max);
     return ['value' => $value, 'score' => $value, 'scored' => true];
 }
 
+function hrQuestionVisibleToRole(array $question, string $role): bool {
+    $raw = trim((string)($question['role_visibility'] ?? ''));
+    if ($raw === '') return true;
+    $roles = array_filter(array_map('trim', explode(',', $raw)));
+    return in_array($role, $roles, true);
+}
+
+function hrPositiveResultLevel(float $score): string {
+    if ($score < 40) return 'ضعیف';
+    if ($score < 60) return 'نیازمند بهبود';
+    if ($score < 75) return 'قابل قبول';
+    if ($score < 90) return 'خوب';
+    return 'عالی';
+}
+
+function hrRiskResultLevel(float $score): string {
+    if ($score < 40) return 'ریسک پایین';
+    if ($score < 65) return 'نیازمند پایش';
+    if ($score < 80) return 'ریسک متوسط';
+    return 'ریسک بالا';
+}
+
+function hrTestResultLevel(string $testCode, string $analysisType, float $score): string {
+    if ($testCode === 'MENU_KNOWLEDGE') {
+        if ($score < 60) return 'نیازمند آموزش فوری';
+        if ($score < 75) return 'قابل قبول';
+        if ($score < 90) return 'خوب';
+        return 'مسلط';
+    }
+    if ($testCode === 'ORG_EQ') {
+        if ($score < 50) return 'نیازمند آموزش جدی';
+        if ($score < 70) return 'قابل قبول با نیاز به بهبود';
+        if ($score < 85) return 'خوب';
+        return 'عالی';
+    }
+    return $analysisType === 'risk' ? hrRiskResultLevel($score) : hrPositiveResultLevel($score);
+}
+
 function hrCalculateTestScore(PDO $db, int $testId, array $answers): array {
+    $testStmt = $db->prepare('SELECT * FROM hr_assessment_tests WHERE id = ? AND deleted_at IS NULL LIMIT 1');
+    $testStmt->execute([$testId]);
+    $test = $testStmt->fetch();
+    if (!$test) {
+        throw new RuntimeException('آزمون انتخاب‌شده معتبر نیست.');
+    }
     $questions = hrFetchTestQuestions($db, $testId, true);
     $dimensions = [];
+    $warnings = [];
     foreach ($questions as $question) {
         $questionId = (int)$question['id'];
+        if (!array_key_exists($questionId, $answers) || $answers[$questionId] === '' || $answers[$questionId] === null) continue;
         $normalized = hrNormalizeTestAnswer($question, $answers[$questionId] ?? null);
-        if (!$normalized['scored']) {
-            continue;
-        }
+        if (!$normalized['scored']) continue;
         $dimensionKey = (string)($question['dimension_code'] ?: 'general');
-        $dimensionTitle = (string)($question['dimension_title'] ?: 'General');
+        $dimensionTitle = (string)($question['dimension_title'] ?: 'عمومی');
         $options = hrTestQuestionOptions($question);
         $scores = array_column($options, 'score');
         $min = $scores ? (float)min($scores) : 0.0;
         $max = $scores ? (float)max($scores) : (((string)$question['answer_type'] === 'scale_7') ? 7.0 : 5.0);
-        if ((string)($question['scoring_direction'] ?? 'positive') === 'negative') {
-            $score = $max + $min - (float)$normalized['score'];
-        } else {
-            $score = (float)$normalized['score'];
-        }
+        $reverse = (int)($question['is_reverse_scored'] ?? 0) === 1
+            || in_array((string)($question['score_direction'] ?? $question['scoring_direction'] ?? 'positive'), ['negative', 'reverse'], true);
+        $score = $reverse ? $max + $min - (float)$normalized['score'] : (float)$normalized['score'];
         $weight = max(0.0, (float)($question['weight'] ?? 1));
         $normalizedScore = $max > $min ? (($score - $min) / ($max - $min)) * 100 : $score;
         $dimensions[$dimensionKey]['title'] = $dimensionTitle;
         $dimensions[$dimensionKey]['weighted_total'] = ($dimensions[$dimensionKey]['weighted_total'] ?? 0) + ($normalizedScore * $weight);
         $dimensions[$dimensionKey]['weight_sum'] = ($dimensions[$dimensionKey]['weight_sum'] ?? 0) + $weight;
+        if ((int)($question['is_critical'] ?? 0) === 1 && $normalizedScore < 50) {
+            $warnings[] = 'نیاز به بازآموزی فوری در سؤال بحرانی: ' . (string)$question['question_text'];
+        }
     }
     $breakdown = [];
-    foreach ($dimensions as $code => $dimension) {
-        $breakdown[$code] = [
-            'title' => $dimension['title'],
-            'score' => round($dimension['weighted_total'] / max(1, $dimension['weight_sum']), 2),
-        ];
+    foreach ($dimensions as $dimensionCode => $dimension) {
+        $breakdown[$dimensionCode] = ['title' => $dimension['title'], 'score' => round($dimension['weighted_total'] / max(1, $dimension['weight_sum']), 2)];
     }
     $final = $breakdown ? round(array_sum(array_column($breakdown, 'score')) / count($breakdown), 2) : 0.0;
-    uasort($breakdown, static fn($a, $b) => ((float)($b['score'] ?? 0)) <=> ((float)($a['score'] ?? 0)));
-    $profile = $breakdown ? implode(' / ', array_slice(array_keys($breakdown), 0, 3)) : 'manual';
-    return ['dimension_scores' => $breakdown, 'normalized_score' => $final, 'profile_output' => $profile];
+    uasort($breakdown, static fn($a, $b) => ((float)$b['score']) <=> ((float)$a['score']));
+    $code = strtoupper((string)($test['test_code'] ?? ''));
+    $analysisType = (string)($test['analysis_type'] ?? 'positive');
+    $profile = $breakdown ? (string)array_key_first($breakdown) : 'manual';
+    if ($code === 'DISC' && count($breakdown) > 1) {
+        $keys = array_keys($breakdown);
+        $profile = abs((float)$breakdown[$keys[0]]['score'] - (float)$breakdown[$keys[1]]['score']) < 10 ? $keys[0] . $keys[1] : $keys[0];
+    } elseif ($code === 'MBTI_ORG') {
+        $profile = '';
+        foreach ([['E','I'], ['S','N'], ['T','F'], ['J','P']] as [$left, $right]) {
+            $profile .= (float)($breakdown[$left]['score'] ?? 0) >= (float)($breakdown[$right]['score'] ?? 0) ? $left : $right;
+        }
+    }
+    if ($code === 'ORG_COMMITMENT' && (float)($breakdown['affective']['score'] ?? 100) < 60 && (float)($breakdown['continuance']['score'] ?? 0) >= 75) {
+        $warnings[] = 'الگوی ماندگاری غیرانگیزشی محتمل است؛ این هشدار نیازمند گفت‌وگوی حمایتی HR است و قضاوت قطعی درباره فرد نیست.';
+    }
+    if ($code === 'JOB_SATISFACTION') {
+        foreach ($breakdown as $dimension) if ((float)$dimension['score'] < 60) $warnings[] = 'ناحیه ریسک رضایت شغلی: ' . (string)$dimension['title'];
+    }
+    $strengths = [];
+    $improvements = [];
+    foreach ($breakdown as $dimensionCode => $dimension) {
+        $label = (string)($dimension['title'] ?? $dimensionCode);
+        $score = (float)$dimension['score'];
+        if (($analysisType === 'risk' && $score < 40) || ($analysisType !== 'risk' && $score >= 75)) $strengths[] = $label;
+        if (($analysisType === 'risk' && $score >= 65) || ($analysisType !== 'risk' && $score < 60)) $improvements[] = $label;
+    }
+    $recommendations = [];
+    if (adminTableExists($db, 'hr_test_recommendations')) {
+        $stmt = $db->prepare("SELECT dimension_code,recommendation_text,min_score,max_score FROM hr_test_recommendations WHERE test_id=? AND status='active' AND deleted_at IS NULL ORDER BY sort_order,id");
+        $stmt->execute([$testId]);
+        foreach ($stmt->fetchAll() as $row) {
+            $dimensionCode = (string)($row['dimension_code'] ?? '');
+            $score = $dimensionCode !== '' ? (float)($breakdown[$dimensionCode]['score'] ?? $final) : $final;
+            if (($row['min_score'] === null || $score >= (float)$row['min_score']) && ($row['max_score'] === null || $score <= (float)$row['max_score'])) {
+                $recommendations[] = (string)$row['recommendation_text'];
+            }
+        }
+    }
+    if (!$recommendations && $improvements) $recommendations[] = 'برای بهبود «' . implode('، ', array_slice($improvements, 0, 3)) . '» برنامه آموزشی و بازخورد عملی تنظیم شود.';
+    return [
+        'dimension_scores' => $breakdown,
+        'normalized_score' => $final,
+        'profile_output' => $profile,
+        'result_level' => hrTestResultLevel($code, $analysisType, $final),
+        'strengths' => $strengths,
+        'improvements' => $improvements,
+        'recommendations' => array_values(array_unique($recommendations)),
+        'warnings' => $warnings,
+        'disclaimer' => hrAssessmentDisclaimer(),
+    ];
 }
 
 function hrAssignmentAppliesToEmployee(array $assignment, array $employee): bool {
@@ -1016,8 +1214,12 @@ function hrFetchAssignedTests(PDO $db, array $employee): array {
             r.id AS response_id, r.status AS response_status, r.normalized_score, r.profile_output, r.submitted_at
         FROM hr_test_assignments a
         JOIN hr_assessment_tests t ON t.id = a.test_id
-        LEFT JOIN hr_test_responses r ON r.assignment_id = a.id AND r.employee_id = ?
-        WHERE a.status = 'active'
+        LEFT JOIN hr_test_responses r ON r.id = (
+            SELECT r2.id FROM hr_test_responses r2
+            WHERE r2.assignment_id = a.id AND r2.employee_id = ? AND r2.deleted_at IS NULL
+            ORDER BY r2.id DESC LIMIT 1
+        )
+        WHERE a.status = 'active' AND a.deleted_at IS NULL
           AND t.is_active = 1
           AND (a.employee_id = ? OR a.employee_id IS NULL)
           AND (a.department IS NULL OR a.department = '' OR a.department = ?)
@@ -1029,11 +1231,24 @@ function hrFetchAssignedTests(PDO $db, array $employee): array {
 }
 
 function hrSaveTestResponse(PDO $db, array $employee, int $assignmentId, array $answers, bool $submit): array {
-    $stmt = $db->prepare('SELECT a.*, t.allow_retake AS test_allow_retake FROM hr_test_assignments a JOIN hr_assessment_tests t ON t.id = a.test_id WHERE a.id = ? AND a.status = "active" LIMIT 1');
+    $stmt = $db->prepare('SELECT a.*, t.allow_retake AS test_allow_retake FROM hr_test_assignments a JOIN hr_assessment_tests t ON t.id = a.test_id WHERE a.id = ? AND a.status = "active" AND a.deleted_at IS NULL AND t.deleted_at IS NULL LIMIT 1');
     $stmt->execute([$assignmentId]);
     $assignment = $stmt->fetch();
     if (!$assignment || !hrAssignmentAppliesToEmployee($assignment, $employee)) {
         throw new RuntimeException('آزمون انتخاب شده برای شما فعال نیست.');
+    }
+    if (!empty($assignment['due_date']) && (string)$assignment['due_date'] < date('Y-m-d')) {
+        throw new RuntimeException('مهلت انجام این آزمون به پایان رسیده است.');
+    }
+    $questions = hrFetchTestQuestions($db, (int)$assignment['test_id'], true);
+    if ($submit) {
+        foreach ($questions as $question) {
+            $questionId = (int)$question['id'];
+            if (!hrQuestionVisibleToRole($question, (string)($employee['role'] ?? 'employee'))) continue;
+            if ((int)($question['is_required'] ?? 1) === 1 && (!array_key_exists($questionId, $answers) || $answers[$questionId] === '' || $answers[$questionId] === null)) {
+                throw new RuntimeException('پاسخ همه سؤال‌های الزامی باید ثبت شود.');
+            }
+        }
     }
     $existing = $db->prepare('SELECT * FROM hr_test_responses WHERE assignment_id = ? AND employee_id = ? ORDER BY id DESC LIMIT 1');
     $existing->execute([$assignmentId, (int)$employee['id']]);
@@ -1041,9 +1256,30 @@ function hrSaveTestResponse(PDO $db, array $employee, int $assignmentId, array $
     if ($response && (string)$response['status'] === 'submitted' && !(int)$assignment['allow_retake'] && !(int)$assignment['test_allow_retake']) {
         throw new RuntimeException('این آزمون قبلا ثبت نهایی شده است.');
     }
+    $completedAttempts = $db->prepare("SELECT COUNT(*) FROM hr_test_attempts WHERE assignment_id=? AND employee_id=? AND status='submitted' AND deleted_at IS NULL");
+    $completedAttempts->execute([$assignmentId, (int)$employee['id']]);
+    $completedCount = (int)$completedAttempts->fetchColumn();
+    $maxAttempts = max(1, (int)($assignment['max_attempts'] ?? 1));
+    if ($submit && $completedCount >= $maxAttempts) {
+        throw new RuntimeException('تعداد دفعات مجاز انجام آزمون به پایان رسیده است.');
+    }
     $score = $submit ? hrCalculateTestScore($db, (int)$assignment['test_id'], $answers) : ['dimension_scores' => [], 'normalized_score' => null, 'profile_output' => null];
+    $db->beginTransaction();
+    try {
+        $attemptStmt = $db->prepare("SELECT * FROM hr_test_attempts WHERE assignment_id=? AND employee_id=? AND status='in_progress' AND deleted_at IS NULL ORDER BY id DESC LIMIT 1 FOR UPDATE");
+        $attemptStmt->execute([$assignmentId, (int)$employee['id']]);
+        $attempt = $attemptStmt->fetch();
+        if (!$attempt) {
+            $db->prepare('INSERT INTO hr_test_attempts (assignment_id,test_id,employee_id,attempt_no,status,started_at,submitted_at) VALUES (?,?,?,?,?,NOW(),' . ($submit ? 'NOW()' : 'NULL') . ')')
+                ->execute([$assignmentId, (int)$assignment['test_id'], (int)$employee['id'], $completedCount + 1, $submit ? 'submitted' : 'in_progress']);
+            $attemptId = (int)$db->lastInsertId();
+        } else {
+            $attemptId = (int)$attempt['id'];
+            if ($submit) $db->prepare("UPDATE hr_test_attempts SET status='submitted',submitted_at=NOW(),updated_at=NOW() WHERE id=?")->execute([$attemptId]);
+        }
     $payload = [
         'assignment_id' => $assignmentId,
+        'attempt_id' => $attemptId,
         'test_id' => (int)$assignment['test_id'],
         'employee_id' => (int)$employee['id'],
         'period_id' => $assignment['period_id'] ?: null,
@@ -1055,15 +1291,23 @@ function hrSaveTestResponse(PDO $db, array $employee, int $assignmentId, array $
     ];
     if ($response && (string)$response['status'] !== 'submitted') {
         $payload['id'] = (int)$response['id'];
-        $db->prepare('UPDATE hr_test_responses SET status=:status,answers_json=:answers_json,dimension_scores_json=:dimension_scores_json,profile_output=:profile_output,normalized_score=:normalized_score,submitted_at=' . ($submit ? 'NOW()' : 'submitted_at') . ',updated_at=NOW() WHERE id=:id')
-            ->execute(array_intersect_key($payload, array_flip(['id','status','answers_json','dimension_scores_json','profile_output','normalized_score'])));
+        $db->prepare('UPDATE hr_test_responses SET attempt_id=:attempt_id,status=:status,answers_json=:answers_json,dimension_scores_json=:dimension_scores_json,profile_output=:profile_output,normalized_score=:normalized_score,submitted_at=' . ($submit ? 'NOW()' : 'submitted_at') . ',updated_at=NOW() WHERE id=:id')
+            ->execute(array_intersect_key($payload, array_flip(['id','attempt_id','status','answers_json','dimension_scores_json','profile_output','normalized_score'])));
     } else {
-        $db->prepare('INSERT INTO hr_test_responses (assignment_id,test_id,employee_id,period_id,status,answers_json,dimension_scores_json,profile_output,normalized_score,started_at,submitted_at) VALUES (:assignment_id,:test_id,:employee_id,:period_id,:status,:answers_json,:dimension_scores_json,:profile_output,:normalized_score,NOW(),' . ($submit ? 'NOW()' : 'NULL') . ')')
-            ->execute(array_intersect_key($payload, array_flip(['assignment_id','test_id','employee_id','period_id','status','answers_json','dimension_scores_json','profile_output','normalized_score'])));
+        $db->prepare('INSERT INTO hr_test_responses (assignment_id,attempt_id,test_id,employee_id,period_id,status,answers_json,dimension_scores_json,profile_output,normalized_score,started_at,submitted_at) VALUES (:assignment_id,:attempt_id,:test_id,:employee_id,:period_id,:status,:answers_json,:dimension_scores_json,:profile_output,:normalized_score,NOW(),' . ($submit ? 'NOW()' : 'NULL') . ')')
+            ->execute(array_intersect_key($payload, array_flip(['assignment_id','attempt_id','test_id','employee_id','period_id','status','answers_json','dimension_scores_json','profile_output','normalized_score'])));
     }
     if ($submit) {
         $db->prepare('INSERT INTO hr_assessment_results (employee_id,test_id,completion_date,result_summary,score_value,result_type,visibility,recorded_by) VALUES (?,?,?,?,?,?,?,?)')
             ->execute([(int)$employee['id'], (int)$assignment['test_id'], date('Y-m-d'), hrJsonEncode($score['dimension_scores']), (string)$score['normalized_score'], (string)$score['profile_output'], 'manager', (int)$employee['id']]);
+        $db->prepare('INSERT INTO hr_test_results (attempt_id,assignment_id,test_id,employee_id,overall_score,result_level,profile_code,dimension_scores_json,strengths_json,improvements_json,recommendations_json,warnings_json,analysis_disclaimer,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,"final") ON DUPLICATE KEY UPDATE overall_score=VALUES(overall_score),result_level=VALUES(result_level),profile_code=VALUES(profile_code),dimension_scores_json=VALUES(dimension_scores_json),strengths_json=VALUES(strengths_json),improvements_json=VALUES(improvements_json),recommendations_json=VALUES(recommendations_json),warnings_json=VALUES(warnings_json),analysis_disclaimer=VALUES(analysis_disclaimer),updated_at=NOW()')
+            ->execute([$attemptId,$assignmentId,(int)$assignment['test_id'],(int)$employee['id'],$score['normalized_score'],$score['result_level'],$score['profile_output'],hrJsonEncode($score['dimension_scores']),hrJsonEncode($score['strengths']),hrJsonEncode($score['improvements']),hrJsonEncode($score['recommendations']),hrJsonEncode($score['warnings']),$score['disclaimer']]);
+    }
+        hrTestAudit($db, $submit ? 'submit' : 'save_progress', 'test_attempt', $attemptId, ['assignment_id' => $assignmentId, 'test_id' => (int)$assignment['test_id']], (int)$employee['id']);
+        $db->commit();
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) $db->rollBack();
+        throw $e;
     }
     return $score;
 }
