@@ -1,0 +1,30 @@
+-- KEY restaurant KPI definition seed foundation. Additive only.
+
+CREATE TABLE IF NOT EXISTS `hr_kpi_definitions` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `kpi_key` varchar(120) NOT NULL,
+  `kpi_code` varchar(120) DEFAULT NULL,
+  `title` varchar(190) NOT NULL,
+  `department` varchar(100) DEFAULT NULL,
+  `role_code` varchar(100) DEFAULT NULL,
+  `category` varchar(100) NOT NULL DEFAULT 'performance',
+  `formula_key` varchar(120) DEFAULT NULL,
+  `unit` varchar(60) DEFAULT NULL,
+  `unit_label` varchar(80) DEFAULT NULL,
+  `target_value` decimal(14,4) DEFAULT NULL,
+  `weight` decimal(6,2) NOT NULL DEFAULT 0.00,
+  `direction` enum('positive','negative') NOT NULL DEFAULT 'positive',
+  `calculation_type` varchar(80) NOT NULL DEFAULT 'simple_percent',
+  `rag_green_threshold` decimal(8,2) DEFAULT NULL,
+  `rag_yellow_threshold` decimal(8,2) DEFAULT NULL,
+  `description` text DEFAULT NULL,
+  `standard_key` varchar(120) DEFAULT NULL,
+  `status` varchar(30) NOT NULL DEFAULT 'active',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_hr_kpi_definition_key` (`kpi_key`),
+  UNIQUE KEY `uniq_hr_kpi_definition_code` (`kpi_code`),
+  KEY `idx_hr_kpi_definition_status` (`status`, `category`),
+  KEY `idx_hr_kpi_definition_scope` (`department`, `role_code`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

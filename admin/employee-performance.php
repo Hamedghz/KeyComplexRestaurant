@@ -1,4 +1,7 @@
 <?php
+require_once __DIR__ . '/lib/admin_schema.php';
+redirectTo('hr-performance-summary.php');
+return;
 require_once __DIR__ . '/lib/hr_evaluation_service.php';
 $currentAdmin = adminGuard('manager');
 $pageTitle = 'عملکرد کارکنان';

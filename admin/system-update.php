@@ -1,5 +1,7 @@
 <?php
 require_once __DIR__ . '/lib/admin_schema.php';
+require_once __DIR__ . '/lib/system_seed_runner.php';
+require_once __DIR__ . '/lib/hr/tests/test_seed_reset_service.php';
 $currentAdmin = adminGuard('super_admin');
 $pageTitle = 'بروزرسانی سیستم';
 $db = adminDb();
@@ -41,6 +43,17 @@ function systemUpdateEnsureMigrationTable(PDO $db): void {
         UNIQUE KEY `uniq_schema_migrations_name` (`migration_name`),
         KEY `idx_schema_migrations_executed_at` (`executed_at`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $columns = [
+        'checksum' => '`checksum` varchar(64) DEFAULT NULL AFTER `migration_name`',
+        'batch' => '`batch` int NOT NULL DEFAULT 1 AFTER `checksum`',
+        'status' => '`status` varchar(30) NOT NULL DEFAULT \'completed\' AFTER `batch`',
+        'error_message' => '`error_message` text DEFAULT NULL AFTER `status`',
+    ];
+    foreach ($columns as $column => $definition) {
+        if (!systemSeedColumnExists($db, 'schema_migrations', $column)) {
+            $db->exec('ALTER TABLE `schema_migrations` ADD COLUMN ' . $definition);
+        }
+    }
 }
 
 function systemUpdateMigrationFiles(): array {
@@ -53,7 +66,7 @@ function systemUpdateMigrationFiles(): array {
 
 function systemUpdateExecutedMigrations(PDO $db): array {
     systemUpdateEnsureMigrationTable($db);
-    $stmt = $db->query('SELECT migration_name FROM schema_migrations ORDER BY migration_name ASC');
+    $stmt = $db->query("SELECT migration_name FROM schema_migrations WHERE status='completed' ORDER BY migration_name ASC");
     return $stmt ? $stmt->fetchAll(PDO::FETCH_COLUMN, 0) : [];
 }
 
@@ -256,20 +269,29 @@ function systemUpdateRunPendingMigrations(PDO $db): array {
             $results['errors'][] = $name . ': فایل migration قابل خواندن نیست.';
             break;
         }
+        $checksum = hash_file('sha256', $file) ?: null;
         try {
             foreach (systemUpdateSplitSql($sql) as $statement) {
-                if (preg_match('/^\s*(?:INSERT(?:\s+IGNORE)?|REPLACE)\s+INTO\s+`?([a-zA-Z0-9_]+)`?/i', $statement, $seedMatch)
-                    && adminTableHasRows($seedMatch[1])) {
-                    safeAdminLog('SEED SKIPPED: ' . $seedMatch[1] . ' already contains data');
-                    continue;
+                try {
+                    $db->exec($statement);
+                } catch (PDOException $e) {
+                    $driverCode = (int)($e->errorInfo[1] ?? 0);
+                    $isSingleRowInsert = preg_match('/^\s*INSERT\s+INTO\b[\s\S]*\bVALUES\s*\([^;]*\)\s*$/i', $statement) === 1
+                        && preg_match('/\)\s*,\s*\(/', $statement) !== 1;
+                    if ($isSingleRowInsert && $driverCode === 1062) {
+                        safeAdminLog('Migration duplicate row safely skipped in ' . $name . ': ' . $e->getMessage());
+                        continue;
+                    }
+                    throw $e;
                 }
-                $db->exec($statement);
             }
-            $stmt = $db->prepare('INSERT INTO schema_migrations (migration_name) VALUES (:name)');
-            $stmt->execute(['name' => $name]);
+            $stmt = $db->prepare("INSERT INTO schema_migrations (migration_name,checksum,batch,status,error_message,executed_at) VALUES (:name,:checksum,1,'completed',NULL,NOW()) ON DUPLICATE KEY UPDATE checksum=VALUES(checksum),status='completed',error_message=NULL,executed_at=NOW()");
+            $stmt->execute(['name' => $name, 'checksum' => $checksum]);
             $results['ran'][] = $name;
         } catch (Throwable $e) {
             $results['errors'][] = $name . ': اجرای migration ناموفق بود.';
+            $stmt = $db->prepare("INSERT INTO schema_migrations (migration_name,checksum,batch,status,error_message,executed_at) VALUES (:name,:checksum,1,'failed',:error,NOW()) ON DUPLICATE KEY UPDATE checksum=VALUES(checksum),status='failed',error_message=VALUES(error_message),executed_at=NOW()");
+            $stmt->execute(['name' => $name, 'checksum' => $checksum, 'error' => mb_substr($e->getMessage(), 0, 2000)]);
             safeAdminLog('Migration failed in system update for ' . $name . ': ' . $e->getMessage());
             break;
         }
@@ -281,6 +303,8 @@ function systemUpdateMigrationStatus(PDO $db): array {
     $files = array_map('basename', systemUpdateMigrationFiles());
     $executed = systemUpdateExecutedMigrations($db);
     $pending = array_values(array_diff($files, $executed));
+    $failedStmt = $db->query("SELECT migration_name FROM schema_migrations WHERE status='failed' ORDER BY migration_name");
+    $failed = $failedStmt ? $failedStmt->fetchAll(PDO::FETCH_COLUMN, 0) : [];
     return [
         'directory' => ROOT_PATH . '/database/migrations',
         'files' => $files,
@@ -288,16 +312,23 @@ function systemUpdateMigrationStatus(PDO $db): array {
         'pending' => $pending,
         'executed_count' => count($executed),
         'pending_count' => count($pending),
+        'failed' => $failed,
+        'failed_count' => count($failed),
     ];
 }
 
 $message = '';
 $error = '';
 $runResults = ['ran' => [], 'errors' => []];
+$testResetResult = null;
+$testResetPreview = [];
 $importResult = null;
 $limitedModeMessage = 'تابع exec یا توابع مشابه روی هاست غیرفعال است؛ عملیات وابسته به git/tar/mysqldump اجرا نمی‌شود و سیستم در حالت محدود اجرا می‌شود.';
 $disabledFunctions = systemUpdateDisabledFunctions();
 $version = systemUpdateVersion();
+systemUpdateEnsureMigrationTable($db);
+ensureSeedRegistrySchema($db);
+registerDefaultSeeds($db);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
@@ -309,6 +340,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($runResults['errors']) {
                 $error = implode(' ', $runResults['errors']);
             }
+            systemSetupLog($db, 'run_pending_migrations', (int)$currentAdmin['id'], $runResults['errors'] ? 'failed' : 'completed', 'اجرای migrationهای در انتظار', $runResults, $runResults['errors'] ? implode(' ', $runResults['errors']) : null);
+        } elseif ($action === 'register_default_seeds') {
+            registerDefaultSeeds($db);
+            systemSetupLog($db, 'register_default_seeds', (int)$currentAdmin['id'], 'completed', 'Seedهای پیش‌فرض ثبت شدند.');
+            $message = 'Seedهای پیش‌فرض ثبت یا به‌روزرسانی شدند.';
+        } elseif ($action === 'run_pending_seeds') {
+            $seedRunResults = runPendingSeeds($db, ['actor_id' => (int)$currentAdmin['id']]);
+            systemSetupLog($db, 'run_pending_seeds', (int)$currentAdmin['id'], $seedRunResults['errors'] ? 'failed' : 'completed', 'اجرای Seedهای در انتظار', $seedRunResults, $seedRunResults['errors'] ? implode(' ', $seedRunResults['errors']) : null);
+            $message = $seedRunResults['ran'] ? 'Seedهای در انتظار اجرا شدند.' : 'Seed در انتظار اجرا وجود ندارد.';
+            if ($seedRunResults['errors']) $error = implode(' ', $seedRunResults['errors']);
+        } elseif ($action === 'run_all_hr_seeds') {
+            $seedRunResults = ['ran' => [], 'errors' => []];
+            foreach (array_keys(systemSeedDefinitions()) as $seedKey) {
+                try { $seedRunResults['ran'][$seedKey] = runSeed($db, $seedKey, ['actor_id' => (int)$currentAdmin['id']]); }
+                catch (Throwable $e) { $seedRunResults['errors'][$seedKey] = 'اجرای Seed ناموفق بود.'; break; }
+            }
+            systemSetupLog($db, 'run_all_hr_seeds', (int)$currentAdmin['id'], $seedRunResults['errors'] ? 'failed' : 'completed', 'اجرای مجدد Seedهای HR', $seedRunResults, $seedRunResults['errors'] ? implode(' ', $seedRunResults['errors']) : null);
+            $message = 'اجرای Seedهای HR پایان یافت.';
+            if ($seedRunResults['errors']) $error = implode(' ', $seedRunResults['errors']);
+        } elseif ($action === 'force_rerun_seed') {
+            $seedKey = (string)($_POST['seed_key'] ?? '');
+            $seedResult = runSeed($db, $seedKey, ['actor_id' => (int)$currentAdmin['id']]);
+            systemSetupLog($db, 'force_rerun_seed', (int)$currentAdmin['id'], 'completed', 'اجرای مجدد Seed: ' . $seedKey, $seedResult);
+            $message = 'Seed انتخاب‌شده دوباره اجرا شد.';
+        } elseif ($action === 'repair_hr_schema') {
+            require_once __DIR__ . '/lib/hr/bootstrap.php';
+            hrEnsureCoreSchema($db);
+            systemSetupLog($db, 'repair_hr_schema', (int)$currentAdmin['id'], 'completed', 'ساختار افزایشی HR بررسی و ترمیم شد.');
+            $message = 'ساختار افزایشی HR بررسی و ترمیم شد.';
+        } elseif ($action === 'reset_hr_test_seed_only') {
+            $testResetResult = hrResetRestaurantOrganizationalTests($db, (int)$currentAdmin['id'], [
+                'confirmation' => (string)($_POST['reset_confirmation'] ?? ''),
+            ]);
+            $message = 'Reset بانک آزمون سازمانی اجرا شد؛ آرشیو، حذف کنترل‌شده و Seed جدید تکمیل شد.';
+        } elseif ($action === 'reset_all_hr_domain_seed_only') {
+            throw new RuntimeException('Reset کل Seedهای HR هنوز غیرفعال است و باید در فاز جداگانه با آرشیو کامل پیاده‌سازی شود.');
         } elseif ($action === 'import_sql') {
             if (($_POST['confirm_sql_import'] ?? '') !== '1') {
                 throw new RuntimeException('برای اجرای فایل، تأیید ایمپورت SQL الزامی است.');
@@ -360,6 +427,34 @@ try {
     safeAdminLog('System update status failed: ' . $e->getMessage());
 }
 
+try {
+    $registeredSeeds = listRegisteredSeeds($db);
+    $seedStatus = ['total' => count($registeredSeeds), 'completed' => 0, 'pending' => 0, 'failed' => 0, 'skipped' => 0, 'changed' => 0];
+    foreach ($registeredSeeds as $registeredSeed) {
+        $status = (string)($registeredSeed['status'] ?? 'pending');
+        if (isset($seedStatus[$status])) $seedStatus[$status]++;
+        if ($status === 'pending' && !empty($registeredSeed['executed_at'])) $seedStatus['changed']++;
+        try {
+            if (($registeredSeed['checksum'] ?? '') !== calculateSeedChecksum((string)$registeredSeed['seed_file'])) $seedStatus['changed']++;
+        } catch (Throwable $e) { $seedStatus['changed']++; }
+    }
+    $logsStmt = $db->query('SELECT * FROM setup_run_logs ORDER BY id DESC LIMIT 20');
+    $setupLogs = $logsStmt ? $logsStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+} catch (Throwable $e) {
+    $registeredSeeds = [];
+    $seedStatus = ['total' => 0, 'completed' => 0, 'pending' => 0, 'failed' => 0, 'skipped' => 0, 'changed' => 0];
+    $setupLogs = [];
+    $error = $error ?: 'وضعیت Seedها قابل خواندن نیست.';
+    safeAdminLog('Seed status failed: ' . $e->getMessage());
+}
+
+try {
+    $testResetPreview = hrDetectExistingTestTables($db);
+} catch (Throwable $e) {
+    $testResetPreview = [];
+    safeAdminLog('HR test reset preview failed: ' . $e->getMessage());
+}
+
 include __DIR__ . '/includes/header.php';
 ?>
 <div class="card">
@@ -408,6 +503,59 @@ include __DIR__ . '/includes/header.php';
         </form>
     </div>
 </div>
+<div class="card">
+    <div class="card-header"><h2>وضعیت Schema و Seed</h2></div>
+    <div class="card-body">
+        <div class="stats-row">
+            <div class="stat-card stat-primary"><div class="stat-content"><h3><?php echo (int)$seedStatus['total']; ?></h3><p>Seed ثبت‌شده</p></div></div>
+            <div class="stat-card stat-success"><div class="stat-content"><h3><?php echo (int)$seedStatus['completed']; ?></h3><p>Seed تکمیل‌شده</p></div></div>
+            <div class="stat-card stat-warning"><div class="stat-content"><h3><?php echo (int)$seedStatus['pending']; ?></h3><p>Seed در انتظار</p></div></div>
+            <div class="stat-card stat-danger"><div class="stat-content"><h3><?php echo (int)$seedStatus['failed']; ?></h3><p>Seed ناموفق</p></div></div>
+        </div>
+        <p>Seedهای دارای checksum تغییرکرده: <strong><?php echo (int)$seedStatus['changed']; ?></strong></p>
+        <p>schema_migrations: <strong>آماده</strong> | seed_registry: <strong>آماده</strong> | setup_run_logs: <strong>آماده</strong></p>
+        <form method="post" class="quick-actions">
+            <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>">
+            <button class="quick-action-btn" name="update_action" value="register_default_seeds"><span>ثبت Seedهای پیش‌فرض</span></button>
+            <button class="quick-action-btn" name="update_action" value="run_pending_seeds"><span>اجرای Seedهای در انتظار</span></button>
+            <button class="quick-action-btn" name="update_action" value="run_all_hr_seeds"><span>اجرای Seedهای HR</span></button>
+            <button class="quick-action-btn" name="update_action" value="repair_hr_schema"><span>ترمیم Schema افزایشی HR</span></button>
+        </form>
+        <div class="table-responsive"><table class="table"><thead><tr><th>Seed</th><th>فایل</th><th>وضعیت</th><th>Inserted</th><th>Updated</th><th>Skipped</th><th>عملیات</th></tr></thead><tbody>
+        <?php foreach ($registeredSeeds as $seed): ?><tr>
+            <td><?php echo h($seed['seed_key']); ?></td><td><?php echo h($seed['seed_file']); ?></td><td><?php echo h($seed['status']); ?></td>
+            <td><?php echo (int)$seed['rows_inserted']; ?></td><td><?php echo (int)$seed['rows_updated']; ?></td><td><?php echo (int)$seed['rows_skipped']; ?></td>
+            <td><form method="post"><input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>"><input type="hidden" name="seed_key" value="<?php echo h($seed['seed_key']); ?>"><button class="btn btn-sm" name="update_action" value="force_rerun_seed">اجرای مجدد</button></form></td>
+        </tr><?php endforeach; ?></tbody></table></div>
+    </div>
+</div>
+<div class="card">
+    <div class="card-header"><h2>اقدامات محافظت‌شده HR</h2></div>
+    <div class="card-body">
+        <p class="text-muted">Reset بانک آزمون فقط جدول‌های HR/test را لمس می‌کند، قبل از حذف آرشیو می‌سازد، Seed قدیمی را غیرفعال نگه می‌دارد و Seed جدید آزمون‌های سازمانی رستوران KEY را اجرا می‌کند.</p>
+        <div class="table-responsive" style="margin-bottom:12px"><table class="table"><thead><tr><th>جدول مجاز</th><th>ردیف فعلی</th></tr></thead><tbody>
+            <?php foreach ($testResetPreview as $previewTable => $preview): ?><tr><td><?php echo h($previewTable); ?></td><td><?php echo (int)($preview['rows'] ?? 0); ?></td></tr><?php endforeach; ?>
+            <?php if (!$testResetPreview): ?><tr><td colspan="2" class="text-muted">جدول HR/test موجود یا قابل شمارش پیدا نشد.</td></tr><?php endif; ?>
+        </tbody></table></div>
+        <form method="post" onsubmit="return confirm('Reset بانک آزمون HR اجرا شود؟ این عملیات ابتدا آرشیو می‌سازد و فقط داده‌های HR/test را حذف می‌کند.');" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>">
+            <input type="text" name="reset_confirmation" placeholder="RESET_HR_TESTS" autocomplete="off" required>
+            <button class="btn btn-danger" name="update_action" value="reset_hr_test_seed_only" type="submit">Reset HR Test Seed Only</button>
+        </form>
+        <button class="btn" type="button" disabled>Reset All HR Seeds Only</button>
+        <div class="alert" style="margin-top:12px;background:#fff3cd;color:#856404">حالت Replace Database یک ابزار بازیابی اضطراری و خارج از جریان HR است. هیچ عملیات HR Setup از آن استفاده نمی‌کند.</div>
+        <?php if ($testResetResult): ?>
+            <div class="alert alert-info" style="margin-top:12px">
+                آرشیو: <?php echo (int)($testResetResult['archive']['rows_archived'] ?? 0); ?> ردیف،
+                حذف کنترل‌شده: <?php echo (int)($testResetResult['delete']['rows_deleted'] ?? 0); ?> ردیف،
+                سوال‌های جدید: <?php echo (int)($testResetResult['new_seed_verification']['questions'] ?? 0); ?>،
+                گزینه‌ها: <?php echo (int)($testResetResult['new_seed_verification']['options'] ?? 0); ?>.
+                وضعیت تایید: <?php echo !empty($testResetResult['new_seed_verification']['ok']) && !empty($testResetResult['old_seed_verification']['ok']) ? 'موفق' : 'نیازمند بررسی'; ?>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
+<div class="card"><div class="card-header"><h2>گزارش اجرای Setup</h2></div><div class="card-body table-responsive"><table class="table"><thead><tr><th>نوع</th><th>وضعیت</th><th>خلاصه</th><th>زمان</th></tr></thead><tbody><?php foreach ($setupLogs as $log): ?><tr><td><?php echo h($log['run_type']); ?></td><td><?php echo h($log['status']); ?></td><td><?php echo h($log['summary']); ?></td><td><?php echo h($log['created_at']); ?></td></tr><?php endforeach; ?></tbody></table></div></div>
 <div class="card">
     <div class="card-header"><h2>ایمپورت فایل SQL</h2></div>
     <div class="card-body">

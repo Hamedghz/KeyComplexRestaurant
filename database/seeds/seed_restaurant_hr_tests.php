@@ -2,7 +2,15 @@
 /**
  * Idempotent professional restaurant HR test seed.
  * This file never deletes data. Existing records are updated by stable codes.
+ *
+ * Legacy status:
+ * FINAL-3 disables this old question bank. The canonical organizational tests
+ * seed is database/seeds/seed_key_restaurant_organizational_tests.php.
  */
+
+if (!defined('LEGACY_HR_TESTS_SEED_DISABLED')) {
+    define('LEGACY_HR_TESTS_SEED_DISABLED', true);
+}
 
 function hrRestaurantTestDefinitions(): array {
     return [
@@ -24,6 +32,19 @@ function hrRestaurantTestDefinitions(): array {
 }
 
 function hrSeedRestaurantProfessionalTests(PDO $db, int $actorId = 0): array {
+    if (LEGACY_HR_TESTS_SEED_DISABLED) {
+        if (function_exists('safeAdminLog')) {
+            safeAdminLog('Legacy restaurant HR tests seed was blocked; use key_restaurant_organizational_tests.');
+        }
+        return [
+            'tests' => 0,
+            'questions' => 0,
+            'skipped' => 1,
+            'legacy_disabled' => true,
+            'message' => 'بانک آزمون قدیمی غیرفعال شده است. از Seed جدید آزمون‌های سازمانی رستوران KEY استفاده کنید.',
+        ];
+    }
+
     $categoryStmt = $db->prepare('INSERT INTO hr_test_categories (title,slug,description,status,sort_order,created_by,updated_by) VALUES (?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE title=VALUES(title),description=VALUES(description),status=VALUES(status),sort_order=VALUES(sort_order),updated_by=VALUES(updated_by)');
     foreach ([['رفتاری و سازمانی','behavioral',10],['مهارتی رستوران','skills',20],['دانش شغلی و ایمنی','knowledge',30],['نگرش سازمانی','organizational',40]] as [$title,$slug,$sort]) {
         $categoryStmt->execute([$title,$slug,'ارزیابی سازمانی، آموزشی و مدیریتی؛ غیرکلینیکی.','active',$sort,$actorId ?: null,$actorId ?: null]);

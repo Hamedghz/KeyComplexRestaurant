@@ -97,6 +97,8 @@ include __DIR__ . '/includes/header.php';
     <div class="stat-card stat-info"><div class="stat-content"><h3><?php echo h($currentAdmin['role']); ?></h3><p><?php echo h($currentAdmin['department'] ?? ''); ?></p></div></div>
 </div>
 
+<?php include __DIR__ . '/includes/planner-widget.php'; ?>
+
 <div class="card">
     <div class="card-header"><h2>فیلتر دوره</h2><a class="btn btn-primary" href="employee-evaluations.php">ارزیابی</a></div>
     <div class="card-body">

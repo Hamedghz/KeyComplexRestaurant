@@ -1260,7 +1260,13 @@ function hrSaveTestResponse(PDO $db, array $employee, int $assignmentId, array $
     $completedAttempts->execute([$assignmentId, (int)$employee['id']]);
     $completedCount = (int)$completedAttempts->fetchColumn();
     $maxAttempts = max(1, (int)($assignment['max_attempts'] ?? 1));
-    if ($submit && $completedCount >= $maxAttempts) {
+    $approvedRetakes = 0;
+    if (adminTableExists($db, 'hr_test_retake_requests')) {
+        $approvedStmt = $db->prepare("SELECT COUNT(*) FROM hr_test_retake_requests WHERE assignment_id=? AND employee_id=? AND status='approved'");
+        $approvedStmt->execute([$assignmentId, (int)$employee['id']]);
+        $approvedRetakes = (int)$approvedStmt->fetchColumn();
+    }
+    if ($submit && $completedCount >= ($maxAttempts + $approvedRetakes)) {
         throw new RuntimeException('تعداد دفعات مجاز انجام آزمون به پایان رسیده است.');
     }
     $score = $submit ? hrCalculateTestScore($db, (int)$assignment['test_id'], $answers) : ['dimension_scores' => [], 'normalized_score' => null, 'profile_output' => null];

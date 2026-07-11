@@ -499,12 +499,13 @@ INSERT IGNORE INTO `admin_navigation_items` (`group_key`,`group_order`,`item_key
 ('surveys_evaluation',60,'surveys','surveys.php','📝','admin',10,NULL),
 ('surveys_evaluation',60,'survey_responses','survey-responses.php','📨','manager',20,NULL),
 ('surveys_evaluation',60,'feedback','feedback.php','⭐','manager',30,NULL),
-('surveys_evaluation',60,'evaluation_builder','evaluation-builder.php','🧭','admin',40,'["evaluation-builder.php","employee-evaluation-settings.php"]'),
-('surveys_evaluation',60,'employee_evaluations','employee-evaluations.php','📝','employee',50,NULL),
-('surveys_evaluation',60,'employee_tests','employee-tests.php','🧠','employee',60,NULL),
-('surveys_evaluation',60,'employee_performance','employee-performance.php','📈','manager',70,NULL),
-('surveys_evaluation',60,'employee_assessments','employee-assessments.php','🧪','manager',80,NULL),
-('surveys_evaluation',60,'hr_test_report','hr-test-report.php','📊','manager',90,NULL),
+('hr_performance_goals',65,'hr_dashboard','hr-dashboard.php','📌','employee',5,'["hr-dashboard.php"]'),
+('hr_performance_goals',65,'hr_tests_bank','hr-tests-bank.php','🧠','admin',10,'["hr-tests-bank.php","hr-test-questions.php","hr-test-assignments.php","hr-my-tests.php","hr-test-results.php","hr-test-personnel-report.php","employee-tests.php","employee-assessments.php","hr-test-report.php","evaluation-builder.php"]'),
+('hr_performance_goals',65,'hr_role_duties','hr-role-duties.php','✅','manager',20,'["hr-role-duties.php","hr-checklist-templates.php","hr-checklist-assignments.php","hr-checklist-submissions.php","hr-checklist-approvals.php","hr-checklist-progress.php"]'),
+('hr_performance_goals',65,'hr_kpi_definitions','hr-kpi-definitions.php','📈','manager',30,'["hr-kpi-definitions.php","hr-kpi-assignments.php","hr-kpi-entries.php","hr-kpi-scores.php","hr-kpi-reports.php","employee-performance.php"]'),
+('hr_performance_goals',65,'hr_planner_mine','planner.php','📅','employee',40,'["planner.php","planner-today.php","planner-assigned.php","planner-report.php","hr-planner-mine.php","hr-planner-today.php","hr-planner-tomorrow.php","hr-planner-overdue.php","hr-planner-referred.php","hr-planner-reports.php"]'),
+('hr_performance_goals',65,'hr_okr_objectives','okr-objectives.php','🎯','manager',50,'["okr-objectives.php","okr-key-results.php","okr-actions.php","okr-progress.php","tmo-review.php","tmo-dashboard.php","hr-okr-objectives.php","hr-okr-key-results.php","hr-okr-actions.php","hr-okr-progress.php","hr-tmo-reviews.php"]'),
+('hr_performance_goals',65,'hr_performance_summary','hr-performance-summary.php','📊','manager',60,'["hr-performance-summary.php","employee-performance.php"]'),
 ('pool_leads_group',70,'pool_leads','pool-leads.php','🏊','manager',10,NULL),
 ('analytics_reports',80,'analytics','analytics.php','📈','manager',10,NULL),
 ('analytics_reports',80,'analytics_traffic_sources','analytics-traffic-sources.php','🧭','manager',20,NULL),
@@ -889,6 +890,564 @@ CREATE TABLE IF NOT EXISTS `crm_customer_statuses` (
   KEY `idx_crm_status_active_order` (`is_active`, `sort_order`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `hr_roles` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `role_code` varchar(100) NOT NULL,
+  `title_fa` varchar(190) NOT NULL,
+  `title_en` varchar(190) DEFAULT NULL,
+  `department` varchar(100) NOT NULL,
+  `parent_role_code` varchar(100) DEFAULT NULL,
+  `level` tinyint(3) UNSIGNED NOT NULL DEFAULT 0,
+  `is_managerial` tinyint(1) NOT NULL DEFAULT 0,
+  `description` text DEFAULT NULL,
+  `source_label` varchar(190) DEFAULT NULL,
+  `status` varchar(30) NOT NULL DEFAULT 'active',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_hr_role_code` (`role_code`),
+  KEY `idx_hr_roles_parent` (`parent_role_code`),
+  KEY `idx_hr_roles_department` (`department`, `status`, `level`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_periods` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `title` varchar(180) NOT NULL,
+  `period_type` enum('daily','shift','weekly','monthly','quarterly','yearly','custom') NOT NULL DEFAULT 'monthly',
+  `starts_at` datetime DEFAULT NULL,
+  `ends_at` datetime DEFAULT NULL,
+  `jalali_label` varchar(120) DEFAULT NULL,
+  `status` varchar(30) NOT NULL DEFAULT 'active',
+  `created_by` int(11) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_hr_periods_type_status` (`period_type`, `status`, `starts_at`, `ends_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_dynamic_fields` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `module_key` varchar(100) NOT NULL,
+  `entity_type` varchar(100) NOT NULL,
+  `entity_id` int(11) UNSIGNED DEFAULT NULL,
+  `field_key` varchar(120) NOT NULL,
+  `label` varchar(190) NOT NULL,
+  `field_type` enum('text','textarea','number','select','multi_select','checkbox','date','json') NOT NULL DEFAULT 'text',
+  `options_json` longtext DEFAULT NULL,
+  `is_required` tinyint(1) NOT NULL DEFAULT 0,
+  `default_value` longtext DEFAULT NULL,
+  `weight` decimal(8,2) DEFAULT NULL,
+  `visible_to` enum('employee','manager','hr','tmo','admin','all') NOT NULL DEFAULT 'all',
+  `sort_order` int(11) NOT NULL DEFAULT 0,
+  `status` varchar(30) NOT NULL DEFAULT 'active',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_hr_dynamic_field` (`module_key`, `entity_type`, `entity_id`, `field_key`),
+  KEY `idx_hr_dynamic_fields_lookup` (`module_key`, `entity_type`, `status`, `sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_dynamic_field_values` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `field_id` int(11) UNSIGNED NOT NULL,
+  `module_key` varchar(100) NOT NULL,
+  `entity_type` varchar(100) NOT NULL,
+  `entity_id` int(11) UNSIGNED NOT NULL,
+  `subject_user_id` int(11) UNSIGNED DEFAULT NULL,
+  `value_json` longtext DEFAULT NULL,
+  `submitted_by` int(11) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_hr_dynamic_values_entity` (`module_key`, `entity_type`, `entity_id`),
+  KEY `idx_hr_dynamic_values_subject` (`subject_user_id`, `field_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_audit_logs` (
+  `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `module_key` varchar(100) NOT NULL,
+  `entity_type` varchar(100) NOT NULL,
+  `entity_id` int(11) UNSIGNED DEFAULT NULL,
+  `action` varchar(100) NOT NULL,
+  `actor_user_id` int(11) UNSIGNED DEFAULT NULL,
+  `old_value_json` longtext DEFAULT NULL,
+  `new_value_json` longtext DEFAULT NULL,
+  `ip_hash` char(64) DEFAULT NULL,
+  `user_agent_hash` char(64) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_hr_audit_entity` (`module_key`, `entity_type`, `entity_id`, `created_at`),
+  KEY `idx_hr_audit_actor` (`actor_user_id`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_module_settings` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `module_key` varchar(100) NOT NULL,
+  `setting_key` varchar(120) NOT NULL,
+  `setting_value_json` longtext DEFAULT NULL,
+  `updated_by` int(11) UNSIGNED DEFAULT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_hr_module_setting` (`module_key`, `setting_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `business_standards` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `standard_key` varchar(120) NOT NULL,
+  `standard_group` varchar(120) NOT NULL,
+  `title` varchar(190) NOT NULL,
+  `description` text DEFAULT NULL,
+  `source_label` varchar(190) DEFAULT NULL,
+  `status` varchar(30) NOT NULL DEFAULT 'active',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_business_standard_key` (`standard_key`),
+  KEY `idx_business_standards_group_status` (`standard_group`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `business_standard_items` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `standard_id` int(11) UNSIGNED NOT NULL,
+  `item_key` varchar(120) NOT NULL,
+  `title` varchar(190) NOT NULL,
+  `description` text DEFAULT NULL,
+  `sort_order` int(11) NOT NULL DEFAULT 0,
+  `status` varchar(30) NOT NULL DEFAULT 'active',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_business_standard_item` (`standard_id`, `item_key`),
+  KEY `idx_business_standard_items_status` (`standard_id`, `status`, `sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `planner_tasks` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `title` varchar(190) NOT NULL,
+  `description` text DEFAULT NULL,
+  `owner_user_id` int(11) UNSIGNED NOT NULL,
+  `assigned_by` int(11) UNSIGNED DEFAULT NULL,
+  `department` varchar(100) DEFAULT NULL,
+  `role_key` varchar(80) DEFAULT NULL,
+  `task_date` date NOT NULL,
+  `due_at` datetime DEFAULT NULL,
+  `period_id` int(11) UNSIGNED DEFAULT NULL,
+  `shift_code` varchar(60) DEFAULT NULL,
+  `priority` enum('low','normal','high','urgent') NOT NULL DEFAULT 'normal',
+  `status` enum('pending','in_progress','done','cancelled','postponed','overdue') NOT NULL DEFAULT 'pending',
+  `progress_percent` tinyint(3) UNSIGNED NOT NULL DEFAULT 0,
+  `source_module` varchar(100) DEFAULT NULL,
+  `source_entity_type` varchar(100) DEFAULT NULL,
+  `source_entity_id` int(11) UNSIGNED DEFAULT NULL,
+  `linked_objective_id` int(11) UNSIGNED DEFAULT NULL,
+  `linked_kr_id` int(11) UNSIGNED DEFAULT NULL,
+  `linked_action_id` int(11) UNSIGNED DEFAULT NULL,
+  `linked_kpi_score_id` int(11) UNSIGNED DEFAULT NULL,
+  `linked_checklist_item_id` int(11) UNSIGNED DEFAULT NULL,
+  `linked_customer_id` int(11) UNSIGNED DEFAULT NULL,
+  `linked_followup_id` int(11) UNSIGNED DEFAULT NULL,
+  `is_recurring` tinyint(1) NOT NULL DEFAULT 0,
+  `recurrence_rule` varchar(190) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `completed_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_planner_owner_date` (`owner_user_id`, `task_date`, `status`),
+  KEY `idx_planner_assigned` (`assigned_by`, `task_date`),
+  KEY `idx_planner_department` (`department`, `role_key`, `status`),
+  KEY `idx_planner_due` (`status`, `due_at`),
+  KEY `idx_planner_source` (`source_module`, `source_entity_type`, `source_entity_id`),
+  KEY `idx_planner_links` (`linked_objective_id`, `linked_kr_id`, `linked_action_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `planner_task_logs` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `task_id` int(11) UNSIGNED NOT NULL,
+  `user_id` int(11) UNSIGNED DEFAULT NULL,
+  `action` varchar(80) NOT NULL,
+  `old_status` varchar(40) DEFAULT NULL,
+  `new_status` varchar(40) DEFAULT NULL,
+  `note` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_planner_logs_task` (`task_id`, `created_at`),
+  KEY `idx_planner_logs_user` (`user_id`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `planner_task_comments` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `task_id` int(11) UNSIGNED NOT NULL,
+  `user_id` int(11) UNSIGNED DEFAULT NULL,
+  `comment` text NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_planner_comments_task` (`task_id`, `created_at`),
+  KEY `idx_planner_comments_user` (`user_id`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_role_duties` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `duty_code` varchar(140) DEFAULT NULL,
+  `role_code` varchar(100) NOT NULL,
+  `title` varchar(190) NOT NULL,
+  `description` text DEFAULT NULL,
+  `responsibility_type` enum('daily','shift','weekly','monthly','as_needed') NOT NULL DEFAULT 'daily',
+  `priority` enum('low','medium','high','critical') NOT NULL DEFAULT 'medium',
+  `standard_key` varchar(120) DEFAULT NULL,
+  `status` varchar(30) NOT NULL DEFAULT 'active',
+  `created_by` int(11) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_hr_role_duty_code` (`duty_code`),
+  UNIQUE KEY `uniq_hr_role_duty` (`role_code`, `title`),
+  KEY `idx_hr_role_duty_status` (`status`, `role_code`),
+  KEY `idx_hr_role_duty_priority` (`priority`, `responsibility_type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_checklist_templates` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `template_key` varchar(120) NOT NULL,
+  `template_code` varchar(120) DEFAULT NULL,
+  `title` varchar(190) NOT NULL,
+  `role_code` varchar(100) DEFAULT NULL,
+  `department` varchar(100) DEFAULT NULL,
+  `period_type` enum('daily','shift','weekly','monthly','custom') NOT NULL DEFAULT 'daily',
+  `requires_manager_approval` tinyint(1) NOT NULL DEFAULT 0,
+  `requires_inspector_approval` tinyint(1) NOT NULL DEFAULT 0,
+  `items_json` longtext DEFAULT NULL,
+  `standard_key` varchar(120) DEFAULT NULL,
+  `status` varchar(30) NOT NULL DEFAULT 'active',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_hr_checklist_template_key` (`template_key`),
+  UNIQUE KEY `uniq_hr_checklist_template_code` (`template_code`),
+  KEY `idx_hr_checklist_template_status` (`status`, `role_code`),
+  KEY `idx_hr_checklist_template_period` (`period_type`, `department`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_checklist_items` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `template_id` int(11) UNSIGNED NOT NULL,
+  `template_code` varchar(120) NOT NULL,
+  `item_code` varchar(140) NOT NULL,
+  `title` varchar(190) NOT NULL,
+  `phase` varchar(60) NOT NULL DEFAULT 'during_shift',
+  `is_required` tinyint(1) NOT NULL DEFAULT 1,
+  `has_quality_score` tinyint(1) NOT NULL DEFAULT 0,
+  `max_quality_score` tinyint(3) UNSIGNED DEFAULT NULL,
+  `has_note` tinyint(1) NOT NULL DEFAULT 0,
+  `can_create_planner_task` tinyint(1) NOT NULL DEFAULT 0,
+  `sort_order` int(11) NOT NULL DEFAULT 0,
+  `status` varchar(30) NOT NULL DEFAULT 'active',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_hr_checklist_item_code` (`template_code`, `item_code`),
+  KEY `idx_hr_checklist_items_template` (`template_id`, `status`, `sort_order`),
+  KEY `idx_hr_checklist_items_phase` (`phase`, `is_required`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_checklist_categories` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `category_key` varchar(120) NOT NULL,
+  `title` varchar(190) NOT NULL,
+  `status` varchar(30) NOT NULL DEFAULT 'active',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_hr_checklist_category_key` (`category_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_checklist_assignments` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `template_id` int(11) UNSIGNED NOT NULL,
+  `assigned_scope_type` enum('employee','role','department','all') NOT NULL DEFAULT 'role',
+  `assigned_scope_id` varchar(120) DEFAULT NULL,
+  `assigned_employee_id` int(11) UNSIGNED DEFAULT NULL,
+  `period_id` int(11) UNSIGNED DEFAULT NULL,
+  `starts_at` datetime DEFAULT NULL,
+  `ends_at` datetime DEFAULT NULL,
+  `role_code` varchar(100) DEFAULT NULL,
+  `employee_id` int(11) UNSIGNED DEFAULT NULL,
+  `assigned_by` int(11) UNSIGNED DEFAULT NULL,
+  `due_date` date DEFAULT NULL,
+  `status` varchar(30) NOT NULL DEFAULT 'assigned',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_hr_checklist_assignment_scope` (`assigned_scope_type`, `assigned_scope_id`, `status`),
+  KEY `idx_hr_checklist_assignment_owner` (`assigned_employee_id`, `status`, `starts_at`),
+  KEY `idx_hr_checklist_assignment_template` (`template_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_checklist_submissions` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `assignment_id` int(11) UNSIGNED NOT NULL,
+  `template_id` int(11) UNSIGNED NOT NULL,
+  `employee_id` int(11) UNSIGNED NOT NULL,
+  `checklist_date` date NOT NULL,
+  `shift_code` varchar(60) DEFAULT NULL,
+  `completion_percent` decimal(6,2) NOT NULL DEFAULT 0.00,
+  `total_quality_score` decimal(8,2) NOT NULL DEFAULT 0.00,
+  `answers_json` longtext DEFAULT NULL,
+  `manager_id` int(11) UNSIGNED DEFAULT NULL,
+  `approval_status` varchar(30) NOT NULL DEFAULT 'pending',
+  `approval_notes` text DEFAULT NULL,
+  `status` enum('draft','submitted','manager_approved','inspector_approved','rejected') NOT NULL DEFAULT 'draft',
+  `submitted_at` datetime DEFAULT NULL,
+  `approved_at` datetime DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_hr_checklist_submission_assignment` (`assignment_id`, `status`),
+  KEY `idx_hr_checklist_submission_employee` (`employee_id`, `checklist_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_checklist_submission_items` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `submission_id` int(11) UNSIGNED NOT NULL,
+  `checklist_item_id` int(11) UNSIGNED NOT NULL,
+  `is_done` tinyint(1) NOT NULL DEFAULT 0,
+  `quality_score` decimal(6,2) DEFAULT NULL,
+  `note` text DEFAULT NULL,
+  `issue_flag` tinyint(1) NOT NULL DEFAULT 0,
+  `corrective_task_id` int(11) UNSIGNED DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_hr_submission_item` (`submission_id`, `checklist_item_id`),
+  KEY `idx_hr_submission_item_issue` (`issue_flag`, `corrective_task_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_checklist_approvals` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `submission_id` int(11) UNSIGNED NOT NULL,
+  `approver_id` int(11) UNSIGNED NOT NULL,
+  `approval_type` enum('manager','inspector') NOT NULL,
+  `status` enum('approved','rejected') NOT NULL,
+  `note` text DEFAULT NULL,
+  `approved_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_hr_checklist_approval_submission` (`submission_id`, `approval_type`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_kpi_definitions` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `kpi_key` varchar(120) DEFAULT NULL,
+  `kpi_code` varchar(120) DEFAULT NULL,
+  `code` varchar(120) DEFAULT NULL,
+  `title` varchar(190) NOT NULL,
+  `department` varchar(100) DEFAULT NULL,
+  `role_code` varchar(100) DEFAULT NULL,
+  `role_key` varchar(100) DEFAULT NULL,
+  `standard_group` varchar(120) DEFAULT NULL,
+  `category` varchar(100) NOT NULL DEFAULT 'performance',
+  `formula_key` varchar(120) DEFAULT NULL,
+  `unit` varchar(60) DEFAULT NULL,
+  `unit_label` varchar(80) DEFAULT NULL,
+  `target_value` decimal(14,4) DEFAULT NULL,
+  `min_value` decimal(14,4) DEFAULT NULL,
+  `max_value` decimal(14,4) DEFAULT NULL,
+  `weight` decimal(6,2) NOT NULL DEFAULT 0.00,
+  `direction` enum('positive','negative') NOT NULL DEFAULT 'positive',
+  `calculation_type` varchar(80) NOT NULL DEFAULT 'simple_percent',
+  `rag_green_threshold` decimal(8,2) DEFAULT NULL,
+  `rag_yellow_threshold` decimal(8,2) DEFAULT NULL,
+  `max_score_percent` decimal(8,2) NOT NULL DEFAULT 100.00,
+  `description` text DEFAULT NULL,
+  `standard_key` varchar(120) DEFAULT NULL,
+  `status` varchar(30) NOT NULL DEFAULT 'active',
+  `created_by` int(11) UNSIGNED DEFAULT NULL,
+  `updated_by` int(11) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_hr_kpi_definition_key` (`kpi_key`),
+  UNIQUE KEY `uniq_hr_kpi_definition_code` (`kpi_code`),
+  UNIQUE KEY `uniq_hr_kpi_definition_code_phase6` (`code`),
+  KEY `idx_hr_kpi_definition_status` (`status`, `category`),
+  KEY `idx_hr_kpi_definition_scope` (`department`, `role_code`, `status`),
+  KEY `idx_hr_kpi_definition_scope_phase6` (`department`, `role_key`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_kpi_assignments` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `kpi_id` int(11) UNSIGNED NOT NULL,
+  `assigned_scope_type` enum('employee','role','department','all') NOT NULL DEFAULT 'role',
+  `assigned_scope_id` varchar(120) DEFAULT NULL,
+  `employee_id` int(11) UNSIGNED DEFAULT NULL,
+  `period_id` int(11) UNSIGNED DEFAULT NULL,
+  `assigned_by` int(11) UNSIGNED DEFAULT NULL,
+  `status` varchar(30) NOT NULL DEFAULT 'active',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_hr_kpi_assignment_scope` (`assigned_scope_type`, `assigned_scope_id`, `period_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_kpi_entries` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `assignment_id` int(11) UNSIGNED NOT NULL,
+  `kpi_id` int(11) UNSIGNED NOT NULL,
+  `employee_id` int(11) UNSIGNED DEFAULT NULL,
+  `period_id` int(11) UNSIGNED DEFAULT NULL,
+  `actual_value` decimal(14,4) NOT NULL DEFAULT 0.0000,
+  `manual_score` decimal(8,2) DEFAULT NULL,
+  `note` text DEFAULT NULL,
+  `entered_by` int(11) UNSIGNED DEFAULT NULL,
+  `entered_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_hr_kpi_entry_period` (`period_id`, `employee_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_kpi_scores` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `assignment_id` int(11) UNSIGNED NOT NULL,
+  `kpi_id` int(11) UNSIGNED NOT NULL,
+  `employee_id` int(11) UNSIGNED DEFAULT NULL,
+  `period_id` int(11) UNSIGNED DEFAULT NULL,
+  `actual_value` decimal(14,4) NOT NULL DEFAULT 0.0000,
+  `target_value` decimal(14,4) DEFAULT NULL,
+  `score_percent` decimal(8,2) NOT NULL DEFAULT 0.00,
+  `weighted_score` decimal(8,2) NOT NULL DEFAULT 0.00,
+  `rag_status` enum('green','yellow','red') NOT NULL DEFAULT 'red',
+  `calculated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_hr_kpi_score_assignment` (`assignment_id`, `period_id`),
+  KEY `idx_hr_kpi_score_rag` (`rag_status`, `calculated_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_kpi_corrective_actions` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `kpi_score_id` int(11) UNSIGNED NOT NULL,
+  `planner_task_id` int(11) UNSIGNED DEFAULT NULL,
+  `title` varchar(190) NOT NULL,
+  `description` text DEFAULT NULL,
+  `owner_user_id` int(11) UNSIGNED DEFAULT NULL,
+  `due_date` date DEFAULT NULL,
+  `status` varchar(30) NOT NULL DEFAULT 'open',
+  PRIMARY KEY (`id`),
+  KEY `idx_hr_kpi_corrective_score` (`kpi_score_id`, `status`),
+  KEY `idx_hr_kpi_corrective_task` (`planner_task_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `okr_objectives` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `title` varchar(190) NOT NULL,
+  `description` text DEFAULT NULL,
+  `period_id` int(11) UNSIGNED DEFAULT NULL,
+  `target_month` char(7) DEFAULT NULL,
+  `scope_type` enum('company','department','team') NOT NULL DEFAULT 'company',
+  `scope_id` varchar(120) DEFAULT NULL,
+  `owner_user_id` int(11) UNSIGNED DEFAULT NULL,
+  `tmo_user_id` int(11) UNSIGNED DEFAULT NULL,
+  `status` enum('draft','active','reviewed','closed','archived') NOT NULL DEFAULT 'draft',
+  `manual_progress_percent` decimal(6,2) DEFAULT NULL,
+  `calculated_progress_percent` decimal(6,2) NOT NULL DEFAULT 0.00,
+  `final_progress_percent` decimal(6,2) NOT NULL DEFAULT 0.00,
+  `created_by` int(11) UNSIGNED DEFAULT NULL,
+  `updated_by` int(11) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_okr_objective_period` (`period_id`, `target_month`, `status`),
+  KEY `idx_okr_objective_tmo` (`tmo_user_id`, `status`),
+  KEY `idx_okr_objective_scope` (`scope_type`, `scope_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `okr_key_results` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `objective_id` int(11) UNSIGNED NOT NULL,
+  `title` varchar(190) NOT NULL,
+  `description` text DEFAULT NULL,
+  `kr_type` enum('numeric','descriptive') NOT NULL DEFAULT 'numeric',
+  `target_value` decimal(14,4) DEFAULT NULL,
+  `current_value` decimal(14,4) DEFAULT NULL,
+  `unit_label` varchar(80) DEFAULT NULL,
+  `weight` decimal(6,2) NOT NULL DEFAULT 1.00,
+  `manual_progress_percent` decimal(6,2) DEFAULT NULL,
+  `calculated_progress_percent` decimal(6,2) NOT NULL DEFAULT 0.00,
+  `final_progress_percent` decimal(6,2) NOT NULL DEFAULT 0.00,
+  `status` varchar(30) NOT NULL DEFAULT 'active',
+  `created_by` int(11) UNSIGNED DEFAULT NULL,
+  `updated_by` int(11) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_okr_kr_objective` (`objective_id`, `status`),
+  KEY `idx_okr_kr_progress` (`final_progress_percent`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `okr_actions` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `objective_id` int(11) UNSIGNED NOT NULL,
+  `kr_id` int(11) UNSIGNED DEFAULT NULL,
+  `title` varchar(190) NOT NULL,
+  `description` text DEFAULT NULL,
+  `owner_user_id` int(11) UNSIGNED DEFAULT NULL,
+  `department` varchar(100) DEFAULT NULL,
+  `due_date` date DEFAULT NULL,
+  `priority` enum('low','normal','high','urgent') NOT NULL DEFAULT 'normal',
+  `status` enum('pending','in_progress','done','cancelled','overdue') NOT NULL DEFAULT 'pending',
+  `planner_task_id` int(11) UNSIGNED DEFAULT NULL,
+  `manual_progress_percent` decimal(6,2) DEFAULT NULL,
+  `calculated_progress_percent` decimal(6,2) NOT NULL DEFAULT 0.00,
+  `final_progress_percent` decimal(6,2) NOT NULL DEFAULT 0.00,
+  `created_by` int(11) UNSIGNED DEFAULT NULL,
+  `updated_by` int(11) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_okr_action_objective` (`objective_id`, `status`),
+  KEY `idx_okr_action_kr` (`kr_id`, `status`),
+  KEY `idx_okr_action_planner` (`planner_task_id`),
+  KEY `idx_okr_action_owner_due` (`owner_user_id`, `due_date`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `okr_kpi_links` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `objective_id` int(11) UNSIGNED DEFAULT NULL,
+  `kr_id` int(11) UNSIGNED DEFAULT NULL,
+  `kpi_definition_id` int(11) UNSIGNED DEFAULT NULL,
+  `kpi_assignment_id` int(11) UNSIGNED DEFAULT NULL,
+  `weight` decimal(6,2) NOT NULL DEFAULT 1.00,
+  `status` varchar(30) NOT NULL DEFAULT 'active',
+  PRIMARY KEY (`id`),
+  KEY `idx_okr_kpi_link_objective` (`objective_id`, `status`),
+  KEY `idx_okr_kpi_link_kr` (`kr_id`, `status`),
+  KEY `idx_okr_kpi_link_kpi` (`kpi_definition_id`, `kpi_assignment_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `okr_progress_logs` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `entity_type` enum('objective','kr','action') NOT NULL,
+  `entity_id` int(11) UNSIGNED NOT NULL,
+  `source` enum('manual','planner','kpi','system') NOT NULL DEFAULT 'manual',
+  `old_progress_percent` decimal(6,2) DEFAULT NULL,
+  `new_progress_percent` decimal(6,2) NOT NULL DEFAULT 0.00,
+  `note` text DEFAULT NULL,
+  `created_by` int(11) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_okr_progress_entity` (`entity_type`, `entity_id`, `created_at`),
+  KEY `idx_okr_progress_source` (`source`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `tmo_reviews` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `objective_id` int(11) UNSIGNED NOT NULL,
+  `tmo_user_id` int(11) UNSIGNED NOT NULL,
+  `review_date` date NOT NULL,
+  `result_summary` text DEFAULT NULL,
+  `blockers` text DEFAULT NULL,
+  `decisions` text DEFAULT NULL,
+  `next_actions` text DEFAULT NULL,
+  `final_score` decimal(6,2) DEFAULT NULL,
+  `status` enum('draft','submitted','approved','closed') NOT NULL DEFAULT 'draft',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_tmo_review_objective` (`objective_id`, `status`),
+  KEY `idx_tmo_review_user_date` (`tmo_user_id`, `review_date`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `hr_evaluation_categories` (
   `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
   `code` varchar(80) NOT NULL,
@@ -975,8 +1534,14 @@ CREATE TABLE IF NOT EXISTS `hr_assessment_tests` (
   `assigned_role` varchar(60) DEFAULT NULL,
   `assigned_department` varchar(100) DEFAULT NULL,
   `allow_retake` tinyint(1) NOT NULL DEFAULT 0,
+  `retake_policy` enum('free','manager_approval_required') NOT NULL DEFAULT 'manager_approval_required',
+  `show_disclaimer` tinyint(1) NOT NULL DEFAULT 1,
+  `created_by` int(11) UNSIGNED DEFAULT NULL,
+  `updated_by` int(11) UNSIGNED DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` datetime DEFAULT NULL,
+  `deleted_by` int(11) UNSIGNED DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uniq_hr_assessment_test_code` (`test_code`),
   KEY `idx_hr_assessment_active_order` (`is_active`, `sort_order`)
@@ -990,8 +1555,14 @@ CREATE TABLE IF NOT EXISTS `hr_test_dimensions` (
   `description` text DEFAULT NULL,
   `positive_label` varchar(120) DEFAULT NULL,
   `negative_label` varchar(120) DEFAULT NULL,
+  `status` varchar(30) NOT NULL DEFAULT 'active',
   `sort_order` int(11) NOT NULL DEFAULT 0,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `created_by` int(11) UNSIGNED DEFAULT NULL,
+  `updated_by` int(11) UNSIGNED DEFAULT NULL,
+  `deleted_at` datetime DEFAULT NULL,
+  `deleted_by` int(11) UNSIGNED DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uniq_hr_test_dimension` (`test_id`, `code`),
   KEY `idx_hr_test_dimension_test` (`test_id`, `sort_order`)
@@ -1004,13 +1575,24 @@ CREATE TABLE IF NOT EXISTS `hr_test_questions` (
   `code` varchar(80) NOT NULL,
   `question_text` text NOT NULL,
   `answer_type` varchar(40) NOT NULL DEFAULT 'scale_5',
+  `question_type` varchar(40) DEFAULT NULL,
   `options_json` longtext DEFAULT NULL,
   `weight` decimal(7,2) NOT NULL DEFAULT 1.00,
   `scoring_direction` varchar(20) NOT NULL DEFAULT 'positive',
+  `score_direction` varchar(20) DEFAULT NULL,
+  `is_reverse_scored` tinyint(1) NOT NULL DEFAULT 0,
+  `is_required` tinyint(1) NOT NULL DEFAULT 1,
+  `is_critical` tinyint(1) NOT NULL DEFAULT 0,
+  `role_visibility` varchar(500) DEFAULT NULL,
   `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `status` varchar(30) NOT NULL DEFAULT 'active',
   `sort_order` int(11) NOT NULL DEFAULT 0,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `created_by` int(11) UNSIGNED DEFAULT NULL,
+  `updated_by` int(11) UNSIGNED DEFAULT NULL,
+  `deleted_at` datetime DEFAULT NULL,
+  `deleted_by` int(11) UNSIGNED DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uniq_hr_test_question` (`test_id`, `code`),
   KEY `idx_hr_test_question_test` (`test_id`, `is_active`, `sort_order`),
@@ -1020,6 +1602,8 @@ CREATE TABLE IF NOT EXISTS `hr_test_questions` (
 CREATE TABLE IF NOT EXISTS `hr_test_assignments` (
   `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
   `test_id` int(11) UNSIGNED NOT NULL,
+  `target_type` varchar(40) NOT NULL DEFAULT 'employee',
+  `target_id` varchar(120) DEFAULT NULL,
   `employee_id` int(11) UNSIGNED DEFAULT NULL,
   `department` varchar(100) DEFAULT NULL,
   `role` varchar(60) DEFAULT NULL,
@@ -1027,18 +1611,25 @@ CREATE TABLE IF NOT EXISTS `hr_test_assignments` (
   `due_date` date DEFAULT NULL,
   `status` varchar(40) NOT NULL DEFAULT 'active',
   `allow_retake` tinyint(1) NOT NULL DEFAULT 0,
+  `max_attempts` int(11) UNSIGNED NOT NULL DEFAULT 1,
+  `show_result_to_employee` tinyint(1) NOT NULL DEFAULT 1,
+  `description` text DEFAULT NULL,
   `assigned_by` int(11) UNSIGNED DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` datetime DEFAULT NULL,
+  `deleted_by` int(11) UNSIGNED DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_hr_test_assignment_test` (`test_id`, `status`),
   KEY `idx_hr_test_assignment_employee` (`employee_id`, `status`),
-  KEY `idx_hr_test_assignment_scope` (`department`, `role`, `status`)
+  KEY `idx_hr_test_assignment_scope` (`department`, `role`, `status`),
+  KEY `idx_hr_test_assignment_target` (`target_type`, `target_id`, `status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `hr_test_responses` (
   `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
   `assignment_id` int(11) UNSIGNED DEFAULT NULL,
+  `attempt_id` int(11) UNSIGNED DEFAULT NULL,
   `test_id` int(11) UNSIGNED NOT NULL,
   `employee_id` int(11) UNSIGNED NOT NULL,
   `period_id` int(11) UNSIGNED DEFAULT NULL,
@@ -1051,10 +1642,133 @@ CREATE TABLE IF NOT EXISTS `hr_test_responses` (
   `submitted_at` datetime DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` datetime DEFAULT NULL,
+  `deleted_by` int(11) UNSIGNED DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_hr_test_response_employee` (`employee_id`, `status`),
   KEY `idx_hr_test_response_test` (`test_id`, `submitted_at`),
   KEY `idx_hr_test_response_assignment` (`assignment_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_test_options` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `question_id` int(11) UNSIGNED NOT NULL,
+  `title` varchar(500) NOT NULL,
+  `slug` varchar(100) NOT NULL,
+  `description` text DEFAULT NULL,
+  `score_value` decimal(8,2) NOT NULL DEFAULT 0.00,
+  `dimension_code` varchar(80) DEFAULT NULL,
+  `is_correct` tinyint(1) NOT NULL DEFAULT 0,
+  `status` varchar(30) NOT NULL DEFAULT 'active',
+  `sort_order` int(11) NOT NULL DEFAULT 0,
+  `created_by` int(11) UNSIGNED DEFAULT NULL,
+  `updated_by` int(11) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` datetime DEFAULT NULL,
+  `deleted_by` int(11) UNSIGNED DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_hr_test_option` (`question_id`, `slug`),
+  KEY `idx_hr_test_option_question` (`question_id`, `status`, `sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_test_scoring_rules` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `test_id` int(11) UNSIGNED NOT NULL,
+  `title` varchar(180) NOT NULL,
+  `slug` varchar(100) NOT NULL,
+  `description` text DEFAULT NULL,
+  `rule_type` varchar(60) NOT NULL DEFAULT 'positive',
+  `rule_config_json` longtext DEFAULT NULL,
+  `status` varchar(30) NOT NULL DEFAULT 'active',
+  `sort_order` int(11) NOT NULL DEFAULT 0,
+  `created_by` int(11) UNSIGNED DEFAULT NULL,
+  `updated_by` int(11) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` datetime DEFAULT NULL,
+  `deleted_by` int(11) UNSIGNED DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_hr_test_scoring_rule` (`test_id`, `slug`),
+  KEY `idx_hr_test_scoring_test` (`test_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_test_attempts` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `assignment_id` int(11) UNSIGNED NOT NULL,
+  `test_id` int(11) UNSIGNED NOT NULL,
+  `employee_id` int(11) UNSIGNED NOT NULL,
+  `attempt_no` int(11) UNSIGNED NOT NULL DEFAULT 1,
+  `status` varchar(30) NOT NULL DEFAULT 'in_progress',
+  `started_at` datetime DEFAULT NULL,
+  `submitted_at` datetime DEFAULT NULL,
+  `expires_at` datetime DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` datetime DEFAULT NULL,
+  `deleted_by` int(11) UNSIGNED DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_hr_test_attempt_no` (`assignment_id`, `employee_id`, `attempt_no`),
+  KEY `idx_hr_test_attempt_employee` (`employee_id`, `status`),
+  KEY `idx_hr_test_attempt_test` (`test_id`, `submitted_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_test_results` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `attempt_id` int(11) UNSIGNED DEFAULT NULL,
+  `assignment_id` int(11) UNSIGNED DEFAULT NULL,
+  `test_id` int(11) UNSIGNED NOT NULL,
+  `employee_id` int(11) UNSIGNED NOT NULL,
+  `overall_score` decimal(6,2) DEFAULT NULL,
+  `result_level` varchar(120) DEFAULT NULL,
+  `profile_code` varchar(120) DEFAULT NULL,
+  `dimension_scores_json` longtext DEFAULT NULL,
+  `strengths_json` longtext DEFAULT NULL,
+  `improvements_json` longtext DEFAULT NULL,
+  `recommendations_json` longtext DEFAULT NULL,
+  `warnings_json` longtext DEFAULT NULL,
+  `analysis_disclaimer` varchar(500) DEFAULT NULL,
+  `status` varchar(30) NOT NULL DEFAULT 'final',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` datetime DEFAULT NULL,
+  `deleted_by` int(11) UNSIGNED DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_hr_test_result_attempt` (`attempt_id`),
+  KEY `idx_hr_test_result_employee` (`employee_id`, `created_at`),
+  KEY `idx_hr_test_result_test` (`test_id`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_test_retake_requests` (
+  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `assignment_id` int(11) UNSIGNED NOT NULL,
+  `test_id` int(11) UNSIGNED NOT NULL,
+  `employee_id` int(11) UNSIGNED NOT NULL,
+  `request_note` text DEFAULT NULL,
+  `status` enum('pending','approved','rejected','cancelled') NOT NULL DEFAULT 'pending',
+  `reviewed_by` int(11) UNSIGNED DEFAULT NULL,
+  `review_note` text DEFAULT NULL,
+  `reviewed_at` datetime DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_hr_test_retake_assignment` (`assignment_id`, `employee_id`, `status`),
+  KEY `idx_hr_test_retake_test` (`test_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `hr_test_audit_logs` (
+  `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `actor_id` int(11) UNSIGNED DEFAULT NULL,
+  `action` varchar(80) NOT NULL,
+  `entity_type` varchar(80) NOT NULL,
+  `entity_id` int(11) UNSIGNED DEFAULT NULL,
+  `description` varchar(500) DEFAULT NULL,
+  `context_json` longtext DEFAULT NULL,
+  `ip_hash` char(64) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_hr_test_audit_entity` (`entity_type`, `entity_id`, `created_at`),
+  KEY `idx_hr_test_audit_actor` (`actor_id`, `created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `hr_assessment_results` (
@@ -1288,10 +2002,48 @@ CREATE TABLE IF NOT EXISTS `traffic_statistics` (
 CREATE TABLE IF NOT EXISTS `schema_migrations` (
   `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
   `migration_name` varchar(255) NOT NULL,
+  `checksum` varchar(64) DEFAULT NULL,
+  `batch` int NOT NULL DEFAULT 1,
+  `status` varchar(30) NOT NULL DEFAULT 'completed',
+  `error_message` text DEFAULT NULL,
   `executed_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uniq_schema_migrations_name` (`migration_name`),
   KEY `idx_schema_migrations_executed_at` (`executed_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `seed_registry` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `seed_key` varchar(190) NOT NULL,
+  `seed_file` varchar(255) NOT NULL,
+  `checksum` varchar(64) DEFAULT NULL,
+  `batch` int NOT NULL DEFAULT 1,
+  `status` varchar(30) NOT NULL DEFAULT 'pending',
+  `rows_inserted` int NOT NULL DEFAULT 0,
+  `rows_updated` int NOT NULL DEFAULT 0,
+  `rows_skipped` int NOT NULL DEFAULT 0,
+  `error_message` text DEFAULT NULL,
+  `executed_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_seed_registry_key` (`seed_key`),
+  KEY `idx_seed_registry_status` (`status`),
+  KEY `idx_seed_registry_executed_at` (`executed_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `setup_run_logs` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `run_type` varchar(80) NOT NULL,
+  `actor_user_id` bigint unsigned DEFAULT NULL,
+  `status` varchar(30) NOT NULL,
+  `summary` text DEFAULT NULL,
+  `details_json` longtext DEFAULT NULL,
+  `error_message` text DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_setup_run_type` (`run_type`, `created_at`),
+  KEY `idx_setup_run_status` (`status`, `created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `analytics_visitors` (

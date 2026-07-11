@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/lib/hr_evaluation_service.php';
+require_once __DIR__ . '/lib/hr/tests.php';
 
 $currentAdmin = adminGuard('employee');
 $pageTitle = 'آزمون های من';
@@ -10,6 +11,7 @@ try {
     ensureAdminSchema();
     $db = adminDb();
     hrEnsureEvaluationSchema($db);
+    hrOrgTestsEnsureSchema($db);
 } catch (Throwable $e) {
     adminRenderSafeError($pageTitle, 'Employee tests bootstrap failed: ' . $e->getMessage());
     return;
@@ -53,6 +55,10 @@ try {
         if (!$selectedAssignment) {
             throw new RuntimeException('آزمون انتخاب شده معتبر نیست.');
         }
+        if ((string)($_POST['test_action'] ?? '') === 'request_retake') {
+            hrOrgTestsRequestRetake($db, $employee, $assignmentId, (string)($_POST['request_note'] ?? ''));
+            redirectTo('employee-tests.php?retake_requested=1&assignment_id=' . urlencode((string)$assignmentId));
+        }
         $answers = is_array($_POST['answer'] ?? null) ? $_POST['answer'] : [];
         $submit = (string)($_POST['test_action'] ?? 'save') === 'submit';
         hrSaveTestResponse($db, $employee, $assignmentId, $answers, $submit);
@@ -70,6 +76,9 @@ if (isset($_GET['saved'])) {
 }
 if (isset($_GET['submitted'])) {
     $message = 'آزمون با موفقیت ثبت نهایی شد.';
+}
+if (isset($_GET['retake_requested'])) {
+    $message = 'درخواست آزمون مجدد ثبت شد.';
 }
 
 include __DIR__ . '/includes/header.php';
@@ -104,6 +113,14 @@ include __DIR__ . '/includes/header.php';
     <div class="card-body">
         <?php if (($selectedAssignment['response_status'] ?? '') === 'submitted' && !(int)$selectedAssignment['allow_retake'] && !(int)$selectedAssignment['test_allow_retake']): ?>
             <p class="text-muted text-center">این آزمون قبلا ثبت نهایی شده است.</p>
+        <?php elseif (($selectedAssignment['response_status'] ?? '') === 'submitted' && ((int)$selectedAssignment['allow_retake'] || (int)$selectedAssignment['test_allow_retake'])): ?>
+            <p class="text-muted text-center">این آزمون قبلا ثبت نهایی شده است. در صورت نیاز می‌توانید درخواست آزمون مجدد ثبت کنید.</p>
+            <form method="post">
+                <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>">
+                <input type="hidden" name="assignment_id" value="<?php echo h($assignmentId); ?>">
+                <textarea class="form-control" name="request_note" placeholder="توضیح درخواست آزمون مجدد"></textarea>
+                <button class="btn btn-primary mt-3" name="test_action" value="request_retake">درخواست آزمون مجدد</button>
+            </form>
         <?php elseif (!$questions): ?>
             <p class="text-muted text-center">برای این آزمون هنوز سوال فعالی تعریف نشده است.</p>
         <?php else: ?>

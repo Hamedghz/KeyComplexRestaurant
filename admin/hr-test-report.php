@@ -1,16 +1,18 @@
 <?php
 require_once __DIR__ . '/lib/hr_evaluation_service.php';
+require_once __DIR__ . '/lib/hr/tests.php';
 $currentAdmin = adminGuard('manager');
 $pageTitle = 'گزارش مدیریتی آزمون‌ها';
 try {
     ensureAdminSchema();
     $db = adminDb();
     hrEnsureEvaluationSchema($db);
+    hrOrgTestsEnsureSchema($db);
 } catch (Throwable $e) {
     adminRenderSafeError($pageTitle, 'HR test report bootstrap failed: ' . $e->getMessage());
     return;
 }
-if (!adminPermissionAllows($currentAdmin, 'employee_test_reports', ['manager','admin','super_admin'])) {
+if (!adminPermissionAllows($currentAdmin, 'hr_tests_reports', ['manager','admin','super_admin']) && !adminPermissionAllows($currentAdmin, 'employee_test_reports', ['manager','admin','super_admin'])) {
     http_response_code(403);
     adminRenderSafeError($pageTitle, 'HR test report permission denied');
     return;

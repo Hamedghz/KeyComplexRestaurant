@@ -1,5 +1,10 @@
 <?php
+require_once __DIR__ . '/lib/admin_schema.php';
+redirectTo('hr-tests.php');
+return;
 require_once __DIR__ . '/lib/hr_evaluation_service.php';
+require_once __DIR__ . '/lib/hr/bootstrap.php';
+require_once dirname(__DIR__) . '/database/seeds/seed_key_business_coaching_standards.php';
 if (!defined('HR_EVALUATION_BUILD_PAGE')) {
     $query = $_SERVER['QUERY_STRING'] ?? '';
     redirectTo('evaluation-builder.php' . ($query !== '' ? '?' . $query : ''));
@@ -12,6 +17,7 @@ $error = '';
 try {
     ensureAdminSchema();
     $db = adminDb();
+    hrEnsureCoreSchema($db);
     hrEnsureEvaluationSchema($db);
     hrSyncAssessmentCatalogToForms($db);
 } catch (Throwable $e) {
@@ -39,9 +45,13 @@ try {
         $action = (string)($_POST['settings_action'] ?? '');
 
         if ($action === 'seed_restaurant_hr_tests') {
-            $seedResult = hrSeedRestaurantProfessionalTests($db, (int)$currentAdmin['id']);
-            hrSyncAssessmentCatalogToForms($db);
-            hrRedirectSettings('seeded=1&tests=' . urlencode((string)$seedResult['tests']) . '&questions=' . urlencode((string)$seedResult['questions']));
+            safeAdminLog('Blocked legacy restaurant HR tests seed action from employee evaluation settings.');
+            redirectTo('hr-tests.php?legacy_seed_disabled=1');
+        }
+
+        if ($action === 'seed_key_business_standards') {
+            $seedResult = seedKeyBusinessCoachingStandards($db, (int)$currentAdmin['id']);
+            hrRedirectSettings('business_seeded=1&groups=' . urlencode((string)$seedResult['groups']) . '&items=' . urlencode((string)$seedResult['items']));
         }
 
         if ($action === 'save_hr_settings') {
@@ -295,6 +305,9 @@ if (isset($_GET['imported'])) {
 if (isset($_GET['seeded'])) {
     $message = 'Seed حرفه‌ای با موفقیت همگام شد: ' . (int)($_GET['tests'] ?? 0) . ' آزمون و ' . (int)($_GET['questions'] ?? 0) . ' سؤال.';
 }
+if (isset($_GET['business_seeded'])) {
+    $message = 'استانداردهای کوچینگ با موفقیت همگام شد: ' . (int)($_GET['groups'] ?? 0) . ' گروه و ' . (int)($_GET['items'] ?? 0) . ' آیتم.';
+}
 
 $categories = hrFetchCategories($db);
 $criteria = hrFetchCriteria($db);
@@ -427,8 +440,14 @@ include __DIR__ . '/includes/header.php';
         <form method="post" class="admin-filter" onsubmit="return confirm('Seed حرفه‌ای با کدهای پایدار همگام شود؟ داده‌ای حذف نخواهد شد.');">
             <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>">
             <input type="hidden" name="settings_action" value="seed_restaurant_hr_tests">
-            <button class="btn btn-primary" type="submit">همگام‌سازی ۱۴ آزمون حرفه‌ای رستوران</button>
-            <span class="text-muted">عملیات idempotent است؛ رکوردهای موجود حذف نمی‌شوند.</span>
+            <button class="btn btn-secondary" type="submit">بانک آزمون قدیمی غیرفعال است</button>
+            <span class="text-muted">از Seed جدید آزمون‌های سازمانی رستوران KEY در System Update استفاده کنید.</span>
+        </form>
+        <form method="post" class="admin-filter" onsubmit="return confirm('استانداردهای کوچینگ کسب‌وکار همگام شوند؟ منوی جدیدی ساخته نمی‌شود و داده‌ای حذف نخواهد شد.');">
+            <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>">
+            <input type="hidden" name="settings_action" value="seed_key_business_standards">
+            <button class="btn btn-primary" type="submit">همگام‌سازی استانداردهای کوچینگ کسب‌وکار</button>
+            <span class="text-muted">این داده فقط لایه مرجع برای آزمون، چک‌لیست، KPI، پلنر و OKR/TMO است.</span>
         </form>
         <form method="post">
             <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo h(generateCSRFToken()); ?>">
